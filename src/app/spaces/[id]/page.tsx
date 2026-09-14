@@ -1,9 +1,12 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SocialLinks } from "@/components/SocialLinks";
+import { BookingCalendar } from "@/components/BookingCalendar";
 import { AD_SPACE_STATUS_LABELS } from "@/lib/supabase/enums";
+import { getBlockingRanges, getNextAvailableStart, addDays } from "@/lib/booking";
 import type {
   AdSpace,
+  Order,
   Profile,
   SellerProfile,
   SocialAccount,
@@ -27,27 +30,48 @@ export default async function SpaceDetailPage({
 
   const adSpace = space as AdSpace;
 
-  const [{ data: profile }, { data: sellerProfile }, { data: socialAccounts }] =
-    await Promise.all([
-      supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", adSpace.seller_id)
-        .maybeSingle(),
-      supabase
-        .from("seller_profiles")
-        .select("*")
-        .eq("user_id", adSpace.seller_id)
-        .maybeSingle(),
-      supabase
-        .from("social_accounts")
-        .select("*")
-        .eq("user_id", adSpace.seller_id),
-    ]);
+  const [
+    { data: profile },
+    { data: sellerProfile },
+    { data: socialAccounts },
+    { data: orders },
+    {
+      data: { user },
+    },
+  ] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", adSpace.seller_id)
+      .maybeSingle(),
+    supabase
+      .from("seller_profiles")
+      .select("*")
+      .eq("user_id", adSpace.seller_id)
+      .maybeSingle(),
+    supabase
+      .from("social_accounts")
+      .select("*")
+      .eq("user_id", adSpace.seller_id),
+    supabase.from("orders").select("*").eq("ad_space_id", adSpace.id),
+    supabase.auth.getUser(),
+  ]);
 
   const seller = profile as Profile | null;
   const sellerExtra = sellerProfile as SellerProfile | null;
   const accounts = (socialAccounts ?? []) as SocialAccount[];
+
+  const blockingRanges = getBlockingRanges((orders ?? []) as Order[]);
+  const nextAvailableStart = getNextAvailableStart(
+    blockingRanges,
+    adSpace.duration_days
+  );
+  const nextAvailableEnd = addDays(
+    new Date(nextAvailableStart),
+    adSpace.duration_days - 1
+  )
+    .toISOString()
+    .slice(0, 10);
 
   const photos = adSpace.photo_urls ?? [];
 
@@ -99,11 +123,23 @@ export default async function SpaceDetailPage({
           {adSpace.city && (
             <p className="mt-1 text-zinc-500">{adSpace.city}</p>
           )}
-          {adSpace.description && (
-            <p className="mt-6 whitespace-pre-line leading-7 text-zinc-700">
-              {adSpace.description}
-            </p>
-          )}
+
+          <div className="mt-8">
+            <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-zinc-500">
+              预订日历
+            </h2>
+            <BookingCalendar
+              adSpaceId={adSpace.id}
+              blockingRanges={blockingRanges}
+              nextAvailableStart={nextAvailableStart}
+              nextAvailableEnd={nextAvailableEnd}
+              durationDays={adSpace.duration_days}
+              priceAmount={adSpace.price_amount}
+              priceCurrency={adSpace.price_currency}
+              isLoggedIn={!!user}
+              isOwnSpace={user?.id === adSpace.seller_id}
+            />
+          </div>
         </div>
 
         <div className="flex flex-col gap-6">
@@ -117,6 +153,11 @@ export default async function SpaceDetailPage({
             {adSpace.duration_days && (
               <p className="mt-1 text-sm text-zinc-500">
                 / {adSpace.duration_days} 天
+              </p>
+            )}
+            {adSpace.description && (
+              <p className="mt-4 whitespace-pre-line text-sm leading-6 text-zinc-600">
+                {adSpace.description}
               </p>
             )}
           </div>

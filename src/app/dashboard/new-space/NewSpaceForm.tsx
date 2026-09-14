@@ -96,7 +96,7 @@ export function NewSpaceForm() {
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="duration_days" className={labelClass}>
-            租期(天)
+            每次预订多少天
           </label>
           <input
             id="duration_days"
@@ -104,21 +104,22 @@ export function NewSpaceForm() {
             type="number"
             min="1"
             required
-            defaultValue={30}
+            placeholder="例如 1、7、30"
             className={inputClass}
           />
         </div>
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="photo_urls" className={labelClass}>
-          图片链接(选填,每行一个)
+        <label htmlFor="photos" className={labelClass}>
+          图片(选填,可多选)
         </label>
-        <textarea
-          id="photo_urls"
-          name="photo_urls"
-          rows={3}
-          placeholder={"https://example.com/photo1.jpg\nhttps://example.com/photo2.jpg"}
+        <input
+          id="photos"
+          name="photos"
+          type="file"
+          accept="image/*"
+          multiple
           className={inputClass}
         />
       </div>

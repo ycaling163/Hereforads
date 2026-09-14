@@ -1,11 +1,15 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 // 目前产品定位是"个人广告位=一面墙"这一个统一概念(参考 thewall.ink),
 // 不让用户选分类,统一落库为 'wall'(这是 ad_space_type 枚举里最贴切的值)。
 const DEFAULT_SPACE_TYPE = "wall";
+
+// 需要在 Supabase 后台建一个同名的 public bucket,见 SQL 说明。
+const PHOTOS_BUCKET = "ad-space-photos";
 
 export interface NewSpaceState {
   error?: string;
@@ -31,7 +35,9 @@ export async function createSpaceAction(
   const priceAmountRaw = String(formData.get("price_amount") ?? "").trim();
   const priceCurrency = String(formData.get("price_currency") ?? "").trim();
   const durationDaysRaw = String(formData.get("duration_days") ?? "").trim();
-  const photoUrlsRaw = String(formData.get("photo_urls") ?? "");
+  const photoFiles = formData
+    .getAll("photos")
+    .filter((entry): entry is File => entry instanceof File && entry.size > 0);
 
   if (!title) {
     return { error: "请填写标题" };
@@ -48,10 +54,23 @@ export async function createSpaceAction(
     return { error: "请填写有效的租期天数" };
   }
 
-  const photoUrls = photoUrlsRaw
-    .split("\n")
-    .map((url) => url.trim())
-    .filter(Boolean);
+  const photoUrls: string[] = [];
+  for (const file of photoFiles) {
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `${user.id}/${randomUUID()}.${ext}`;
+    const { error: uploadError } = await supabase.storage
+      .from(PHOTOS_BUCKET)
+      .upload(path, file, { contentType: file.type || undefined });
+
+    if (uploadError) {
+      return { error: `图片上传失败:${uploadError.message}` };
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from(PHOTOS_BUCKET).getPublicUrl(path);
+    photoUrls.push(publicUrl);
+  }
 
   const { data, error } = await supabase
     .from("ad_spaces")
