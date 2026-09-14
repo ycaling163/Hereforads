@@ -64,7 +64,9 @@ export async function createSpaceAction(
       price_amount: priceAmount,
       price_currency: priceCurrency,
       duration_days: durationDaysRaw ? Number(durationDaysRaw) : null,
-      photo_urls: photoUrls.length > 0 ? photoUrls : null,
+      // photo_urls is NOT NULL in the database — always send an array,
+      // empty when no photos were provided.
+      photo_urls: photoUrls,
     })
     .select("id")
     .single();
