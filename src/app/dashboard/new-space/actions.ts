@@ -55,21 +55,27 @@ export async function createSpaceAction(
   }
 
   const photoUrls: string[] = [];
-  for (const file of photoFiles) {
-    const ext = file.name.split(".").pop() || "jpg";
-    const path = `${user.id}/${randomUUID()}.${ext}`;
-    const { error: uploadError } = await supabase.storage
-      .from(PHOTOS_BUCKET)
-      .upload(path, file, { contentType: file.type || undefined });
+  try {
+    for (const file of photoFiles) {
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `${user.id}/${randomUUID()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from(PHOTOS_BUCKET)
+        .upload(path, file, { contentType: file.type || undefined });
 
-    if (uploadError) {
-      return { error: `图片上传失败:${uploadError.message}` };
+      if (uploadError) {
+        return { error: `图片上传失败:${uploadError.message}` };
+      }
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from(PHOTOS_BUCKET).getPublicUrl(path);
+      photoUrls.push(publicUrl);
     }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from(PHOTOS_BUCKET).getPublicUrl(path);
-    photoUrls.push(publicUrl);
+  } catch (err) {
+    return {
+      error: `图片上传失败:${err instanceof Error ? err.message : "未知错误"}`,
+    };
   }
 
   const { data, error } = await supabase
