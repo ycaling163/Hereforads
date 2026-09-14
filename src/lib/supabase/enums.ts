@@ -1,67 +1,68 @@
 /**
- * TODO: 这几个是数据库里自定义枚举类型（user_role / ad_space_type /
- * ad_space_status / social_platform）的取值，目前是按常见场景猜的占位值。
- * 请在 Supabase 后台 Database → Enumerated Types 里核对真实取值，
- * 不一致的话改这一个文件就行，其他地方都是引用这里的常量。
+ * 数据库真实枚举取值（Database → Enumerated Types 核对过）。
  */
 
-export const USER_ROLES = ["buyer", "seller", "both"] as const;
+export const USER_ROLES = ["seller", "buyer", "both"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 export const DEFAULT_USER_ROLE: UserRole = "both";
 
 export const AD_SPACE_TYPES = [
   "wall",
-  "window",
-  "storefront",
-  "billboard",
-  "vehicle",
+  "picture_frame",
+  "clothing_pocket",
+  "clothing_back",
+  "face_left",
+  "face_right",
   "other",
 ] as const;
 export type AdSpaceType = (typeof AD_SPACE_TYPES)[number];
 
 export const AD_SPACE_STATUSES = [
-  "pending",
-  "active",
-  "sold",
-  "expired",
+  "available",
+  "reserved",
+  "active_campaign",
+  "inactive",
 ] as const;
 export type AdSpaceStatus = (typeof AD_SPACE_STATUSES)[number];
 
 export const SOCIAL_PLATFORMS = [
+  "douyin",
+  "xiaohongshu",
+  "weibo",
+  "wechat_channel",
+  "youtube",
   "instagram",
   "tiktok",
-  "youtube",
-  "twitter",
-  "facebook",
-  "wechat",
-  "xiaohongshu",
+  "bilibili",
   "other",
 ] as const;
 export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
 
 export const AD_SPACE_TYPE_LABELS: Record<AdSpaceType, string> = {
   wall: "墙面",
-  window: "橱窗",
-  storefront: "门店/店面",
-  billboard: "广告牌",
-  vehicle: "车身",
+  picture_frame: "画框",
+  clothing_pocket: "衣服口袋",
+  clothing_back: "衣服背面",
+  face_left: "左脸",
+  face_right: "右脸",
   other: "其他",
 };
 
 export const AD_SPACE_STATUS_LABELS: Record<AdSpaceStatus, string> = {
-  pending: "审核中",
-  active: "招租中",
-  sold: "已出租",
-  expired: "已下架",
+  available: "招租中",
+  reserved: "已预订",
+  active_campaign: "投放中",
+  inactive: "已下线",
 };
 
 export const SOCIAL_PLATFORM_LABELS: Record<SocialPlatform, string> = {
+  douyin: "抖音",
+  xiaohongshu: "小红书",
+  weibo: "微博",
+  wechat_channel: "微信视频号",
+  youtube: "YouTube",
   instagram: "Instagram",
   tiktok: "TikTok",
-  youtube: "YouTube",
-  twitter: "X / Twitter",
-  facebook: "Facebook",
-  wechat: "微信",
-  xiaohongshu: "小红书",
+  bilibili: "哔哩哔哩",
   other: "其他",
 };
