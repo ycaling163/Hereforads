@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
+import { PasswordInput } from "@/components/PasswordInput";
 import { registerAction, type RegisterState } from "./actions";
 
 const initialState: RegisterState = {};
@@ -27,40 +28,20 @@ export function RegisterForm() {
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
         />
       </div>
-      <div className="flex flex-col gap-1.5">
-        <label
-          htmlFor="password"
-          className="text-sm font-medium text-zinc-700"
-        >
-          密码
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          required
-          minLength={6}
-          autoComplete="new-password"
-          className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
-        />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <label
-          htmlFor="confirmPassword"
-          className="text-sm font-medium text-zinc-700"
-        >
-          确认密码
-        </label>
-        <input
-          id="confirmPassword"
-          name="confirmPassword"
-          type="password"
-          required
-          minLength={6}
-          autoComplete="new-password"
-          className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
-        />
-      </div>
+      <PasswordInput
+        id="password"
+        name="password"
+        label="密码"
+        minLength={6}
+        autoComplete="new-password"
+      />
+      <PasswordInput
+        id="confirmPassword"
+        name="confirmPassword"
+        label="确认密码"
+        minLength={6}
+        autoComplete="new-password"
+      />
 
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       {state.message && (
