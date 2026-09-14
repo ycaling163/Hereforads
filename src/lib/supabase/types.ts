@@ -19,6 +19,7 @@ export interface AdSpace {
   space_type: AdSpaceType;
   title: string;
   description: string | null;
+  keyword: string | null;
   photo_urls: string[] | null;
   city: string | null;
   latitude: number | null;

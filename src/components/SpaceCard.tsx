@@ -1,9 +1,6 @@
 import Link from "next/link";
 import type { AdSpace } from "@/lib/supabase/types";
-import {
-  AD_SPACE_STATUS_LABELS,
-  AD_SPACE_TYPE_LABELS,
-} from "@/lib/supabase/enums";
+import { AD_SPACE_STATUS_LABELS } from "@/lib/supabase/enums";
 
 export function SpaceCard({ space }: { space: AdSpace }) {
   const cover = space.photo_urls?.[0];
@@ -29,9 +26,13 @@ export function SpaceCard({ space }: { space: AdSpace }) {
       </div>
       <div className="flex flex-1 flex-col gap-2 p-4">
         <div className="flex items-center justify-between gap-2">
-          <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
-            {AD_SPACE_TYPE_LABELS[space.space_type] ?? space.space_type}
-          </span>
+          {space.keyword ? (
+            <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
+              {space.keyword}
+            </span>
+          ) : (
+            <span />
+          )}
           <span className="rounded-full bg-zinc-900/5 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
             {AD_SPACE_STATUS_LABELS[space.status] ?? space.status}
           </span>

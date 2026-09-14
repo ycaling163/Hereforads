@@ -44,11 +44,25 @@ export function NewSpaceForm() {
         />
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="city" className={labelClass}>
-          城市(选填)
-        </label>
-        <input id="city" name="city" type="text" className={inputClass} />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="keyword" className={labelClass}>
+            关键词(选填)
+          </label>
+          <input
+            id="keyword"
+            name="keyword"
+            type="text"
+            placeholder="例如:咖啡馆 / 高人流量"
+            className={inputClass}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="city" className={labelClass}>
+            城市(选填)
+          </label>
+          <input id="city" name="city" type="text" className={inputClass} />
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">

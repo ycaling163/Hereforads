@@ -1,10 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SocialLinks } from "@/components/SocialLinks";
-import {
-  AD_SPACE_STATUS_LABELS,
-  AD_SPACE_TYPE_LABELS,
-} from "@/lib/supabase/enums";
+import { AD_SPACE_STATUS_LABELS } from "@/lib/supabase/enums";
 import type {
   AdSpace,
   Profile,
@@ -53,10 +50,6 @@ export default async function SpaceDetailPage({
   const accounts = (socialAccounts ?? []) as SocialAccount[];
 
   const photos = adSpace.photo_urls ?? [];
-  const mapUrl =
-    adSpace.latitude != null && adSpace.longitude != null
-      ? `https://www.google.com/maps?q=${adSpace.latitude},${adSpace.longitude}`
-      : null;
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-12">
@@ -91,9 +84,11 @@ export default async function SpaceDetailPage({
           )}
 
           <div className="mt-8 flex items-center gap-2">
-            <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
-              {AD_SPACE_TYPE_LABELS[adSpace.space_type] ?? adSpace.space_type}
-            </span>
+            {adSpace.keyword && (
+              <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
+                {adSpace.keyword}
+              </span>
+            )}
             <span className="rounded-full bg-zinc-900/5 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
               {AD_SPACE_STATUS_LABELS[adSpace.status] ?? adSpace.status}
             </span>
@@ -102,19 +97,7 @@ export default async function SpaceDetailPage({
             {adSpace.title}
           </h1>
           {adSpace.city && (
-            <p className="mt-1 text-zinc-500">
-              {adSpace.city}
-              {mapUrl && (
-                <a
-                  href={mapUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-2 text-sm underline"
-                >
-                  在地图中查看
-                </a>
-              )}
-            </p>
+            <p className="mt-1 text-zinc-500">{adSpace.city}</p>
           )}
           {adSpace.description && (
             <p className="mt-6 whitespace-pre-line leading-7 text-zinc-700">

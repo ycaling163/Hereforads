@@ -26,6 +26,7 @@ export async function createSpaceAction(
 
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
+  const keyword = String(formData.get("keyword") ?? "").trim();
   const city = String(formData.get("city") ?? "").trim();
   const priceAmountRaw = String(formData.get("price_amount") ?? "").trim();
   const priceCurrency = String(formData.get("price_currency") ?? "").trim();
@@ -58,6 +59,7 @@ export async function createSpaceAction(
       seller_id: user.id,
       title,
       description: description || null,
+      keyword: keyword || null,
       space_type: DEFAULT_SPACE_TYPE,
       city: city || null,
       // 不采集经纬度了;这两列在库里非空,先给 0 兜底(不用于任何展示/计算)。
