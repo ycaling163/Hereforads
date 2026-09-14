@@ -2,7 +2,6 @@
 
 import { useActionState } from "react";
 import { createSpaceAction, type NewSpaceState } from "./actions";
-import { AD_SPACE_TYPES, AD_SPACE_TYPE_LABELS } from "@/lib/supabase/enums";
 
 const initialState: NewSpaceState = {};
 
@@ -45,61 +44,11 @@ export function NewSpaceForm() {
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="space_type" className={labelClass}>
-            广告位类型
-          </label>
-          <select
-            id="space_type"
-            name="space_type"
-            required
-            defaultValue=""
-            className={inputClass}
-          >
-            <option value="" disabled>
-              请选择
-            </option>
-            {AD_SPACE_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {AD_SPACE_TYPE_LABELS[type]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="city" className={labelClass}>
-            城市
-          </label>
-          <input id="city" name="city" type="text" className={inputClass} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="latitude" className={labelClass}>
-            纬度(选填)
-          </label>
-          <input
-            id="latitude"
-            name="latitude"
-            type="number"
-            step="any"
-            className={inputClass}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="longitude" className={labelClass}>
-            经度(选填)
-          </label>
-          <input
-            id="longitude"
-            name="longitude"
-            type="number"
-            step="any"
-            className={inputClass}
-          />
-        </div>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="city" className={labelClass}>
+          城市(选填)
+        </label>
+        <input id="city" name="city" type="text" className={inputClass} />
       </div>
 
       <div className="grid grid-cols-3 gap-4">

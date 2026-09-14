@@ -2,7 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { AD_SPACE_TYPES, type AdSpaceType } from "@/lib/supabase/enums";
+
+// 目前产品定位是"个人广告位=一面墙"这一个统一概念(参考 thewall.ink),
+// 不让用户选分类,统一落库为 'wall'(这是 ad_space_type 枚举里最贴切的值)。
+const DEFAULT_SPACE_TYPE = "wall";
 
 export interface NewSpaceState {
   error?: string;
@@ -23,10 +26,7 @@ export async function createSpaceAction(
 
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
-  const spaceType = String(formData.get("space_type") ?? "") as AdSpaceType;
   const city = String(formData.get("city") ?? "").trim();
-  const latitudeRaw = String(formData.get("latitude") ?? "").trim();
-  const longitudeRaw = String(formData.get("longitude") ?? "").trim();
   const priceAmountRaw = String(formData.get("price_amount") ?? "").trim();
   const priceCurrency = String(formData.get("price_currency") ?? "").trim();
   const durationDaysRaw = String(formData.get("duration_days") ?? "").trim();
@@ -34,9 +34,6 @@ export async function createSpaceAction(
 
   if (!title) {
     return { error: "请填写标题" };
-  }
-  if (!AD_SPACE_TYPES.includes(spaceType)) {
-    return { error: "请选择广告位类型" };
   }
   const priceAmount = Number(priceAmountRaw);
   if (!priceAmountRaw || Number.isNaN(priceAmount) || priceAmount < 0) {
@@ -61,10 +58,11 @@ export async function createSpaceAction(
       seller_id: user.id,
       title,
       description: description || null,
-      space_type: spaceType,
+      space_type: DEFAULT_SPACE_TYPE,
       city: city || null,
-      latitude: latitudeRaw ? Number(latitudeRaw) : null,
-      longitude: longitudeRaw ? Number(longitudeRaw) : null,
+      // 不采集经纬度了;这两列在库里非空,先给 0 兜底(不用于任何展示/计算)。
+      latitude: 0,
+      longitude: 0,
       price_amount: priceAmount,
       price_currency: priceCurrency,
       duration_days: durationDays,
