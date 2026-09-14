@@ -133,13 +133,15 @@ export function NewSpaceForm() {
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="duration_days" className={labelClass}>
-            租期(天,选填)
+            租期(天)
           </label>
           <input
             id="duration_days"
             name="duration_days"
             type="number"
-            min="0"
+            min="1"
+            required
+            defaultValue={30}
             className={inputClass}
           />
         </div>

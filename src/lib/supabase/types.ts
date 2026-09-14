@@ -25,7 +25,7 @@ export interface AdSpace {
   longitude: number | null;
   price_amount: number;
   price_currency: string;
-  duration_days: number | null;
+  duration_days: number;
   status: AdSpaceStatus;
   created_at: string;
   updated_at: string;

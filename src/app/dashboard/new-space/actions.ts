@@ -45,6 +45,10 @@ export async function createSpaceAction(
   if (!priceCurrency) {
     return { error: "请填写币种" };
   }
+  const durationDays = Number(durationDaysRaw);
+  if (!durationDaysRaw || Number.isNaN(durationDays) || durationDays <= 0) {
+    return { error: "请填写有效的租期天数" };
+  }
 
   const photoUrls = photoUrlsRaw
     .split("\n")
@@ -63,7 +67,7 @@ export async function createSpaceAction(
       longitude: longitudeRaw ? Number(longitudeRaw) : null,
       price_amount: priceAmount,
       price_currency: priceCurrency,
-      duration_days: durationDaysRaw ? Number(durationDaysRaw) : null,
+      duration_days: durationDays,
       // photo_urls is NOT NULL in the database — always send an array,
       // empty when no photos were provided.
       photo_urls: photoUrls,
