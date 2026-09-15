@@ -1,9 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
-import { createSpaceAction, type NewSpaceState } from "./actions";
+import type { AdSpace } from "@/lib/supabase/types";
 
-const initialState: NewSpaceState = {};
+export interface SpaceFormState {
+  error?: string;
+}
 
 const inputClass =
   "rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900";
@@ -20,11 +22,26 @@ const CURRENCIES = [
   { code: "SGD", label: "SGD · 新加坡元" },
 ];
 
-export function NewSpaceForm() {
-  const [state, formAction, pending] = useActionState(
-    createSpaceAction,
-    initialState
-  );
+export function SpaceForm({
+  action,
+  initialSpace,
+  submitLabel,
+  pendingLabel,
+}: {
+  action: (prevState: SpaceFormState, formData: FormData) => Promise<SpaceFormState>;
+  initialSpace?: AdSpace;
+  submitLabel: string;
+  pendingLabel: string;
+}) {
+  const [state, formAction, pending] = useActionState(action, {});
+
+  const currencyOptions = CURRENCIES.some(
+    (c) => c.code === initialSpace?.price_currency
+  )
+    ? CURRENCIES
+    : initialSpace?.price_currency
+      ? [{ code: initialSpace.price_currency, label: initialSpace.price_currency }, ...CURRENCIES]
+      : CURRENCIES;
 
   return (
     <form action={formAction} className="flex flex-col gap-5">
@@ -37,6 +54,7 @@ export function NewSpaceForm() {
           name="title"
           type="text"
           required
+          defaultValue={initialSpace?.title}
           placeholder="例如:市中心咖啡馆橱窗广告位"
           className={inputClass}
         />
@@ -50,6 +68,7 @@ export function NewSpaceForm() {
           id="description"
           name="description"
           rows={4}
+          defaultValue={initialSpace?.description ?? ""}
           placeholder="介绍一下这个空间的位置、人流量、展示条件等"
           className={inputClass}
         />
@@ -64,6 +83,7 @@ export function NewSpaceForm() {
             id="keyword"
             name="keyword"
             type="text"
+            defaultValue={initialSpace?.keyword ?? ""}
             placeholder="例如:咖啡馆 / 高人流量"
             className={inputClass}
           />
@@ -72,7 +92,13 @@ export function NewSpaceForm() {
           <label htmlFor="city" className={labelClass}>
             城市(选填)
           </label>
-          <input id="city" name="city" type="text" className={inputClass} />
+          <input
+            id="city"
+            name="city"
+            type="text"
+            defaultValue={initialSpace?.city ?? ""}
+            className={inputClass}
+          />
         </div>
       </div>
 
@@ -88,6 +114,7 @@ export function NewSpaceForm() {
             step="0.01"
             min="0"
             required
+            defaultValue={initialSpace?.price_amount}
             className={inputClass}
           />
         </div>
@@ -99,10 +126,10 @@ export function NewSpaceForm() {
             id="price_currency"
             name="price_currency"
             required
-            defaultValue="CNY"
+            defaultValue={initialSpace?.price_currency ?? "CNY"}
             className={inputClass}
           >
-            {CURRENCIES.map((currency) => (
+            {currencyOptions.map((currency) => (
               <option key={currency.code} value={currency.code}>
                 {currency.label}
               </option>
@@ -119,15 +146,33 @@ export function NewSpaceForm() {
             type="number"
             min="1"
             required
+            defaultValue={initialSpace?.duration_days}
             placeholder="例如 1、7、30"
             className={inputClass}
           />
         </div>
       </div>
 
+      {initialSpace && initialSpace.photo_urls && initialSpace.photo_urls.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <p className={labelClass}>已上传的图片</p>
+          <div className="grid grid-cols-4 gap-3">
+            {initialSpace.photo_urls.map((url) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={url}
+                src={url}
+                alt=""
+                className="aspect-square w-full rounded-lg object-cover"
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col gap-1.5">
         <label htmlFor="photos" className={labelClass}>
-          图片(选填,可多选)
+          {initialSpace ? "再上传更多图片(选填,追加在已有图片后面)" : "图片(选填,可多选)"}
         </label>
         <input
           id="photos"
@@ -146,7 +191,7 @@ export function NewSpaceForm() {
         disabled={pending}
         className="mt-2 self-start rounded-full bg-zinc-900 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50"
       >
-        {pending ? "发布中..." : "发布广告位"}
+        {pending ? pendingLabel : submitLabel}
       </button>
     </form>
   );

@@ -1,6 +1,11 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
 // 预订还没走真正的支付流程,只有这几个状态代表"这段日期已经被占用"。
-const BLOCKING_ORDER_STATUSES = ["pending_payment", "paid", "in_progress"];
+const BLOCKING_ORDER_STATUSES = [
+  "pending_payment",
+  "confirmed",
+  "paid",
+  "in_progress",
+];
 
 export interface DateRange {
   start: string; // YYYY-MM-DD
