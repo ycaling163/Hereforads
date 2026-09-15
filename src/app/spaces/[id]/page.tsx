@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { BookingCalendar } from "@/components/BookingCalendar";
@@ -84,6 +85,8 @@ export default async function SpaceDetailPage({
     adSpace.price_currency
   );
 
+  const isOwnSpace = user?.id === adSpace.seller_id;
+
   const socialSummary = accounts
     .slice(0, 2)
     .map((account) => {
@@ -114,6 +117,14 @@ export default async function SpaceDetailPage({
               </div>
             )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
+            {isOwnSpace && (
+              <Link
+                href={`/dashboard/spaces/${adSpace.id}/edit`}
+                className="absolute right-4 top-4 rounded-full bg-white/90 px-4 py-1.5 text-sm font-medium text-zinc-900 backdrop-blur-sm transition-colors hover:bg-white"
+              >
+                编辑广告位
+              </Link>
+            )}
             <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 p-6">
               <div>
                 <div className="flex items-center gap-2">
@@ -190,7 +201,7 @@ export default async function SpaceDetailPage({
               priceAmount={adSpace.price_amount}
               priceCurrency={adSpace.price_currency}
               isLoggedIn={!!user}
-              isOwnSpace={user?.id === adSpace.seller_id}
+              isOwnSpace={isOwnSpace}
             />
           </div>
         </div>
