@@ -25,7 +25,7 @@ export default async function Home() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <div className="mx-auto flex w-full max-w-5xl flex-col items-center px-6 pt-6 pb-20 text-center">
+      <div className="mx-auto flex w-full max-w-5xl flex-col items-center px-6 pt-8 pb-8 text-center">
         <h1 className="max-w-2xl text-5xl font-semibold tracking-tight text-zinc-900">
           把你的空间,变成广告位
         </h1>
