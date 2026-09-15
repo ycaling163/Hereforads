@@ -86,7 +86,7 @@ export async function updateSpaceAction(
 
   const existingPhotoUrls = (existing.photo_urls as string[] | null) ?? [];
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("ad_spaces")
     .update({
       title,
@@ -98,10 +98,19 @@ export async function updateSpaceAction(
       duration_days: durationDays,
       photo_urls: [...existingPhotoUrls, ...uploadedUrls],
     })
-    .eq("id", spaceId);
+    .eq("id", spaceId)
+    .select("id");
 
   if (error) {
     return { error: error.message };
+  }
+  if (!updated || updated.length === 0) {
+    // update() doesn't error on zero rows affected — this means the
+    // database's row-level security policy silently blocked the write.
+    return {
+      error:
+        "保存失败:数据库拒绝了这次更新(权限策略问题),请联系管理员检查 ad_spaces 表的 UPDATE 权限策略(RLS)。",
+    };
   }
 
   redirect(`/spaces/${spaceId}`);
