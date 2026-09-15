@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { LogoutButton } from "./LogoutButton";
@@ -11,8 +12,8 @@ export async function Header() {
   return (
     <header className="border-b border-zinc-200">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-        <Link href="/" className="text-lg font-semibold tracking-tight text-zinc-900">
-          myadsspace
+        <Link href="/" className="flex items-center">
+          <Image src="/logo.png" alt="Here For Ads" width={140} height={111} className="h-10 w-auto" priority />
         </Link>
         <nav className="flex items-center gap-6 text-sm text-zinc-600">
           <Link href="/spaces" className="hover:text-zinc-900">
