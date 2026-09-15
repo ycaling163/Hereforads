@@ -189,23 +189,6 @@ export default async function SpaceDetailPage({
               ))}
             </div>
           )}
-
-          <div className="mt-8">
-            <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-zinc-500">
-              预订日历
-            </h2>
-            <BookingCalendar
-              adSpaceId={adSpace.id}
-              blockingRanges={blockingRanges}
-              nextAvailableStart={nextAvailableStart}
-              nextAvailableEnd={nextAvailableEnd}
-              durationDays={adSpace.duration_days}
-              priceAmount={adSpace.price_amount}
-              priceCurrency={adSpace.price_currency}
-              isLoggedIn={!!user}
-              isOwnSpace={isOwnSpace}
-            />
-          </div>
         </div>
 
         <div className="flex flex-col gap-6">
@@ -246,6 +229,23 @@ export default async function SpaceDetailPage({
             </div>
           )}
         </div>
+      </div>
+
+      <div className="mt-8">
+        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-zinc-500">
+          预订日历
+        </h2>
+        <BookingCalendar
+          adSpaceId={adSpace.id}
+          blockingRanges={blockingRanges}
+          nextAvailableStart={nextAvailableStart}
+          nextAvailableEnd={nextAvailableEnd}
+          durationDays={adSpace.duration_days}
+          priceAmount={adSpace.price_amount}
+          priceCurrency={adSpace.price_currency}
+          isLoggedIn={!!user}
+          isOwnSpace={isOwnSpace}
+        />
       </div>
     </div>
   );

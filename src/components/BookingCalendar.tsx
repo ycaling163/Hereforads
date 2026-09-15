@@ -64,63 +64,65 @@ export function BookingCalendar({
   );
 
   return (
-    <div>
-      <p className="mb-2 text-sm font-medium text-zinc-700">
-        {today.getFullYear()} 年 {today.getMonth() + 1} 月 · 点击日期选择起租日
-      </p>
-      <div className="grid grid-cols-7 gap-1 text-center text-xs">
-        {monthDays.map((day) => {
-          const dayStr = toDateOnly(day);
-          const blocked = isDateBlocked(day, blockingRanges);
-          const isPast = day < today;
-          const inSelectedRange = dayStr >= selectedStart && dayStr <= selectedEnd;
-          const selectable = !isPast && !blocked;
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
+      <div className="lg:col-span-2">
+        <p className="mb-2 text-sm font-medium text-zinc-700">
+          {today.getFullYear()} 年 {today.getMonth() + 1} 月 · 点击日期选择起租日
+        </p>
+        <div className="grid grid-cols-7 gap-1 text-center text-xs">
+          {monthDays.map((day) => {
+            const dayStr = toDateOnly(day);
+            const blocked = isDateBlocked(day, blockingRanges);
+            const isPast = day < today;
+            const inSelectedRange = dayStr >= selectedStart && dayStr <= selectedEnd;
+            const selectable = !isPast && !blocked;
 
-          const baseClass =
-            "aspect-square rounded-md flex items-center justify-center transition-colors";
-          let stateClass: string;
-          if (isPast) {
-            stateClass = "text-zinc-300";
-          } else if (blocked) {
-            stateClass = "bg-zinc-300 text-zinc-500 line-through";
-          } else if (inSelectedRange) {
-            stateClass = selectionIsValid
-              ? "bg-emerald-200 text-zinc-900 font-semibold"
-              : "bg-red-100 text-red-500";
-          } else {
-            stateClass = "bg-emerald-50 text-emerald-700 hover:bg-emerald-100";
-          }
+            const baseClass =
+              "aspect-square rounded-md flex items-center justify-center transition-colors";
+            let stateClass: string;
+            if (isPast) {
+              stateClass = "text-zinc-300";
+            } else if (blocked) {
+              stateClass = "bg-zinc-300 text-zinc-500 line-through";
+            } else if (inSelectedRange) {
+              stateClass = selectionIsValid
+                ? "bg-emerald-200 text-zinc-900 font-semibold"
+                : "bg-red-100 text-red-500";
+            } else {
+              stateClass = "bg-emerald-50 text-emerald-700 hover:bg-emerald-100";
+            }
 
-          return (
-            <button
-              key={day.toISOString()}
-              type="button"
-              disabled={!selectable}
-              title={blocked ? "已被预订" : "可预订"}
-              onClick={() => setSelectedStart(dayStr)}
-              className={`${baseClass} ${stateClass} ${
-                selectable ? "cursor-pointer" : "cursor-default"
-              }`}
-            >
-              {day.getDate()}
-            </button>
-          );
-        })}
+            return (
+              <button
+                key={day.toISOString()}
+                type="button"
+                disabled={!selectable}
+                title={blocked ? "已被预订" : "可预订"}
+                onClick={() => setSelectedStart(dayStr)}
+                className={`${baseClass} ${stateClass} ${
+                  selectable ? "cursor-pointer" : "cursor-default"
+                }`}
+              >
+                {day.getDate()}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-6 flex items-center gap-4 text-xs text-zinc-500">
+          <span className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded bg-emerald-50" /> 可预订
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded bg-zinc-300" /> 已被预订
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded bg-emerald-200" /> 已选中
+          </span>
+        </div>
       </div>
 
-      <div className="mt-6 flex items-center gap-4 text-xs text-zinc-500">
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded bg-emerald-50" /> 可预订
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded bg-zinc-300" /> 已被预订
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded bg-emerald-200" /> 已选中
-        </span>
-      </div>
-
-      <div className="mt-6 rounded-2xl border border-zinc-200 p-5">
+      <div className="rounded-2xl border border-zinc-200 p-5">
         <p className="text-sm text-zinc-600">你选的档期</p>
         <p className="mt-1 text-lg font-semibold text-zinc-900">
           {selectedStart} 至 {selectedEnd}({durationDays} 天)
