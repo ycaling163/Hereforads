@@ -92,9 +92,9 @@ export function SocialAccountsManager({
         </div>
         <div className="col-span-2 flex flex-col gap-1.5">
           <label htmlFor="url" className={labelClass}>
-            主页链接
+            主页链接(选填,小红书等没有链接的平台可以只填账号名)
           </label>
-          <input id="url" name="url" type="url" required className={inputClass} />
+          <input id="url" name="url" type="url" className={inputClass} />
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="follower_count" className={labelClass}>

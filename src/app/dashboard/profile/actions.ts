@@ -47,13 +47,20 @@ export async function updateProfileAction(
     avatarUrl = publicUrl;
   }
 
-  const { error: profileError } = await supabase
+  const { data: updatedProfile, error: profileError } = await supabase
     .from("profiles")
     .update({ display_name: displayName || null })
-    .eq("id", user.id);
+    .eq("id", user.id)
+    .select("id");
 
   if (profileError) {
     return { error: profileError.message };
+  }
+  if (!updatedProfile || updatedProfile.length === 0) {
+    return {
+      error:
+        "保存失败:数据库拒绝了这次更新(权限策略问题),请联系管理员检查 profiles 表的 UPDATE 权限策略(RLS)。",
+    };
   }
 
   const { error: sellerError } = await supabase.from("seller_profiles").upsert(
@@ -97,8 +104,8 @@ export async function addSocialAccountAction(
   if (!SOCIAL_PLATFORMS.includes(platform as SocialPlatform)) {
     return { error: "请选择平台" };
   }
-  if (!url) {
-    return { error: "请填写账号链接" };
+  if (!url && !handle) {
+    return { error: "账号名和主页链接至少填一个" };
   }
 
   let followerCount: number | null = null;
@@ -113,7 +120,7 @@ export async function addSocialAccountAction(
     user_id: user.id,
     platform,
     handle: handle || null,
-    url,
+    url: url || "",
     follower_count: followerCount,
   });
 
