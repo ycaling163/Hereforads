@@ -4,7 +4,7 @@ export default function Home() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-6 py-32 text-center">
       <p className="text-sm font-medium uppercase tracking-widest text-zinc-500">
-        myadsspace
+        hereforads
       </p>
       <h1 className="mt-4 max-w-2xl text-5xl font-semibold tracking-tight text-zinc-900">
         把你的空间,变成广告位

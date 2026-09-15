@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "myadsspace",
+  title: "hereforads",
   description: "把你的实体空间变成广告位,轻松出租与发现广告位",
 };
 
