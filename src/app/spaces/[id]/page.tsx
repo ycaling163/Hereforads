@@ -197,11 +197,6 @@ export default async function SpaceDetailPage({
               </span>
               <span className="text-zinc-500">{adSpace.price_currency}</span>
             </div>
-            {adSpace.duration_days && (
-              <p className="mt-1 text-sm text-zinc-500">
-                / {adSpace.duration_days} 天
-              </p>
-            )}
             <DailyCountdown />
           </div>
 
