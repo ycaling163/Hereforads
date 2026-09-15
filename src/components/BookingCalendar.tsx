@@ -85,7 +85,7 @@ export function BookingCalendar({
             stateClass = "bg-zinc-200 text-zinc-400 line-through";
           } else if (inSelectedRange) {
             stateClass = selectionIsValid
-              ? "bg-zinc-900 text-white"
+              ? "bg-emerald-600 text-white"
               : "bg-red-100 text-red-500";
           } else {
             stateClass = "bg-emerald-50 text-emerald-700 hover:bg-emerald-100";
@@ -116,7 +116,7 @@ export function BookingCalendar({
           <span className="h-3 w-3 rounded bg-zinc-200" /> 已被预订
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded bg-zinc-900" /> 已选中
+          <span className="h-3 w-3 rounded bg-emerald-600" /> 已选中
         </span>
       </div>
 
