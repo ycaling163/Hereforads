@@ -21,6 +21,9 @@ export async function Header() {
           </Link>
           {user ? (
             <>
+              <Link href="/dashboard" className="hover:text-zinc-900">
+                会员中心
+              </Link>
               <Link href="/dashboard/new-space" className="hover:text-zinc-900">
                 发布广告位
               </Link>

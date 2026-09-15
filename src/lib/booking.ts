@@ -1,6 +1,11 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
 // 预订还没走真正的支付流程,只有这几个状态代表"这段日期已经被占用"。
-const BLOCKING_ORDER_STATUSES = ["pending_payment", "paid", "in_progress"];
+const BLOCKING_ORDER_STATUSES = [
+  "pending_payment",
+  "confirmed",
+  "paid",
+  "in_progress",
+];
 
 export interface DateRange {
   start: string; // YYYY-MM-DD
@@ -69,6 +74,22 @@ export function getNextAvailableStart(
 export function isDateBlocked(date: Date, blockingRanges: DateRange[]): boolean {
   const day = toDateOnly(date);
   return blockingRanges.some((r) => day >= r.start && day <= r.end);
+}
+
+/**
+ * 检查从 start 开始、连续 durationDays 天的这一段,是否完全不跟任何
+ * 已占用区间重叠(用于校验用户手动选的起始日期是否可订)。
+ */
+export function isRangeFree(
+  blockingRanges: DateRange[],
+  start: string,
+  durationDays: number
+): boolean {
+  const startDate = new Date(start);
+  const endDate = addDays(startDate, durationDays - 1);
+  return !blockingRanges.some((r) =>
+    rangesOverlap(startDate, endDate, new Date(r.start), new Date(r.end))
+  );
 }
 
 export { toDateOnly, addDays };
