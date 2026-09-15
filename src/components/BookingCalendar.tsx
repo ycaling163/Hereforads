@@ -44,41 +44,32 @@ export function BookingCalendar({
   );
 
   const today = new Date(toDateOnly(new Date()));
-  const months = [today, addDays(today, 31)];
+  const monthDays = buildMonthDays(
+    new Date(today.getFullYear(), today.getMonth(), 1)
+  );
 
   return (
     <div>
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-        {months.map((monthStart) => {
-          const days = buildMonthDays(
-            new Date(monthStart.getFullYear(), monthStart.getMonth(), 1)
-          );
+      <p className="mb-2 text-sm font-medium text-zinc-700">
+        {today.getFullYear()} 年 {today.getMonth() + 1} 月
+      </p>
+      <div className="grid grid-cols-7 gap-1 text-center text-xs">
+        {monthDays.map((day) => {
+          const blocked = isDateBlocked(day, blockingRanges);
+          const isPast = day < today;
           return (
-            <div key={monthStart.toISOString()}>
-              <p className="mb-2 text-sm font-medium text-zinc-700">
-                {monthStart.getFullYear()} 年 {monthStart.getMonth() + 1} 月
-              </p>
-              <div className="grid grid-cols-7 gap-1 text-center text-xs">
-                {days.map((day) => {
-                  const blocked = isDateBlocked(day, blockingRanges);
-                  const isPast = day < today;
-                  return (
-                    <div
-                      key={day.toISOString()}
-                      title={blocked ? "已被预订" : "可预订"}
-                      className={`aspect-square rounded-md flex items-center justify-center ${
-                        isPast
-                          ? "text-zinc-300"
-                          : blocked
-                            ? "bg-zinc-200 text-zinc-400 line-through"
-                            : "bg-emerald-50 text-emerald-700"
-                      }`}
-                    >
-                      {day.getDate()}
-                    </div>
-                  );
-                })}
-              </div>
+            <div
+              key={day.toISOString()}
+              title={blocked ? "已被预订" : "可预订"}
+              className={`aspect-square rounded-md flex items-center justify-center ${
+                isPast
+                  ? "text-zinc-300"
+                  : blocked
+                    ? "bg-zinc-200 text-zinc-400 line-through"
+                    : "bg-emerald-50 text-emerald-700"
+              }`}
+            >
+              {day.getDate()}
             </div>
           );
         })}
