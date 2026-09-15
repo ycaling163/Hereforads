@@ -101,7 +101,66 @@ export default async function SpaceDetailPage({
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-12">
-      <div className="grid grid-cols-1 gap-10 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              {adSpace.keyword && (
+                <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
+                  {adSpace.keyword}
+                </span>
+              )}
+              <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
+                {AD_SPACE_STATUS_LABELS[adSpace.status] ?? adSpace.status}
+              </span>
+            </div>
+            {isOwnSpace && (
+              <Link
+                href={`/dashboard/spaces/${adSpace.id}/edit`}
+                className="rounded-full bg-zinc-100 px-4 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-200"
+              >
+                编辑广告位
+              </Link>
+            )}
+          </div>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900">
+            {adSpace.title}
+          </h1>
+          {adSpace.city && (
+            <p className="mt-1 text-sm text-zinc-500">{adSpace.city}</p>
+          )}
+        </div>
+
+        <div className="flex items-start justify-end gap-3">
+          {sellerExtra?.avatar_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={sellerExtra.avatar_url}
+              alt={seller?.display_name ?? "seller"}
+              className="h-11 w-11 shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-500">
+              {(seller?.display_name ?? "S")[0]}
+            </div>
+          )}
+          <div className="text-right">
+            <p className="flex items-center justify-end gap-1.5 font-medium text-zinc-900">
+              {seller?.display_name ?? "匿名卖家"}
+              {sellerExtra?.is_verified && (
+                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                  已认证
+                </span>
+              )}
+            </p>
+            <p className="mt-0.5 text-xs text-zinc-500">
+              {socialSummary || "暂无社交账号"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-10 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-zinc-100">
             {photos[0] ? (
@@ -116,63 +175,6 @@ export default async function SpaceDetailPage({
                 暂无图片
               </div>
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
-            {isOwnSpace && (
-              <Link
-                href={`/dashboard/spaces/${adSpace.id}/edit`}
-                className="absolute right-4 top-4 rounded-full bg-white/90 px-4 py-1.5 text-sm font-medium text-zinc-900 backdrop-blur-sm transition-colors hover:bg-white"
-              >
-                编辑广告位
-              </Link>
-            )}
-            <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 p-6">
-              <div>
-                <div className="flex items-center gap-2">
-                  {adSpace.keyword && (
-                    <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
-                      {adSpace.keyword}
-                    </span>
-                  )}
-                  <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
-                    {AD_SPACE_STATUS_LABELS[adSpace.status] ?? adSpace.status}
-                  </span>
-                </div>
-                <h1 className="mt-2 max-w-sm text-3xl font-semibold tracking-tight text-white">
-                  {adSpace.title}
-                </h1>
-                {adSpace.city && (
-                  <p className="mt-1 text-sm text-white/70">{adSpace.city}</p>
-                )}
-              </div>
-
-              <div className="flex shrink-0 items-center gap-3">
-                {sellerExtra?.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={sellerExtra.avatar_url}
-                    alt={seller?.display_name ?? "seller"}
-                    className="h-11 w-11 rounded-full object-cover ring-2 ring-white/30"
-                  />
-                ) : (
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/20 text-white ring-2 ring-white/30">
-                    {(seller?.display_name ?? "S")[0]}
-                  </div>
-                )}
-                <div className="text-right">
-                  <p className="flex items-center justify-end gap-1.5 font-medium text-white">
-                    {seller?.display_name ?? "匿名卖家"}
-                    {sellerExtra?.is_verified && (
-                      <span className="rounded-full bg-blue-400/30 px-2 py-0.5 text-xs font-medium text-white">
-                        已认证
-                      </span>
-                    )}
-                  </p>
-                  <p className="mt-0.5 text-xs text-white/70">
-                    {socialSummary || "暂无社交账号"}
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
           {photos.length > 1 && (
             <div className="mt-3 grid grid-cols-4 gap-3">
@@ -187,29 +189,12 @@ export default async function SpaceDetailPage({
               ))}
             </div>
           )}
-
-          <div className="mt-8">
-            <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-zinc-500">
-              预订日历
-            </h2>
-            <BookingCalendar
-              adSpaceId={adSpace.id}
-              blockingRanges={blockingRanges}
-              nextAvailableStart={nextAvailableStart}
-              nextAvailableEnd={nextAvailableEnd}
-              durationDays={adSpace.duration_days}
-              priceAmount={adSpace.price_amount}
-              priceCurrency={adSpace.price_currency}
-              isLoggedIn={!!user}
-              isOwnSpace={isOwnSpace}
-            />
-          </div>
         </div>
 
         <div className="flex flex-col gap-6">
           <div className="rounded-2xl border border-transparent bg-zinc-50 p-6">
             <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-semibold text-zinc-900">
+              <span className="text-5xl font-semibold text-zinc-900">
                 {adSpace.price_amount}
               </span>
               <span className="text-zinc-500">{adSpace.price_currency}</span>
@@ -222,43 +207,16 @@ export default async function SpaceDetailPage({
             <DailyCountdown />
           </div>
 
-          <div className="rounded-2xl border border-transparent bg-zinc-50 p-6">
-            <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-zinc-500">
-              卖家信息
-            </h2>
-            <div className="flex items-center gap-3">
-              {sellerExtra?.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={sellerExtra.avatar_url}
-                  alt={seller?.display_name ?? "seller"}
-                  className="h-12 w-12 rounded-full object-cover"
-                />
-              ) : (
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-200 text-zinc-500">
-                  {(seller?.display_name ?? "S")[0]}
-                </div>
-              )}
-              <div>
-                <p className="flex items-center gap-1.5 font-medium text-zinc-900">
-                  {seller?.display_name ?? "匿名卖家"}
-                  {sellerExtra?.is_verified && (
-                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-                      已认证
-                    </span>
-                  )}
-                </p>
-                <p className="mt-0.5 text-xs text-zinc-500">
-                  {socialSummary || "暂无社交账号"}
-                </p>
-              </div>
-            </div>
-            {sellerExtra?.bio && (
-              <p className="mt-4 text-sm leading-6 text-zinc-600">
+          {sellerExtra?.bio && (
+            <div className="rounded-2xl border border-transparent bg-zinc-50 p-6">
+              <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-zinc-500">
+                卖家简介
+              </h2>
+              <p className="text-sm leading-6 text-zinc-600">
                 {sellerExtra.bio}
               </p>
-            )}
-          </div>
+            </div>
+          )}
 
           {adSpace.description && (
             <div className="rounded-2xl border border-transparent bg-zinc-50 p-6">
@@ -271,6 +229,23 @@ export default async function SpaceDetailPage({
             </div>
           )}
         </div>
+      </div>
+
+      <div className="mt-8">
+        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-zinc-500">
+          预订日历
+        </h2>
+        <BookingCalendar
+          adSpaceId={adSpace.id}
+          blockingRanges={blockingRanges}
+          nextAvailableStart={nextAvailableStart}
+          nextAvailableEnd={nextAvailableEnd}
+          durationDays={adSpace.duration_days}
+          priceAmount={adSpace.price_amount}
+          priceCurrency={adSpace.price_currency}
+          isLoggedIn={!!user}
+          isOwnSpace={isOwnSpace}
+        />
       </div>
     </div>
   );
