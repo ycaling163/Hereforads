@@ -1,9 +1,11 @@
 import Link from "next/link";
 import type { AdSpace } from "@/lib/supabase/types";
 import { AD_SPACE_STATUS_LABELS } from "@/lib/supabase/enums";
+import { approxCnyAmount } from "@/lib/currency";
 
 export function SpaceCard({ space }: { space: AdSpace }) {
   const cover = space.photo_urls?.[0];
+  const approxCny = approxCnyAmount(space.price_amount, space.price_currency);
 
   return (
     <Link
@@ -43,14 +45,21 @@ export function SpaceCard({ space }: { space: AdSpace }) {
         {space.city && (
           <p className="text-sm text-zinc-500">{space.city}</p>
         )}
-        <div className="mt-auto flex items-baseline gap-1 pt-2">
-          <span className="text-xl font-semibold text-zinc-900">
-            {space.price_amount}
-          </span>
-          <span className="text-sm text-zinc-500">
-            {space.price_currency}
-            {space.duration_days ? ` / ${space.duration_days} 天` : ""}
-          </span>
+        <div className="mt-auto pt-2">
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-semibold text-zinc-900">
+              {space.price_amount}
+            </span>
+            <span className="text-sm text-zinc-500">
+              {space.price_currency}
+              {space.duration_days ? ` / ${space.duration_days} 天` : ""}
+            </span>
+          </div>
+          {approxCny !== null && (
+            <p className="text-xs text-zinc-400">
+              约合 ¥{approxCny.toLocaleString()}
+            </p>
+          )}
         </div>
       </div>
     </Link>

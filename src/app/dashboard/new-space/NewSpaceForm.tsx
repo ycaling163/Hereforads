@@ -9,6 +9,17 @@ const inputClass =
   "rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900";
 const labelClass = "text-sm font-medium text-zinc-700";
 
+const CURRENCIES = [
+  { code: "CNY", label: "CNY · 人民币" },
+  { code: "USD", label: "USD · 美元" },
+  { code: "GBP", label: "GBP · 英镑" },
+  { code: "EUR", label: "EUR · 欧元" },
+  { code: "HKD", label: "HKD · 港币" },
+  { code: "JPY", label: "JPY · 日元" },
+  { code: "AUD", label: "AUD · 澳元" },
+  { code: "SGD", label: "SGD · 新加坡元" },
+];
+
 export function NewSpaceForm() {
   const [state, formAction, pending] = useActionState(
     createSpaceAction,
@@ -84,15 +95,19 @@ export function NewSpaceForm() {
           <label htmlFor="price_currency" className={labelClass}>
             币种
           </label>
-          <input
+          <select
             id="price_currency"
             name="price_currency"
-            type="text"
             required
-            placeholder="CNY / USD"
             defaultValue="CNY"
             className={inputClass}
-          />
+          >
+            {CURRENCIES.map((currency) => (
+              <option key={currency.code} value={currency.code}>
+                {currency.label}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="duration_days" className={labelClass}>
