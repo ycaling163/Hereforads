@@ -1,19 +1,9 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { NewSpaceForm } from "./NewSpaceForm";
+import { SpaceForm } from "@/components/SpaceForm";
+import { createSpaceAction } from "./actions";
 
-export default async function NewSpacePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
+export default function NewSpacePage() {
   return (
-    <div className="mx-auto w-full max-w-2xl px-6 py-12">
+    <div className="max-w-2xl">
       <h1 className="text-3xl font-semibold tracking-tight text-zinc-900">
         发布广告位
       </h1>
@@ -21,7 +11,11 @@ export default async function NewSpacePage() {
         填写你的实体空间信息,发布后买家就能在广告位列表中看到。
       </p>
       <div className="mt-8">
-        <NewSpaceForm />
+        <SpaceForm
+          action={createSpaceAction}
+          submitLabel="发布广告位"
+          pendingLabel="发布中..."
+        />
       </div>
     </div>
   );

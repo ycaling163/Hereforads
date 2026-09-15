@@ -17,6 +17,29 @@ export const AD_SPACE_TYPES = [
 ] as const;
 export type AdSpaceType = (typeof AD_SPACE_TYPES)[number];
 
+// orders.status 目前在库里是自由文本,没有对应的 Postgres 枚举类型,
+// 这里列出的是代码里实际会写入/读取的取值。
+export const ORDER_STATUSES = [
+  "pending_payment",
+  "confirmed",
+  "rejected",
+  "paid",
+  "in_progress",
+  "completed",
+  "cancelled",
+] as const;
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+  pending_payment: "待卖家确认",
+  confirmed: "已确认(待付款)",
+  rejected: "已拒绝",
+  paid: "已付款",
+  in_progress: "进行中",
+  completed: "已完成",
+  cancelled: "已取消",
+};
+
 export const AD_SPACE_STATUSES = [
   "available",
   "reserved",
