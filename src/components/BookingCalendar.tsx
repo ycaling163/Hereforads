@@ -82,10 +82,10 @@ export function BookingCalendar({
           if (isPast) {
             stateClass = "text-zinc-300";
           } else if (blocked) {
-            stateClass = "bg-zinc-200 text-zinc-400 line-through";
+            stateClass = "bg-zinc-300 text-zinc-500 line-through";
           } else if (inSelectedRange) {
             stateClass = selectionIsValid
-              ? "bg-emerald-600 text-white"
+              ? "bg-emerald-200 text-zinc-900 font-semibold"
               : "bg-red-100 text-red-500";
           } else {
             stateClass = "bg-emerald-50 text-emerald-700 hover:bg-emerald-100";
@@ -113,10 +113,10 @@ export function BookingCalendar({
           <span className="h-3 w-3 rounded bg-emerald-50" /> 可预订
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded bg-zinc-200" /> 已被预订
+          <span className="h-3 w-3 rounded bg-zinc-300" /> 已被预订
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded bg-emerald-600" /> 已选中
+          <span className="h-3 w-3 rounded bg-emerald-200" /> 已选中
         </span>
       </div>
 
