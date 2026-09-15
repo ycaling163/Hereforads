@@ -7,6 +7,7 @@ import {
   SOCIAL_PLATFORM_LABELS,
 } from "@/lib/supabase/enums";
 import { getBlockingRanges, getNextAvailableStart, addDays } from "@/lib/booking";
+import { approxCnyAmount } from "@/lib/currency";
 import type {
   AdSpace,
   Order,
@@ -77,6 +78,11 @@ export default async function SpaceDetailPage({
     .slice(0, 10);
 
   const photos = adSpace.photo_urls ?? [];
+
+  const approxCny = approxCnyAmount(
+    adSpace.price_amount,
+    adSpace.price_currency
+  );
 
   const socialSummary = accounts
     .slice(0, 2)
@@ -197,6 +203,11 @@ export default async function SpaceDetailPage({
               </span>
               <span className="text-zinc-500">{adSpace.price_currency}</span>
             </div>
+            {approxCny !== null && (
+              <p className="mt-1 text-xs text-zinc-400">
+                约合 ¥{approxCny.toLocaleString()}(参考汇率,非实时)
+              </p>
+            )}
             <DailyCountdown />
           </div>
 
