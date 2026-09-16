@@ -5,7 +5,12 @@ import { ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/supabase/enums";
 import { confirmOrderAction, rejectOrderAction } from "./actions";
 import type { Order } from "@/lib/supabase/types";
 
-export default async function ReceivedOrdersPage() {
+export default async function ReceivedOrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -50,6 +55,12 @@ export default async function ReceivedOrdersPage() {
       <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
         收到的预订请求
       </h1>
+
+      {error === "update_failed" && (
+        <p className="mt-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">
+          操作未生效,可能是数据库权限(RLS 策略)未开放卖家更新订单状态,请联系管理员检查。
+        </p>
+      )}
 
       {orders.length === 0 ? (
         <p className="mt-8 text-sm text-zinc-500">还没有收到预订请求。</p>

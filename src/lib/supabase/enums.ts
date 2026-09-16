@@ -17,8 +17,9 @@ export const AD_SPACE_TYPES = [
 ] as const;
 export type AdSpaceType = (typeof AD_SPACE_TYPES)[number];
 
-// orders.status 目前在库里是自由文本,没有对应的 Postgres 枚举类型,
-// 这里列出的是代码里实际会写入/读取的取值。
+// orders.status 在库里其实是 Postgres 枚举类型 order_status(不是自由文本),
+// 这里的取值必须和数据库枚举完全一致,否则 update 会报 400 invalid input value for enum。
+// confirmed/rejected 需要先执行 README 里的 `alter type ... add value` 语句。
 export const ORDER_STATUSES = [
   "pending_payment",
   "confirmed",
