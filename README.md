@@ -110,6 +110,14 @@ on public.orders for insert
 to authenticated
 with check (auth.uid() = buyer_id);
 
+-- 卖家在"收到的预订请求"页确认/拒绝订单要 UPDATE 权限,
+-- 之前漏配这条策略,导致确认/拒绝按钮点击后状态不会变(RLS 默认拒绝、update 静默 0 行)
+create policy "sellers can update their own orders"
+on public.orders for update
+to authenticated
+using (auth.uid() = seller_id)
+with check (auth.uid() = seller_id);
+
 -- Storage: 广告位图片的 public bucket + 策略
 insert into storage.buckets (id, name, public)
 values ('ad-space-photos', 'ad-space-photos', true)
