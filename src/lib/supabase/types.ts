@@ -46,8 +46,9 @@ export interface SocialAccount {
   user_id: string;
   platform: SocialPlatform;
   handle: string | null;
-  url: string;
-  follower_count: number | null;
+  url: string | null;
+  // 自由文本,允许填"22k"/"100k"/"1.2万"这类模糊说法,不强制精确数字。
+  follower_count: string | null;
   created_at: string;
 }
 
