@@ -62,7 +62,7 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 - `ad_space_type`: `wall` / `picture_frame` / `clothing_pocket` / `clothing_back` / `face_left` / `face_right` / `other`——**产品上暂时只用 `wall` 一种**,发布表单没有分类选择器,`src/app/dashboard/new-space/actions.ts` 里写死了 `DEFAULT_SPACE_TYPE = "wall"`。真实取值和展示文案在 `src/lib/supabase/enums.ts`,以后要放开分类选择,改这一个文件+表单加个 `<select>` 就行
 - `ad_space_status`: `available` / `reserved` / `active_campaign` / `inactive`
 - `social_platform`: `douyin` / `xiaohongshu` / `weibo` / `wechat_channel` / `youtube` / `instagram` / `tiktok` / `bilibili` / `other`
-- `order_status`: `pending_payment` / `paid` / `in_progress` / `completed` / `cancelled` / `refunded`
+- `order_status`: `pending_payment` / `confirmed` / `rejected` / `paid` / `in_progress` / `completed` / `cancelled` / `refunded`(`confirmed`/`rejected` 是后加的值,见下面 RLS 策略章节的 `alter type` 语句)
 - `payment_channel`: `stripe` / `wechat_pay` / `alipay`(预订时先硬编码成 `stripe` 占位,没有真实选择/扣款)
 - `payout_status`: `pending` / `paid` / `failed`
 
@@ -112,6 +112,13 @@ alter table public.ad_spaces add column if not exists keyword text;
 -- orders: 加预订日历用的起止日期列 + 策略
 alter table public.orders add column if not exists start_date date;
 alter table public.orders add column if not exists end_date date;
+
+-- orders.status 实际是 Postgres 枚举类型 order_status,当初建表时只给了
+-- pending_payment/paid/in_progress/completed/cancelled/refunded 这几个值。
+-- 卖家"确认预订"/"拒绝"页要把状态改成 confirmed/rejected,枚举里没有这两个值,
+-- 之前一直报 400 invalid input value for enum order_status,跟 RLS 策略无关。
+alter type public.order_status add value if not exists 'confirmed';
+alter type public.order_status add value if not exists 'rejected';
 
 create policy "anyone can view orders"
 on public.orders for select

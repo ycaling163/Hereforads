@@ -14,14 +14,23 @@ async function respondToOrder(orderId: string, nextStatus: OrderStatus) {
     redirect("/login");
   }
 
-  const { data: order } = await supabase
+  const { data: order, error: selectError } = await supabase
     .from("orders")
     .select("seller_id,status")
     .eq("id", orderId)
     .single();
 
   if (!order || order.seller_id !== user.id || order.status !== "pending_payment") {
-    redirect("/dashboard/orders");
+    const detail = selectError
+      ? `select_error:${selectError.message}`
+      : !order
+        ? "order_not_found"
+        : order.seller_id !== user.id
+          ? `seller_mismatch:auth=${user.id},order=${order.seller_id}`
+          : `status_mismatch:${order.status}`;
+    redirect(
+      `/dashboard/orders?error=precondition_failed&detail=${encodeURIComponent(detail)}`
+    );
   }
 
   // .update() 在 RLS 拒绝写入时不会报错,只会静默影响 0 行,
@@ -33,7 +42,10 @@ async function respondToOrder(orderId: string, nextStatus: OrderStatus) {
     .select("id");
 
   if (error || !updatedRows || updatedRows.length === 0) {
-    redirect("/dashboard/orders?error=update_failed");
+    const detail = error ? error.message : "zero_rows_affected";
+    redirect(
+      `/dashboard/orders?error=update_failed&detail=${encodeURIComponent(detail)}`
+    );
   }
 
   redirect("/dashboard/orders");
