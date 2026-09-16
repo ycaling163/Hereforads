@@ -86,7 +86,9 @@ export async function updateSpaceAction(
 
   const existingPhotoUrls = (existing.photo_urls as string[] | null) ?? [];
 
-  const { error } = await supabase
+  // .update() 在 RLS 拒绝写入时不会报错,只会静默影响 0 行,
+  // 所以用 .select() 拿回受影响的行来判断是否真的保存了。
+  const { data: updatedRows, error } = await supabase
     .from("ad_spaces")
     .update({
       title,
@@ -98,10 +100,14 @@ export async function updateSpaceAction(
       duration_days: durationDays,
       photo_urls: [...existingPhotoUrls, ...uploadedUrls],
     })
-    .eq("id", spaceId);
+    .eq("id", spaceId)
+    .select("id");
 
   if (error) {
     return { error: error.message };
+  }
+  if (!updatedRows || updatedRows.length === 0) {
+    return { error: "保存失败:没有权限更新这个广告位(数据库权限策略问题)" };
   }
 
   redirect(`/spaces/${spaceId}`);

@@ -93,6 +93,19 @@ on public.ad_spaces for select
 to anon, authenticated
 using (true);
 
+-- 卖家在"我的广告位"页编辑/删除自己的广告位要 UPDATE / DELETE 权限,
+-- 之前漏配这两条策略,导致编辑保存、删除按钮点击后不会有任何变化(RLS 默认拒绝、静默 0 行)
+create policy "sellers can update own ad_spaces"
+on public.ad_spaces for update
+to authenticated
+using (auth.uid() = seller_id)
+with check (auth.uid() = seller_id);
+
+create policy "sellers can delete own ad_spaces"
+on public.ad_spaces for delete
+to authenticated
+using (auth.uid() = seller_id);
+
 -- ad_spaces 加关键词列(表单里的"关键词"字段用)
 alter table public.ad_spaces add column if not exists keyword text;
 

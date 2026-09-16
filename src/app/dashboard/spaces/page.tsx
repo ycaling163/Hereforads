@@ -6,7 +6,12 @@ import { AD_SPACE_STATUS_LABELS } from "@/lib/supabase/enums";
 import { deleteSpaceAction } from "./actions";
 import type { AdSpace } from "@/lib/supabase/types";
 
-export default async function MySpacesPage() {
+export default async function MySpacesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -37,6 +42,12 @@ export default async function MySpacesPage() {
           + 发布新广告位
         </Link>
       </div>
+
+      {error === "delete_failed" && (
+        <p className="mt-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">
+          删除未生效,可能是数据库权限(RLS 策略)未开放卖家删除广告位,请联系管理员检查。
+        </p>
+      )}
 
       {spaces.length === 0 ? (
         <p className="mt-8 text-sm text-zinc-500">还没有发布任何广告位。</p>
