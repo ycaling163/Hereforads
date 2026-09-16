@@ -8,9 +8,9 @@ import type { Order } from "@/lib/supabase/types";
 export default async function ReceivedOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; detail?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, detail } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -58,7 +58,14 @@ export default async function ReceivedOrdersPage({
 
       {error === "update_failed" && (
         <p className="mt-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">
-          操作未生效,可能是数据库权限(RLS 策略)未开放卖家更新订单状态,请联系管理员检查。
+          操作未生效,数据库拒绝了这次更新,请联系管理员检查权限策略或数据格式。
+          {detail ? `(${detail})` : null}
+        </p>
+      )}
+      {error === "precondition_failed" && (
+        <p className="mt-4 rounded-xl bg-amber-50 px-4 py-2 text-sm text-amber-700">
+          这个订单当前状态不允许确认/拒绝(可能已被处理过,或数据不一致)。
+          {detail ? `(${detail})` : null}
         </p>
       )}
 

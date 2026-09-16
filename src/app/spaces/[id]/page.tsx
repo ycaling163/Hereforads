@@ -88,10 +88,7 @@ export default async function SpaceDetailPage({
     .slice(0, 2)
     .map((account) => {
       const label = SOCIAL_PLATFORM_LABELS[account.platform] ?? account.platform;
-      const followers =
-        typeof account.follower_count === "number"
-          ? ` ${account.follower_count.toLocaleString()}`
-          : "";
+      const followers = account.follower_count ? ` ${account.follower_count}` : "";
       return `${label}${followers}`;
     })
     .join(" · ");

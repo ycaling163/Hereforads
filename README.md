@@ -30,7 +30,7 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 | `/` | 首页 |
 | `/login`、`/register` | 邮箱密码登录/注册,密码框带显示/隐藏切换。注册成功后自动在 `profiles` 建一条记录(`role='both'`);如果 Supabase 开了邮箱验证、注册时还没有 session,会在验证后**首次登录**时补建 |
 | `/spaces` | 广告位卡片列表,读 `ad_spaces` 表 |
-| `/spaces/[id]` | 详情页:图片、关键词、状态、卖家信息(`profiles`+`seller_profiles`)、社交账号(`social_accounts`,可点击跳转)、**预订日历** |
+| `/spaces/[id]` | 详情页:图片、关键词、状态、卖家信息(`profiles`+`seller_profiles`)、社交账号(`social_accounts`,纯文字展示,未做可点击链接)、**预订日历** |
 | `/dashboard/new-space` | 卖家发布表单:标题/描述/关键词/城市/价格/币种/租期天数(卖家自定,不限 30 天)/图片(真实文件上传) |
 
 ## 预订日历怎么工作的
@@ -46,10 +46,10 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 
 ### 本项目用到的表
 
-- **profiles**(`id` uuid PK, `role` user_role, `display_name` text, `created_at`, `updated_at`)——目前**没有任何页面能编辑 `display_name`**,所以卖家信息一直显示"匿名卖家"
+- **profiles**(`id` uuid PK, `role` user_role, `display_name` text, `created_at`, `updated_at`)——`/dashboard/profile` 页可以编辑 `display_name`
 - **ad_spaces**(`id`, `seller_id`→profiles, `space_type` ad_space_type, `title`, `description`, `keyword` text, `photo_urls` text[] NOT NULL, `city`, `latitude`/`longitude` numeric NOT NULL(现在恒为 0,表单已不采集,纯历史遗留字段), `price_amount`, `price_currency`, `duration_days` int NOT NULL, `status` ad_space_status, `created_at`, `updated_at`)
-- **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `is_verified` bool, ...)——只有展示,**没有编辑入口**
-- **social_accounts**(`id`, `user_id`→profiles, `platform` social_platform, `handle`, `url`, `follower_count`, ...)——只有展示,**没有新增/编辑入口**
+- **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `is_verified` bool, ...)——`/dashboard/profile` 页可以编辑 `bio`/`avatar_url`,`is_verified` 仍只读(没有人工审核入口)
+- **social_accounts**(`id`, `user_id`→profiles, `platform` social_platform, `handle`, `url` text 可空, `follower_count` text 可空(允许填"22k"/"100k"这类模糊说法,不强制精确数字), ...)——`/dashboard/profile` 页可以新增/删除,没有编辑入口(改错了只能删掉重加);`url` 和 `handle` 至少填一个,不强制必须是链接(小红书之类账号名比链接常见)
 - **orders**(`id`, `ad_space_id`, `buyer_id`, `seller_id`, `payment_channel`, `amount`, `currency`, `status` order_status, `start_date`/`end_date` date, ...)——预订日历在用,`start_date`/`end_date` 是这次开发中后加的列
 
 ### 已知但本项目暂未使用的表
@@ -62,7 +62,7 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 - `ad_space_type`: `wall` / `picture_frame` / `clothing_pocket` / `clothing_back` / `face_left` / `face_right` / `other`——**产品上暂时只用 `wall` 一种**,发布表单没有分类选择器,`src/app/dashboard/new-space/actions.ts` 里写死了 `DEFAULT_SPACE_TYPE = "wall"`。真实取值和展示文案在 `src/lib/supabase/enums.ts`,以后要放开分类选择,改这一个文件+表单加个 `<select>` 就行
 - `ad_space_status`: `available` / `reserved` / `active_campaign` / `inactive`
 - `social_platform`: `douyin` / `xiaohongshu` / `weibo` / `wechat_channel` / `youtube` / `instagram` / `tiktok` / `bilibili` / `other`
-- `order_status`: `pending_payment` / `paid` / `in_progress` / `completed` / `cancelled` / `refunded`
+- `order_status`: `pending_payment` / `confirmed` / `rejected` / `paid` / `in_progress` / `completed` / `cancelled` / `refunded`(`confirmed`/`rejected` 是后加的值,见下面 RLS 策略章节的 `alter type` 语句)
 - `payment_channel`: `stripe` / `wechat_pay` / `alipay`(预订时先硬编码成 `stripe` 占位,没有真实选择/扣款)
 - `payout_status`: `pending` / `paid` / `failed`
 
@@ -81,6 +81,39 @@ create policy "anyone can view profiles"
 on public.profiles for select
 to anon, authenticated
 using (true);
+
+-- seller_profiles: "个人资料"页加了编辑功能后才需要的策略。
+-- update/insert 这两条之前已经手动配过(条件正确,auth.uid() = user_id),
+-- 但这张表的 RLS 总开关一度被直接关掉了(等于绕过了下面所有策略,任何人可读写全表数据),
+-- 后来重新打开了 RLS 开关,但一直没补 select 策略,导致打开 RLS 后自己和买家都读不到卖家资料了。
+create policy "anyone can view seller_profiles"
+on public.seller_profiles for select
+to anon, authenticated
+using (true);
+
+-- social_accounts: 同样是"个人资料"页加了新增/删除功能后才需要的策略,
+-- 之前这张表 RLS 开着但一条策略都没配(等于对所有人拒绝所有操作),
+-- 导致新增社交账号报错、删除静默失败、广告位详情页也看不到任何卖家的社交账号。
+create policy "anyone can view social_accounts"
+on public.social_accounts for select
+to anon, authenticated
+using (true);
+
+create policy "users can insert own social_accounts"
+on public.social_accounts for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+create policy "users can delete own social_accounts"
+on public.social_accounts for delete
+to authenticated
+using (auth.uid() = user_id);
+
+-- social_accounts: url 原本是 NOT NULL,但小红书这类平台账号名比链接常见,
+-- 改成可空、链接和账号名只要求填一个;follower_count 原本是 integer,
+-- 改成 text 允许填"22k"/"100k"这类模糊说法,不强制精确数字。
+alter table public.social_accounts alter column url drop not null;
+alter table public.social_accounts alter column follower_count type text using follower_count::text;
 
 -- ad_spaces: 卖家只能建自己的,所有人可查看
 create policy "sellers can insert own ad_spaces"
@@ -112,6 +145,13 @@ alter table public.ad_spaces add column if not exists keyword text;
 -- orders: 加预订日历用的起止日期列 + 策略
 alter table public.orders add column if not exists start_date date;
 alter table public.orders add column if not exists end_date date;
+
+-- orders.status 实际是 Postgres 枚举类型 order_status,当初建表时只给了
+-- pending_payment/paid/in_progress/completed/cancelled/refunded 这几个值。
+-- 卖家"确认预订"/"拒绝"页要把状态改成 confirmed/rejected,枚举里没有这两个值,
+-- 之前一直报 400 invalid input value for enum order_status,跟 RLS 策略无关。
+alter type public.order_status add value if not exists 'confirmed';
+alter type public.order_status add value if not exists 'rejected';
 
 create policy "anyone can view orders"
 on public.orders for select
@@ -158,9 +198,7 @@ with check (
 
 ## 已知欠缺 / 下一步 TODO
 
-- **支付未接入**:预订只是把订单状态停在 `pending_payment`,没有真正扣款、也没有卖家/系统确认订单的地方
-- **卖家资料无法编辑**:`profiles.display_name`、`seller_profiles`(简介/头像)、`social_accounts` 目前都只读,需要补一个"个人资料"页面
-- **订单管理页缺失**:买家/卖家都看不到自己的订单列表,只能去 Supabase 后台肉眼查 `orders` 表
+- **支付未接入**:卖家在 `/dashboard/orders` 能确认/拒绝预订了,但确认后订单停在 `confirmed`,没有真正扣款的流程把它推进到 `paid`
 - **`campaigns` 表未使用**:订单确认后买家提交广告创意素材的流程还没做
 - **图片管理简陋**:上传后不能删除单张、排序、换封面,只能整体重新提交
 - **日历只显示当月**:跨月的预订档期在视觉上看不到下个月部分(不影响预订本身是否成功,纯展示局限)

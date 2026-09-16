@@ -41,9 +41,9 @@ export function SocialAccountsManager({
                 </span>
                 <span className="ml-2 text-zinc-500">
                   {account.handle ?? account.url}
-                  {typeof account.follower_count === "number" && (
+                  {account.follower_count && (
                     <span className="ml-2 text-zinc-400">
-                      {account.follower_count.toLocaleString()} 粉丝
+                      {account.follower_count} 粉丝
                     </span>
                   )}
                 </span>
@@ -92,9 +92,15 @@ export function SocialAccountsManager({
         </div>
         <div className="col-span-2 flex flex-col gap-1.5">
           <label htmlFor="url" className={labelClass}>
-            主页链接
+            主页链接(选填)
           </label>
-          <input id="url" name="url" type="url" required className={inputClass} />
+          <input
+            id="url"
+            name="url"
+            type="url"
+            placeholder="没有链接的话,填上面的账号名就行"
+            className={inputClass}
+          />
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="follower_count" className={labelClass}>
@@ -103,8 +109,8 @@ export function SocialAccountsManager({
           <input
             id="follower_count"
             name="follower_count"
-            type="number"
-            min="0"
+            type="text"
+            placeholder="如 320 / 22k / 100k"
             className={inputClass}
           />
         </div>

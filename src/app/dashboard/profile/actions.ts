@@ -92,29 +92,23 @@ export async function addSocialAccountAction(
   const platform = String(formData.get("platform") ?? "");
   const handle = String(formData.get("handle") ?? "").trim();
   const url = String(formData.get("url") ?? "").trim();
-  const followerCountRaw = String(formData.get("follower_count") ?? "").trim();
+  const followerCount = String(formData.get("follower_count") ?? "").trim();
 
   if (!SOCIAL_PLATFORMS.includes(platform as SocialPlatform)) {
     return { error: "请选择平台" };
   }
-  if (!url) {
-    return { error: "请填写账号链接" };
-  }
-
-  let followerCount: number | null = null;
-  if (followerCountRaw) {
-    followerCount = Number(followerCountRaw);
-    if (Number.isNaN(followerCount) || followerCount < 0) {
-      return { error: "粉丝数请填写有效数字" };
-    }
+  // 有些平台(比如小红书)没有好分享的主页链接,账号名足够标识账号,
+  // 所以链接和账号名只要求填一个,不强制必须是链接。
+  if (!handle && !url) {
+    return { error: "请至少填写账号名或主页链接" };
   }
 
   const { error } = await supabase.from("social_accounts").insert({
     user_id: user.id,
     platform,
     handle: handle || null,
-    url,
-    follower_count: followerCount,
+    url: url || null,
+    follower_count: followerCount || null,
   });
 
   if (error) {
@@ -134,11 +128,18 @@ export async function deleteSocialAccountAction(accountId: string): Promise<void
     redirect("/login");
   }
 
-  await supabase
+  // .delete() 在 RLS 拒绝时不会报错,只会静默影响 0 行,
+  // 所以用 .select() 拿回被删的行来判断是否真的删除了。
+  const { data: deletedRows, error } = await supabase
     .from("social_accounts")
     .delete()
     .eq("id", accountId)
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .select("id");
+
+  if (error || !deletedRows || deletedRows.length === 0) {
+    redirect("/dashboard/profile?error=delete_failed");
+  }
 
   redirect("/dashboard/profile");
 }
