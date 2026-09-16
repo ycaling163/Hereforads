@@ -20,11 +20,20 @@ async function respondToOrder(orderId: string, nextStatus: OrderStatus) {
     .eq("id", orderId)
     .single();
 
-  if (order && order.seller_id === user.id && order.status === "pending_payment") {
-    await supabase
-      .from("orders")
-      .update({ status: nextStatus })
-      .eq("id", orderId);
+  if (!order || order.seller_id !== user.id || order.status !== "pending_payment") {
+    redirect("/dashboard/orders");
+  }
+
+  // .update() 在 RLS 拒绝写入时不会报错,只会静默影响 0 行,
+  // 所以这里用 .select() 拿回受影响的行来判断是否真的改了状态。
+  const { data: updatedRows, error } = await supabase
+    .from("orders")
+    .update({ status: nextStatus })
+    .eq("id", orderId)
+    .select("id");
+
+  if (error || !updatedRows || updatedRows.length === 0) {
+    redirect("/dashboard/orders?error=update_failed");
   }
 
   redirect("/dashboard/orders");
