@@ -1,6 +1,10 @@
 import type {
   AdSpaceStatus,
   AdSpaceType,
+  ListingCategory,
+  ListingOrderStatus,
+  ListingStatus,
+  PricingUnit,
   SocialPlatform,
   UserRole,
 } from "./enums";
@@ -9,6 +13,11 @@ export interface Profile {
   id: string;
   role: UserRole;
   display_name: string | null;
+  // MVP v2 新增字段,见 README 里的 schema 迁移说明。老账号这三个字段读出来是 null,
+  // 代表还没走过新流程 —— country 未填、stripe_onboarded 视为 false。
+  country: string | null;
+  stripe_connect_account_id: string | null;
+  stripe_onboarded: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -63,5 +72,63 @@ export interface Order {
   status: string;
   start_date: string | null;
   end_date: string | null;
+  created_at: string;
+}
+
+/**
+ * MVP v2 新模型("HereForAds MVP 产品方案"文档)—— 跟上面 AdSpace/Order 是两套
+ * 完全独立的实体,分别对应 listings/orders(新)/payments/messages 四张新表。
+ */
+
+export interface Listing {
+  id: string;
+  seller_id: string;
+  title: string;
+  description: string | null;
+  categories: ListingCategory[];
+  price_amount: number;
+  price_currency: string;
+  pricing_unit: PricingUnit;
+  media_urls: string[];
+  status: ListingStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ListingOrder {
+  id: string;
+  listing_id: string;
+  buyer_id: string;
+  seller_id: string;
+  amount: number;
+  currency: string;
+  status: ListingOrderStatus;
+  proof_url: string | null;
+  // 仅 pricing_unit 非 one_time 的 listing 才会填,用于判断档期冲突。
+  start_date: string | null;
+  end_date: string | null;
+  paid_at: string | null;
+  delivered_at: string | null;
+  confirmed_at: string | null;
+  created_at: string;
+}
+
+export interface Payment {
+  id: string;
+  order_id: string;
+  stripe_payment_intent_id: string | null;
+  stripe_transfer_id: string | null;
+  platform_fee_amount: number | null;
+  status: string;
+  created_at: string;
+}
+
+// 绑在某个 listing 下的一对一消息串,不做群聊。
+export interface ListingMessage {
+  id: string;
+  listing_id: string;
+  sender_id: string;
+  receiver_id: string;
+  body: string;
   created_at: string;
 }
