@@ -30,7 +30,8 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 | `/` | 首页 |
 | `/login`、`/register` | 邮箱密码登录/注册,密码框带显示/隐藏切换。注册成功后自动在 `profiles` 建一条记录(`role='both'`);如果 Supabase 开了邮箱验证、注册时还没有 session,会在验证后**首次登录**时补建 |
 | `/spaces` | 广告位卡片列表,读 `ad_spaces` 表 |
-| `/spaces/[id]` | 详情页:图片、关键词、状态、卖家信息(`profiles`+`seller_profiles`)、社交账号(`social_accounts`,纯文字展示,未做可点击链接)、**预订日历** |
+| `/spaces/[id]` | 详情页:图片、关键词、状态、卖家信息(`profiles`+`seller_profiles`,头像/名字可点进 `/sellers/[id]`)、社交账号(`social_accounts`,可点击链接)、**预订日历** |
+| `/sellers/[id]` | 卖家公开主页:头像/简介/认证标记、全部社交账号、该卖家发布的全部广告位(卡片列表) |
 | `/dashboard/new-space` | 卖家发布表单:标题/描述/关键词/城市/价格/币种/租期天数(卖家自定,不限 30 天)/图片(真实文件上传) |
 
 ## 预订日历怎么工作的
@@ -49,7 +50,7 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 - **profiles**(`id` uuid PK, `role` user_role, `display_name` text, `created_at`, `updated_at`)——`/dashboard/profile` 页可以编辑 `display_name`
 - **ad_spaces**(`id`, `seller_id`→profiles, `space_type` ad_space_type, `title`, `description`, `keyword` text, `photo_urls` text[] NOT NULL, `city`, `latitude`/`longitude` numeric NOT NULL(现在恒为 0,表单已不采集,纯历史遗留字段), `price_amount`, `price_currency`, `duration_days` int NOT NULL, `status` ad_space_status, `created_at`, `updated_at`)
 - **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `is_verified` bool, ...)——`/dashboard/profile` 页可以编辑 `bio`/`avatar_url`,`is_verified` 仍只读(没有人工审核入口)
-- **social_accounts**(`id`, `user_id`→profiles, `platform` social_platform, `handle`, `url` text 可空, `follower_count` text 可空(允许填"22k"/"100k"这类模糊说法,不强制精确数字), ...)——`/dashboard/profile` 页可以新增/删除,没有编辑入口(改错了只能删掉重加);`url` 和 `handle` 至少填一个,不强制必须是链接(小红书之类账号名比链接常见)
+- **social_accounts**(`id`, `user_id`→profiles, `platform` social_platform, `handle`, `url` text 可空, `follower_count` text 可空(允许填"22k"/"100k"这类模糊说法,不强制精确数字), ...)——`/dashboard/profile` 页可以新增/编辑/删除;`url` 和 `handle` 至少填一个,不强制必须是链接(小红书之类账号名比链接常见),两个都填了会都显示(之前只显示 `handle`,`url` 填了也不会出现在列表里)
 - **orders**(`id`, `ad_space_id`, `buyer_id`, `seller_id`, `payment_channel`, `amount`, `currency`, `status` order_status, `start_date`/`end_date` date, ...)——预订日历在用,`start_date`/`end_date` 是这次开发中后加的列
 
 ### 已知但本项目暂未使用的表
