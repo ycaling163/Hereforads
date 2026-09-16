@@ -1,0 +1,122 @@
+"use server";
+
+import { randomUUID } from "node:crypto";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import {
+  LISTING_CATEGORIES,
+  MIN_LISTING_PRICE,
+  PRICING_UNITS,
+  type ListingCategory,
+  type PricingUnit,
+} from "@/lib/supabase/enums";
+
+// listing 图片/视频复用已有的 ad-space-photos bucket,不用重新建。
+const MEDIA_BUCKET = "ad-space-photos";
+
+export interface NewListingState {
+  error?: string;
+}
+
+export async function createListingAction(
+  _prevState: NewListingState,
+  formData: FormData
+): Promise<NewListingState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("stripe_onboarded")
+    .eq("id", user.id)
+    .single();
+
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const priceAmountRaw = String(formData.get("price_amount") ?? "").trim();
+  const priceCurrency = String(formData.get("price_currency") ?? "").trim();
+  const pricingUnitRaw = String(formData.get("pricing_unit") ?? "");
+  const categories = formData
+    .getAll("categories")
+    .map(String)
+    .filter((c): c is ListingCategory =>
+      (LISTING_CATEGORIES as readonly string[]).includes(c)
+    );
+  const mediaFiles = formData
+    .getAll("media")
+    .filter((entry): entry is File => entry instanceof File && entry.size > 0);
+
+  if (!title) {
+    return { error: "Please enter a title" };
+  }
+  const priceAmount = Number(priceAmountRaw);
+  if (!priceAmountRaw || Number.isNaN(priceAmount) || priceAmount < MIN_LISTING_PRICE) {
+    return { error: `Please enter a valid price (minimum $${MIN_LISTING_PRICE})` };
+  }
+  if (!priceCurrency) {
+    return { error: "Please choose a currency" };
+  }
+  if (!(PRICING_UNITS as readonly string[]).includes(pricingUnitRaw)) {
+    return { error: "Please choose a pricing unit" };
+  }
+  const pricingUnit = pricingUnitRaw as PricingUnit;
+  if (categories.length === 0) {
+    return { error: "Please select at least one category" };
+  }
+
+  const mediaUrls: string[] = [];
+  try {
+    for (const file of mediaFiles) {
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `${user.id}/listings/${randomUUID()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from(MEDIA_BUCKET)
+        .upload(path, file, { contentType: file.type || undefined });
+
+      if (uploadError) {
+        return { error: `Media upload failed: ${uploadError.message}` };
+      }
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
+      mediaUrls.push(publicUrl);
+    }
+  } catch (err) {
+    return {
+      error: `Media upload failed: ${err instanceof Error ? err.message : "unknown error"}`,
+    };
+  }
+
+  // 没开通 Stripe 的卖家也能填表,但落库状态强制是 draft —— 买家看不到、也下不了单,
+  // 光靠前端隐藏发布入口挡不住有人直接提交表单绕过去,所以这里再校验一次。
+  const status = profile?.stripe_onboarded ? "active" : "draft";
+
+  const { data, error } = await supabase
+    .from("listings")
+    .insert({
+      seller_id: user.id,
+      title,
+      description: description || null,
+      categories,
+      price_amount: priceAmount,
+      price_currency: priceCurrency,
+      pricing_unit: pricingUnit,
+      media_urls: mediaUrls,
+      status,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    return { error: error?.message ?? "Failed to publish, please try again" };
+  }
+
+  redirect(`/listings/${data.id}`);
+}
