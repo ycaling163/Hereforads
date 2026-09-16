@@ -13,7 +13,13 @@ export interface DateRange {
 }
 
 function toDateOnly(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  // 用本地日期拼字符串,不能用 toISOString()——它会转成 UTC,
+  // 在东八区这种正时区里,本地零点转出去会变成前一天,导致日历
+  // 点的日期和实际提交的 start_date 差一天。
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function addDays(date: Date, days: number): Date {
