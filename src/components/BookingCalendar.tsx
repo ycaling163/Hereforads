@@ -49,7 +49,8 @@ export function BookingCalendar({
   );
   const [selectedStart, setSelectedStart] = useState(nextAvailableStart);
 
-  const today = new Date(toDateOnly(new Date()));
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const monthDays = buildMonthDays(
     new Date(today.getFullYear(), today.getMonth(), 1)
   );

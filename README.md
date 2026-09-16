@@ -63,7 +63,7 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 - `ad_space_type`: `wall` / `picture_frame` / `clothing_pocket` / `clothing_back` / `face_left` / `face_right` / `other`——**产品上暂时只用 `wall` 一种**,发布表单没有分类选择器,`src/app/dashboard/new-space/actions.ts` 里写死了 `DEFAULT_SPACE_TYPE = "wall"`。真实取值和展示文案在 `src/lib/supabase/enums.ts`,以后要放开分类选择,改这一个文件+表单加个 `<select>` 就行
 - `ad_space_status`: `available` / `reserved` / `active_campaign` / `inactive`
 - `social_platform`: `douyin` / `xiaohongshu` / `weibo` / `wechat_channel` / `youtube` / `instagram` / `tiktok` / `bilibili` / `other`
-- `order_status`: `pending_payment` / `paid` / `in_progress` / `completed` / `cancelled` / `refunded`
+- `order_status`: `pending_payment` / `confirmed` / `rejected` / `paid` / `in_progress` / `completed` / `cancelled` / `refunded`(`confirmed`/`rejected` 是后加的值,见下面 RLS 策略章节的 `alter type` 语句,**这条还没确认在线上库里执行过**)
 - `payment_channel`: `stripe` / `wechat_pay` / `alipay`(预订时先硬编码成 `stripe` 占位,没有真实选择/扣款)
 - `payout_status`: `pending` / `paid` / `failed`
 
@@ -97,6 +97,20 @@ using (true);
 -- ad_spaces 加关键词列(表单里的"关键词"字段用)
 alter table public.ad_spaces add column if not exists keyword text;
 
+-- ad_spaces: 卖家在"我的广告位"页编辑/删除自己的广告位要 UPDATE / DELETE 权限,
+-- 之前漏配这两条策略,导致编辑保存、删除按钮点击后不会有任何变化(RLS 默认拒绝、静默 0 行)。
+-- 代码这边已经加了检测(0 行时显示错误提示),但只有权限策略真的配上才会真正生效。
+create policy "sellers can update own ad_spaces"
+on public.ad_spaces for update
+to authenticated
+using (auth.uid() = seller_id)
+with check (auth.uid() = seller_id);
+
+create policy "sellers can delete own ad_spaces"
+on public.ad_spaces for delete
+to authenticated
+using (auth.uid() = seller_id);
+
 -- orders: 加预订日历用的起止日期列 + 策略
 alter table public.orders add column if not exists start_date date;
 alter table public.orders add column if not exists end_date date;
@@ -110,6 +124,44 @@ create policy "buyers can create their own orders"
 on public.orders for insert
 to authenticated
 with check (auth.uid() = buyer_id);
+
+-- orders: 卖家在"收到的预订请求"页确认/拒绝订单要 UPDATE 权限,
+-- 之前漏配这条策略,导致确认/拒绝按钮点击后状态不会变(RLS 默认拒绝、update 静默 0 行)
+create policy "sellers can update their own orders"
+on public.orders for update
+to authenticated
+using (auth.uid() = seller_id)
+with check (auth.uid() = seller_id);
+
+-- orders.status 实际是 Postgres 枚举类型 order_status,当初建表时只给了
+-- pending_payment/paid/in_progress/completed/cancelled/refunded 这几个值。
+-- 卖家"确认预订"/"拒绝"页要把状态改成 confirmed/rejected,枚举里没有这两个值会
+-- 报 400 invalid input value for enum order_status,跟上面的 RLS 策略是两个独立问题,
+-- 两个都要执行确认预订/拒绝才能真正生效。
+alter type public.order_status add value if not exists 'confirmed';
+alter type public.order_status add value if not exists 'rejected';
+
+-- social_accounts: "个人资料"页新增/编辑/删除社交账号要的策略
+create policy "anyone can view social_accounts"
+on public.social_accounts for select
+to anon, authenticated
+using (true);
+
+create policy "users can insert own social_accounts"
+on public.social_accounts for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+create policy "users can update own social_accounts"
+on public.social_accounts for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "users can delete own social_accounts"
+on public.social_accounts for delete
+to authenticated
+using (auth.uid() = user_id);
 
 -- Storage: 广告位图片的 public bucket + 策略
 insert into storage.buckets (id, name, public)
