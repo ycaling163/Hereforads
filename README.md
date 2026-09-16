@@ -91,6 +91,24 @@ on public.seller_profiles for select
 to anon, authenticated
 using (true);
 
+-- social_accounts: 同样是"个人资料"页加了新增/删除功能后才需要的策略,
+-- 之前这张表 RLS 开着但一条策略都没配(等于对所有人拒绝所有操作),
+-- 导致新增社交账号报错、删除静默失败、广告位详情页也看不到任何卖家的社交账号。
+create policy "anyone can view social_accounts"
+on public.social_accounts for select
+to anon, authenticated
+using (true);
+
+create policy "users can insert own social_accounts"
+on public.social_accounts for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+create policy "users can delete own social_accounts"
+on public.social_accounts for delete
+to authenticated
+using (auth.uid() = user_id);
+
 -- ad_spaces: 卖家只能建自己的,所有人可查看
 create policy "sellers can insert own ad_spaces"
 on public.ad_spaces for insert
