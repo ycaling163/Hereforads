@@ -3,16 +3,11 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 const NAV_ITEMS = [
-  { href: "/dashboard/new-listing", label: "Publish listing" },
-  { href: "/dashboard/sales", label: "Sales" },
-  { href: "/dashboard/purchases", label: "Purchases" },
-  { href: "/dashboard/messages", label: "Messages" },
-  { href: "/dashboard/stripe-connect", label: "Stripe payouts" },
+  { href: "/dashboard/spaces", label: "我的广告位" },
+  { href: "/dashboard/orders", label: "收到的预订" },
+  { href: "/dashboard/bookings", label: "我的预订" },
   { href: "/dashboard/profile", label: "个人资料" },
-  { href: "/dashboard/spaces", label: "我的广告位(旧)" },
-  { href: "/dashboard/orders", label: "收到的预订(旧)" },
-  { href: "/dashboard/bookings", label: "我的预订(旧)" },
-  { href: "/dashboard/new-space", label: "发布广告位(旧)" },
+  { href: "/dashboard/new-space", label: "发布广告位" },
 ];
 
 export default async function DashboardLayout({
