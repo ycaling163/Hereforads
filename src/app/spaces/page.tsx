@@ -12,7 +12,7 @@ export default async function SpacesPage() {
   const spaces = (data ?? []) as AdSpace[];
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-12">
+    <div className="mx-auto w-full max-w-7xl px-6 py-12">
       <h1 className="text-3xl font-semibold tracking-tight text-zinc-900">
         广告位
       </h1>
@@ -34,7 +34,7 @@ export default async function SpacesPage() {
         </p>
       )}
 
-      <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {spaces.map((space) => (
           <SpaceCard key={space.id} space={space} />
         ))}

@@ -25,7 +25,7 @@ export default async function Home() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <div className="mx-auto flex w-full max-w-5xl flex-col items-center px-6 pt-8 pb-8 text-center">
+      <div className="mx-auto flex w-full max-w-7xl flex-col items-center px-6 pt-8 pb-8 text-center">
         <h1 className="max-w-2xl text-5xl font-semibold tracking-tight text-zinc-900">
           把你的空间,变成广告位
         </h1>
@@ -58,14 +58,14 @@ export default async function Home() {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-5xl px-6 pb-24">
+      <div className="mx-auto w-full max-w-7xl px-6 pb-24">
         <h2 className="text-xl font-semibold tracking-tight text-zinc-900">
           推荐广告位
         </h2>
         {recommended.length === 0 ? (
           <p className="mt-4 text-sm text-zinc-500">暂无推荐广告位</p>
         ) : (
-          <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {recommended.map((space) => (
               <SpaceCard key={space.id} space={space} />
             ))}

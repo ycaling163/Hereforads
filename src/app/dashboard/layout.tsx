@@ -25,7 +25,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-12">
+    <div className="mx-auto w-full max-w-7xl px-6 py-12">
       <nav className="mb-10 flex flex-wrap gap-2 border-b border-zinc-200 pb-4">
         {NAV_ITEMS.map((item) => (
           <Link

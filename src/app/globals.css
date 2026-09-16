@@ -12,12 +12,9 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* 这个项目没有做深色模式的适配(所有文字颜色都是写死的 zinc-900 之类的深色),
+   之前留着 Next.js 模板自带的 prefers-color-scheme 判断,导致手机开了系统深色模式后
+   背景变黑、深色文字完全看不见。产品上就是一直白底,所以这里去掉深色分支。 */
 
 body {
   background: var(--background);

@@ -131,6 +131,63 @@ export async function addSocialAccountAction(
   redirect("/dashboard/profile");
 }
 
+export async function updateSocialAccountAction(
+  accountId: string,
+  _prevState: SocialAccountFormState,
+  formData: FormData
+): Promise<SocialAccountFormState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const platform = String(formData.get("platform") ?? "");
+  const handle = String(formData.get("handle") ?? "").trim();
+  const url = String(formData.get("url") ?? "").trim();
+  const followerCountRaw = String(formData.get("follower_count") ?? "").trim();
+
+  if (!SOCIAL_PLATFORMS.includes(platform as SocialPlatform)) {
+    return { error: "请选择平台" };
+  }
+  if (!url && !handle) {
+    return { error: "账号名和主页链接至少填一个" };
+  }
+
+  let followerCount: number | null = null;
+  if (followerCountRaw) {
+    followerCount = Number(followerCountRaw);
+    if (Number.isNaN(followerCount) || followerCount < 0) {
+      return { error: "粉丝数请填写有效数字" };
+    }
+  }
+
+  // 同样要用 .select() 拿回被改的行,不然 RLS 拒绝时 .update() 会静默影响 0 行。
+  const { data: updatedRows, error } = await supabase
+    .from("social_accounts")
+    .update({
+      platform,
+      handle: handle || null,
+      url: url || "",
+      follower_count: followerCount,
+    })
+    .eq("id", accountId)
+    .eq("user_id", user.id)
+    .select("id");
+
+  if (error) {
+    return { error: error.message };
+  }
+  if (!updatedRows || updatedRows.length === 0) {
+    return { error: "保存失败,数据库拒绝了这次操作" };
+  }
+
+  redirect("/dashboard/profile");
+}
+
 export async function deleteSocialAccountAction(accountId: string): Promise<void> {
   const supabase = await createClient();
   const {
@@ -141,11 +198,18 @@ export async function deleteSocialAccountAction(accountId: string): Promise<void
     redirect("/login");
   }
 
-  await supabase
+  // .delete() 在 RLS 拒绝时不会报错,只会静默影响 0 行,
+  // 所以用 .select() 拿回被删的行来判断是否真的删除了。
+  const { data: deletedRows, error } = await supabase
     .from("social_accounts")
     .delete()
     .eq("id", accountId)
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .select("id");
+
+  if (error || !deletedRows || deletedRows.length === 0) {
+    redirect("/dashboard/profile?error=delete_failed");
+  }
 
   redirect("/dashboard/profile");
 }
