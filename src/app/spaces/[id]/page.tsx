@@ -100,7 +100,7 @@ export default async function SpaceDetailPage({
     .join(" · ");
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-12">
+    <div className="mx-auto w-full max-w-7xl px-6 py-12">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="flex items-center justify-between gap-2">
@@ -131,7 +131,10 @@ export default async function SpaceDetailPage({
           )}
         </div>
 
-        <div className="flex items-start justify-end gap-3">
+        <Link
+          href={`/sellers/${adSpace.seller_id}`}
+          className="flex items-start justify-end gap-3"
+        >
           {sellerExtra?.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -145,7 +148,7 @@ export default async function SpaceDetailPage({
             </div>
           )}
           <div className="text-right">
-            <p className="flex items-center justify-end gap-1.5 font-medium text-zinc-900">
+            <p className="flex items-center justify-end gap-1.5 font-medium text-zinc-900 hover:underline">
               {seller?.display_name ?? "匿名卖家"}
               {sellerExtra?.is_verified && (
                 <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
@@ -157,7 +160,7 @@ export default async function SpaceDetailPage({
               {socialSummary || "暂无社交账号"}
             </p>
           </div>
-        </div>
+        </Link>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-10 lg:grid-cols-3">

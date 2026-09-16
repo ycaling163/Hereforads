@@ -1,14 +1,10 @@
 "use client";
 
 import { useActionState } from "react";
-import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
 import { SOCIAL_PLATFORMS, SOCIAL_PLATFORM_LABELS } from "@/lib/supabase/enums";
 import type { SocialAccount } from "@/lib/supabase/types";
-import {
-  addSocialAccountAction,
-  deleteSocialAccountAction,
-  type SocialAccountFormState,
-} from "./actions";
+import { SocialAccountRow } from "./SocialAccountRow";
+import { addSocialAccountAction, type SocialAccountFormState } from "./actions";
 
 const initialState: SocialAccountFormState = {};
 
@@ -31,30 +27,7 @@ export function SocialAccountsManager({
       {accounts.length > 0 && (
         <ul className="flex flex-col gap-2">
           {accounts.map((account) => (
-            <li
-              key={account.id}
-              className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 px-4 py-2.5 text-sm"
-            >
-              <span>
-                <span className="font-medium text-zinc-900">
-                  {SOCIAL_PLATFORM_LABELS[account.platform] ?? account.platform}
-                </span>
-                <span className="ml-2 text-zinc-500">
-                  {account.handle ?? account.url}
-                  {typeof account.follower_count === "number" && (
-                    <span className="ml-2 text-zinc-400">
-                      {account.follower_count.toLocaleString()} 粉丝
-                    </span>
-                  )}
-                </span>
-              </span>
-              <ConfirmSubmitForm
-                action={deleteSocialAccountAction.bind(null, account.id)}
-                confirmMessage="确定要删除这个社交账号吗?"
-                label="删除"
-                className="text-xs text-zinc-400 transition-colors hover:text-red-600"
-              />
-            </li>
+            <SocialAccountRow key={account.id} account={account} />
           ))}
         </ul>
       )}

@@ -30,7 +30,8 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 | `/` | 首页 |
 | `/login`、`/register` | 邮箱密码登录/注册,密码框带显示/隐藏切换。注册成功后自动在 `profiles` 建一条记录(`role='both'`);如果 Supabase 开了邮箱验证、注册时还没有 session,会在验证后**首次登录**时补建 |
 | `/spaces` | 广告位卡片列表,读 `ad_spaces` 表 |
-| `/spaces/[id]` | 详情页:图片、关键词、状态、卖家信息(`profiles`+`seller_profiles`)、社交账号(`social_accounts`,可点击跳转)、**预订日历** |
+| `/spaces/[id]` | 详情页:图片、关键词、状态、卖家信息(`profiles`+`seller_profiles`,头像/名字可点进 `/sellers/[id]`)、社交账号(`social_accounts`,可点击跳转)、**预订日历** |
+| `/sellers/[id]` | 卖家公开主页:头像/简介/认证标记、全部社交账号、该卖家发布的全部广告位(卡片列表) |
 | `/dashboard/new-space` | 卖家发布表单:标题/描述/关键词/城市/价格/币种/租期天数(卖家自定,不限 30 天)/图片(真实文件上传) |
 
 ## 预订日历怎么工作的
@@ -48,8 +49,8 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 
 - **profiles**(`id` uuid PK, `role` user_role, `display_name` text, `created_at`, `updated_at`)——目前**没有任何页面能编辑 `display_name`**,所以卖家信息一直显示"匿名卖家"
 - **ad_spaces**(`id`, `seller_id`→profiles, `space_type` ad_space_type, `title`, `description`, `keyword` text, `photo_urls` text[] NOT NULL, `city`, `latitude`/`longitude` numeric NOT NULL(现在恒为 0,表单已不采集,纯历史遗留字段), `price_amount`, `price_currency`, `duration_days` int NOT NULL, `status` ad_space_status, `created_at`, `updated_at`)
-- **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `is_verified` bool, ...)——只有展示,**没有编辑入口**
-- **social_accounts**(`id`, `user_id`→profiles, `platform` social_platform, `handle`, `url`, `follower_count`, ...)——只有展示,**没有新增/编辑入口**
+- **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `is_verified` bool, ...)——`/dashboard/profile` 页可以编辑 `bio`/`avatar_url`,`is_verified` 仍只读(没有人工审核入口)
+- **social_accounts**(`id`, `user_id`→profiles, `platform` social_platform, `handle`, `url` text, `follower_count` integer 可空, ...)——`/dashboard/profile` 页可以新增/编辑/删除;`url` 和 `handle` 至少填一个
 - **orders**(`id`, `ad_space_id`, `buyer_id`, `seller_id`, `payment_channel`, `amount`, `currency`, `status` order_status, `start_date`/`end_date` date, ...)——预订日历在用,`start_date`/`end_date` 是这次开发中后加的列
 
 ### 已知但本项目暂未使用的表
@@ -133,7 +134,7 @@ with check (
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能)
 - `next.config.ts` 里把 Server Actions 的请求体上限从默认 1MB 调到了 10MB(`experimental.serverActions.bodySizeLimit`),不然发布广告位带图片会报 `Body exceeded 1 MB limit` 的 500 错误
-- 目前仓库的默认分支/Vercel 生产分支是 `claude/admiring-goldberg-8x70p7`,另外建了个内容相同的 `main` 分支但还没启用——如果要切到"新分支开发 + PR 合并到 main 才上线"这套流程,记得同步去 Vercel 项目设置里把 Production Branch 改成 `main`
+- **`main` 才是 hereforads.com 实际部署的分支**(有 `public/logo.png` 品牌 logo 为证)。仓库另外还有一条 `claude/admiring-goldberg-8x70p7`,历史上曾各自独立合并过好几个 PR、跟 `main` 分叉了十几个提交,**没有连着线上环境**,不要在那条分支上开发——之前有 session 误在那条分支上开发、PR 也顺利合并了,但改动从未真正上线,排查了很久才发现。这条笔记之前写反过(说 admiring-goldberg 才是生产分支),已更正。
 
 ## 已知欠缺 / 下一步 TODO
 
