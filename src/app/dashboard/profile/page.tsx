@@ -4,7 +4,12 @@ import { ProfileForm } from "./ProfileForm";
 import { SocialAccountsManager } from "./SocialAccountsManager";
 import type { Profile, SellerProfile, SocialAccount } from "@/lib/supabase/types";
 
-export default async function ProfilePage() {
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -38,6 +43,11 @@ export default async function ProfilePage() {
         <p className="mt-2 text-sm text-zinc-500">
           买家在广告位详情页会看到这些信息。
         </p>
+        {error === "delete_failed" && (
+          <p className="mt-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">
+            删除未生效,数据库拒绝了这次操作,请联系管理员检查权限策略。
+          </p>
+        )}
         <div className="mt-6 max-w-xl">
           <ProfileForm
             initialDisplayName={(profile as Profile | null)?.display_name ?? ""}

@@ -134,11 +134,18 @@ export async function deleteSocialAccountAction(accountId: string): Promise<void
     redirect("/login");
   }
 
-  await supabase
+  // .delete() 在 RLS 拒绝时不会报错,只会静默影响 0 行,
+  // 所以用 .select() 拿回被删的行来判断是否真的删除了。
+  const { data: deletedRows, error } = await supabase
     .from("social_accounts")
     .delete()
     .eq("id", accountId)
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .select("id");
+
+  if (error || !deletedRows || deletedRows.length === 0) {
+    redirect("/dashboard/profile?error=delete_failed");
+  }
 
   redirect("/dashboard/profile");
 }

@@ -46,10 +46,10 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 
 ### 本项目用到的表
 
-- **profiles**(`id` uuid PK, `role` user_role, `display_name` text, `created_at`, `updated_at`)——目前**没有任何页面能编辑 `display_name`**,所以卖家信息一直显示"匿名卖家"
+- **profiles**(`id` uuid PK, `role` user_role, `display_name` text, `created_at`, `updated_at`)——`/dashboard/profile` 页可以编辑 `display_name`
 - **ad_spaces**(`id`, `seller_id`→profiles, `space_type` ad_space_type, `title`, `description`, `keyword` text, `photo_urls` text[] NOT NULL, `city`, `latitude`/`longitude` numeric NOT NULL(现在恒为 0,表单已不采集,纯历史遗留字段), `price_amount`, `price_currency`, `duration_days` int NOT NULL, `status` ad_space_status, `created_at`, `updated_at`)
-- **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `is_verified` bool, ...)——只有展示,**没有编辑入口**
-- **social_accounts**(`id`, `user_id`→profiles, `platform` social_platform, `handle`, `url`, `follower_count`, ...)——只有展示,**没有新增/编辑入口**
+- **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `is_verified` bool, ...)——`/dashboard/profile` 页可以编辑 `bio`/`avatar_url`,`is_verified` 仍只读(没有人工审核入口)
+- **social_accounts**(`id`, `user_id`→profiles, `platform` social_platform, `handle`, `url`, `follower_count`, ...)——`/dashboard/profile` 页可以新增/删除,没有编辑入口(改错了只能删掉重加)
 - **orders**(`id`, `ad_space_id`, `buyer_id`, `seller_id`, `payment_channel`, `amount`, `currency`, `status` order_status, `start_date`/`end_date` date, ...)——预订日历在用,`start_date`/`end_date` 是这次开发中后加的列
 
 ### 已知但本项目暂未使用的表
@@ -79,6 +79,15 @@ with check (auth.uid() = id);
 
 create policy "anyone can view profiles"
 on public.profiles for select
+to anon, authenticated
+using (true);
+
+-- seller_profiles: "个人资料"页加了编辑功能后才需要的策略。
+-- update/insert 这两条之前已经手动配过(条件正确,auth.uid() = user_id),
+-- 但这张表的 RLS 总开关一度被直接关掉了(等于绕过了下面所有策略,任何人可读写全表数据),
+-- 后来重新打开了 RLS 开关,但一直没补 select 策略,导致打开 RLS 后自己和买家都读不到卖家资料了。
+create policy "anyone can view seller_profiles"
+on public.seller_profiles for select
 to anon, authenticated
 using (true);
 
@@ -165,9 +174,7 @@ with check (
 
 ## 已知欠缺 / 下一步 TODO
 
-- **支付未接入**:预订只是把订单状态停在 `pending_payment`,没有真正扣款、也没有卖家/系统确认订单的地方
-- **卖家资料无法编辑**:`profiles.display_name`、`seller_profiles`(简介/头像)、`social_accounts` 目前都只读,需要补一个"个人资料"页面
-- **订单管理页缺失**:买家/卖家都看不到自己的订单列表,只能去 Supabase 后台肉眼查 `orders` 表
+- **支付未接入**:卖家在 `/dashboard/orders` 能确认/拒绝预订了,但确认后订单停在 `confirmed`,没有真正扣款的流程把它推进到 `paid`
 - **`campaigns` 表未使用**:订单确认后买家提交广告创意素材的流程还没做
 - **图片管理简陋**:上传后不能删除单张、排序、换封面,只能整体重新提交
 - **日历只显示当月**:跨月的预订档期在视觉上看不到下个月部分(不影响预订本身是否成功,纯展示局限)
