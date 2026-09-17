@@ -108,5 +108,8 @@ export interface ListingMessage {
   body: string;
   // 收件人打开这条会话时才会补上这个时间戳,null 就是未读。加之前读出来是 undefined。
   read_at: string | null;
+  // 消息可以只发图片、不写文字(这时 body 是空字符串),用来在沟通交付细节时
+  // 直接甩参考图/效果图。加之前读出来是 undefined。
+  image_url: string | null;
   created_at: string;
 }

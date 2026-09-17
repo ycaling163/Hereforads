@@ -1,9 +1,13 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe/server";
 import type { Listing } from "@/lib/supabase/types";
+
+// 私信图片复用已有的 ad-space-photos bucket,不用新建。
+const MESSAGE_MEDIA_BUCKET = "ad-space-photos";
 
 export interface BuyListingState {
   error?: string;
@@ -108,9 +112,11 @@ export async function sendListingMessageAction(
 
   const listingId = String(formData.get("listing_id") ?? "");
   const body = String(formData.get("body") ?? "").trim();
+  const imageFile = formData.get("image");
+  const hasImage = imageFile instanceof File && imageFile.size > 0;
 
-  if (!body) {
-    return { error: "Message can't be empty" };
+  if (!body && !hasImage) {
+    return { error: "Write a message or attach a photo" };
   }
 
   const { data: listing, error: listingError } = await supabase
@@ -126,11 +132,30 @@ export async function sendListingMessageAction(
     return { error: "You can't message yourself" };
   }
 
+  let imageUrl: string | null = null;
+  if (hasImage && imageFile instanceof File) {
+    const ext = imageFile.name.split(".").pop() || "jpg";
+    const path = `${user.id}/messages/${randomUUID()}.${ext}`;
+    const { error: uploadError } = await supabase.storage
+      .from(MESSAGE_MEDIA_BUCKET)
+      .upload(path, imageFile, { contentType: imageFile.type || undefined });
+
+    if (uploadError) {
+      return { error: `Photo upload failed: ${uploadError.message}` };
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from(MESSAGE_MEDIA_BUCKET).getPublicUrl(path);
+    imageUrl = publicUrl;
+  }
+
   const { error } = await supabase.from("listing_messages").insert({
     listing_id: listingId,
     sender_id: user.id,
     receiver_id: listing.seller_id,
     body,
+    image_url: imageUrl,
   });
 
   if (error) {

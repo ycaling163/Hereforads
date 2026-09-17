@@ -71,13 +71,21 @@ export default async function MessageThreadPage({
         {messages.map((message) => (
           <div
             key={message.id}
-            className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${
+            className={`flex max-w-[80%] flex-col gap-2 rounded-2xl px-4 py-2 text-sm ${
               message.sender_id === user.id
                 ? "self-end bg-zinc-900 text-white"
                 : "self-start bg-zinc-100 text-zinc-900"
             }`}
           >
-            {message.body}
+            {message.image_url && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={message.image_url}
+                alt=""
+                className="max-h-64 rounded-lg object-cover"
+              />
+            )}
+            {message.body && <p>{message.body}</p>}
           </div>
         ))}
       </div>

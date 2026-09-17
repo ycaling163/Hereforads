@@ -1,7 +1,11 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+
+// 私信图片复用已有的 ad-space-photos bucket,不用新建。
+const MESSAGE_MEDIA_BUCKET = "ad-space-photos";
 
 export interface ReplyState {
   error?: string;
@@ -23,8 +27,29 @@ export async function replyToThreadAction(
   }
 
   const body = String(formData.get("body") ?? "").trim();
-  if (!body) {
-    return { error: "Message can't be empty" };
+  const imageFile = formData.get("image");
+  const hasImage = imageFile instanceof File && imageFile.size > 0;
+
+  if (!body && !hasImage) {
+    return { error: "Write a message or attach a photo" };
+  }
+
+  let imageUrl: string | null = null;
+  if (hasImage && imageFile instanceof File) {
+    const ext = imageFile.name.split(".").pop() || "jpg";
+    const path = `${user.id}/messages/${randomUUID()}.${ext}`;
+    const { error: uploadError } = await supabase.storage
+      .from(MESSAGE_MEDIA_BUCKET)
+      .upload(path, imageFile, { contentType: imageFile.type || undefined });
+
+    if (uploadError) {
+      return { error: `Photo upload failed: ${uploadError.message}` };
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from(MESSAGE_MEDIA_BUCKET).getPublicUrl(path);
+    imageUrl = publicUrl;
   }
 
   const { error } = await supabase.from("listing_messages").insert({
@@ -32,6 +57,7 @@ export async function replyToThreadAction(
     sender_id: user.id,
     receiver_id: otherUserId,
     body,
+    image_url: imageUrl,
   });
 
   if (error) {

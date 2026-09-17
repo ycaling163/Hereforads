@@ -102,7 +102,12 @@ export default async function SalesPage() {
                         {order.amount} {order.currency}
                       </span>
                       <span>·</span>
-                      <span>Buyer: {buyerNameById.get(order.buyer_id) ?? "Anonymous buyer"}</span>
+                      <span>
+                        Buyer:{" "}
+                        <Link href={`/sellers/${order.buyer_id}`} className="underline">
+                          {buyerNameById.get(order.buyer_id) ?? "Anonymous buyer"}
+                        </Link>
+                      </span>
                       <Link
                         href={`/dashboard/messages/${order.listing_id}/${order.buyer_id}`}
                         className="underline"

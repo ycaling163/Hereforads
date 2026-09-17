@@ -81,7 +81,7 @@ export default async function MessagesPage() {
               </span>
             </div>
             <p className="mt-1 line-clamp-1 text-sm text-zinc-500">
-              {thread.lastMessage.body}
+              {thread.lastMessage.body || (thread.lastMessage.image_url ? "📷 Photo" : "")}
             </p>
           </Link>
         ))}
