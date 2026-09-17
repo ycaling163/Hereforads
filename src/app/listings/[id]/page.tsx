@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -16,6 +17,26 @@ import type {
   SellerProfile,
   SocialAccount,
 } from "@/lib/supabase/types";
+
+export async function generateMetadata({
+  params,
+}: PageProps<"/listings/[id]">): Promise<Metadata> {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: listing } = await supabase
+    .from("listings")
+    .select("title,description")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!listing) {
+    return { title: "Ad space" };
+  }
+  return {
+    title: listing.title,
+    description: listing.description ?? undefined,
+  };
+}
 
 export default async function ListingDetailPage({
   params,

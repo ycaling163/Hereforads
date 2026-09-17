@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { ListingCard } from "@/components/ListingCard";
 import type { Listing } from "@/lib/supabase/types";
+
+export const metadata: Metadata = {
+  title: "Ad Spaces",
+  description:
+    "Browse ad placements from creators and sellers around the world — from social bio-links to real-world walls and desks.",
+};
 
 export default async function ListingsPage() {
   const supabase = await createClient();
@@ -15,7 +22,7 @@ export default async function ListingsPage() {
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-12">
       <h1 className="text-3xl font-semibold tracking-tight text-zinc-900">
-        Listings
+        Ad spaces
       </h1>
       <p className="mt-2 text-zinc-600">
         Ad spots and promo services from creators and sellers around the world

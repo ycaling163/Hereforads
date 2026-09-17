@@ -14,9 +14,21 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "hereforads",
+  metadataBase: new URL("https://hereforads.com"),
+  title: {
+    default: "HereForAds — Turn Your Space Into Ad Space",
+    template: "%s | HereForAds",
+  },
   description:
-    "Turn your space into ad space — list it, rent it out, or find the perfect placement to advertise on.",
+    "HereForAds is a marketplace where creators and everyday people list their physical or digital space as ad placements, and brands find and book the right spot to advertise.",
+  openGraph: {
+    title: "HereForAds — Turn Your Space Into Ad Space",
+    description:
+      "List your space and get paid by brands, or browse ad placements — from creator bio-links to real-world walls and desks.",
+    url: "https://hereforads.com",
+    siteName: "HereForAds",
+    images: ["/logo.png"],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
