@@ -62,6 +62,10 @@ export default async function ReceivedOrdersPage({
         </p>
       )}
 
+      <p className="mt-4 text-sm text-zinc-500">
+        确认后,买家会在&ldquo;我的预订&rdquo;页看到付款入口;拒绝的预订不会占用日历上的档期。
+      </p>
+
       {orders.length === 0 ? (
         <p className="mt-8 text-sm text-zinc-500">还没有收到预订请求。</p>
       ) : (

@@ -6,6 +6,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/spaces", label: "我的广告位" },
   { href: "/dashboard/orders", label: "收到的预订" },
   { href: "/dashboard/bookings", label: "我的预订" },
+  { href: "/dashboard/payments", label: "收款设置" },
   { href: "/dashboard/profile", label: "个人资料" },
   { href: "/dashboard/new-space", label: "发布广告位" },
 ];

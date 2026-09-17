@@ -39,7 +39,24 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 - 从 `orders` 表读出该广告位所有 `pending_payment` / `paid` / `in_progress` 状态的订单,算出哪些日期已被占用(`src/lib/booking.ts`)
 - 日历里点任意一个空闲日期,会高亮从那天起、连续 `duration_days` 天的整个档期;跟已有预订冲突会变红并禁止提交
 - 点"预订"提交后,`src/app/spaces/[id]/actions.ts` 会**用数据库里最新的订单重新校验一遍**该档期是否还空着(防止两人同时抢同一天),校验通过就插入一条 `status: pending_payment` 的订单
-- **还没接真实支付**——这一步只是把日期占上,状态停在"待确认"。后面接 Stripe/微信支付/宝真正扣款时,大概率要在这个 action 里加支付环节,并且需要一个卖家/系统确认订单、把状态推进到 `paid` 的地方(目前没有)
+- 卖家在"收到的预订请求"页确认后,状态变成 `confirmed`;买家在"我的预订"页对 `confirmed` 的订单会看到"去支付"按钮,走 Stripe Checkout 完成真正扣款(见下面"支付流程"一节),支付成功后 webhook 把状态推进到 `paid`
+
+## 支付流程(Stripe Connect)
+
+用的是 **Stripe Connect · Express 账户 + destination charge**:买家在 Stripe 托管的 Checkout 页付款,钱直接转进卖家的连接账户,平台不经手资金,也还没抽成(`payment_intent_data.transfer_data.destination` 转全额给卖家,没设置 `application_fee_amount`)。
+
+流程:
+
+1. 卖家在 `/dashboard/payments` 点"连接 Stripe 账户"(`src/app/dashboard/payments/actions.ts` → `startStripeOnboardingAction`),后端建一个 Stripe Express account、存 `stripe_account_id`,跳到 Stripe 托管的入驻表单(Account Link)
+2. 卖家资料填完、Stripe 审核通过后,Stripe 发 `account.updated` webhook,把 `seller_profiles.stripe_charges_enabled` / `stripe_payouts_enabled` 更新成 `true`
+3. 买家的订单被卖家确认(`confirmed`)后,在 `/dashboard/bookings` 点"去支付"(`src/app/dashboard/bookings/actions.ts` → `createCheckoutSessionAction`),后端校验订单属于当前买家且状态是 `confirmed`、卖家 `stripe_charges_enabled` 为真,才会建 Stripe Checkout Session 并跳转过去;卖家还没连好 Stripe 时会提示"卖家还没完成收款设置"
+4. 买家付款成功后,Stripe 发 `checkout.session.completed` webhook 到 `/api/stripe/webhook`(`src/app/api/stripe/webhook/route.ts`),校验签名后把订单从 `confirmed` 推进到 `paid`、记下 `stripe_payment_intent_id`
+
+**Webhook 用的是 service_role key,不是 RLS**:Stripe 的 webhook 请求没有买家/卖家的登录态,没法靠 `auth.uid()` 的 RLS 策略去改别人的订单/资料,所以 `/api/stripe/webhook` 单独用 `SUPABASE_SERVICE_ROLE_KEY`(`src/lib/supabase/admin.ts`)绕过 RLS,安全性完全靠 `stripe.webhooks.constructEvent` 校验请求确实来自 Stripe、带着正确签名。这个 key 只应该出现在服务端环境变量里,不能加 `NEXT_PUBLIC_` 前缀,也不能在这个文件之外的地方 import `admin.ts`。
+
+**本地测试 webhook**:装 [Stripe CLI](https://docs.stripe.com/stripe-cli),跑 `stripe listen --forward-to localhost:3000/api/stripe/webhook`,它会打印一个 `whsec_...`,填到 `.env.local` 的 `STRIPE_WEBHOOK_SECRET`。线上部署时去 Stripe 后台 Developers → Webhooks 加一个指向 `https://hereforads.com/api/stripe/webhook` 的 endpoint,订阅 `checkout.session.completed` 和 `account.updated` 这两个事件,把后台生成的 signing secret 填到部署环境的 `STRIPE_WEBHOOK_SECRET`。
+
+**还没做的**:卖家没连 Stripe 时依然可以正常发布广告位、收到预订请求(只是买家到付款那一步会被挡住),没有强制卖家先连好 Stripe 才能收预订;没有退款(`refunded`)流程;没有平台抽成。
 
 ## 数据库(Supabase 项目 `myadsspace`, ref `jnfllsllahunbfgpopfv`)
 
@@ -49,9 +66,9 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 
 - **profiles**(`id` uuid PK, `role` user_role, `display_name` text, `created_at`, `updated_at`)——目前**没有任何页面能编辑 `display_name`**,所以卖家信息一直显示"匿名卖家"
 - **ad_spaces**(`id`, `seller_id`→profiles, `space_type` ad_space_type, `title`, `description`, `keyword` text, `photo_urls` text[] NOT NULL, `city`, `latitude`/`longitude` numeric NOT NULL(现在恒为 0,表单已不采集,纯历史遗留字段), `price_amount`, `price_currency`, `duration_days` int NOT NULL, `status` ad_space_status, `created_at`, `updated_at`)
-- **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `is_verified` bool, ...)——`/dashboard/profile` 页可以编辑 `bio`/`avatar_url`,`is_verified` 仍只读(没有人工审核入口)
+- **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `is_verified` bool, `stripe_account_id` text, `stripe_charges_enabled` bool, `stripe_payouts_enabled` bool, ...)——`/dashboard/profile` 页可以编辑 `bio`/`avatar_url`,`is_verified` 仍只读(没有人工审核入口);`stripe_*` 三列是这次接支付新加的,见下面"支付流程"一节
 - **social_accounts**(`id`, `user_id`→profiles, `platform` social_platform, `handle`, `url` text, `follower_count` integer 可空, ...)——`/dashboard/profile` 页可以新增/编辑/删除;`url` 和 `handle` 至少填一个
-- **orders**(`id`, `ad_space_id`, `buyer_id`, `seller_id`, `payment_channel`, `amount`, `currency`, `status` order_status, `start_date`/`end_date` date, ...)——预订日历在用,`start_date`/`end_date` 是这次开发中后加的列
+- **orders**(`id`, `ad_space_id`, `buyer_id`, `seller_id`, `payment_channel`, `amount`, `currency`, `status` order_status, `start_date`/`end_date` date, `stripe_checkout_session_id` text, `stripe_payment_intent_id` text, ...)——预订日历在用,`start_date`/`end_date` 是早前加的列,`stripe_checkout_session_id`/`stripe_payment_intent_id` 是这次接支付新加的
 
 ### 已知但本项目暂未使用的表
 
@@ -141,6 +158,30 @@ with check (auth.uid() = seller_id);
 alter type public.order_status add value if not exists 'confirmed';
 alter type public.order_status add value if not exists 'rejected';
 
+-- seller_profiles / orders: 接 Stripe Connect 支付新加的列
+alter table public.seller_profiles add column if not exists stripe_account_id text;
+alter table public.seller_profiles add column if not exists stripe_charges_enabled boolean not null default false;
+alter table public.seller_profiles add column if not exists stripe_payouts_enabled boolean not null default false;
+
+alter table public.orders add column if not exists stripe_checkout_session_id text;
+alter table public.orders add column if not exists stripe_payment_intent_id text;
+
+-- orders: 买家在"我的预订"页发起 Stripe Checkout 时,要把生成的
+-- session id 写回自己的订单。故意把 using/with check 都锁在
+-- status = 'confirmed',这样这条策略只能用来在"待付款"状态下
+-- 补写 stripe_checkout_session_id 这类字段,买家没法借着这条策略
+-- 直接把 status 改成 paid(改了 with check 就不满足,会被拒绝)——
+-- 真正把订单推进到 paid 只能通过 webhook 的 service_role key。
+create policy "buyers can update their own confirmed orders"
+on public.orders for update
+to authenticated
+using (auth.uid() = buyer_id and status = 'confirmed')
+with check (auth.uid() = buyer_id and status = 'confirmed');
+
+-- 注意:/api/stripe/webhook 改订单状态(推进到 paid)、改 seller_profiles 的
+-- stripe_charges_enabled/stripe_payouts_enabled,走的是 service_role key,
+-- 会绕过上面所有 RLS 策略,不需要专门为 webhook 开策略。
+
 -- social_accounts: "个人资料"页新增/编辑/删除社交账号要的策略
 create policy "anyone can view social_accounts"
 on public.social_accounts for select
@@ -184,16 +225,15 @@ with check (
 
 ## 部署(Vercel)
 
-- Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能)
+- Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀
 - `next.config.ts` 里把 Server Actions 的请求体上限从默认 1MB 调到了 10MB(`experimental.serverActions.bodySizeLimit`),不然发布广告位带图片会报 `Body exceeded 1 MB limit` 的 500 错误
 - **`main` 才是 hereforads.com 实际部署的分支**(有 `public/logo.png` 品牌 logo 为证)。仓库另外还有一条 `claude/admiring-goldberg-8x70p7`,历史上曾各自独立合并过好几个 PR、跟 `main` 分叉了十几个提交,**没有连着线上环境**,不要在那条分支上开发——之前有 session 误在那条分支上开发、PR 也顺利合并了,但改动从未真正上线,排查了很久才发现。这条笔记之前写反过(说 admiring-goldberg 才是生产分支),已更正。
 
 ## 已知欠缺 / 下一步 TODO
 
-- **支付未接入**:预订只是把订单状态停在 `pending_payment`,没有真正扣款、也没有卖家/系统确认订单的地方
-- **卖家资料无法编辑**:`profiles.display_name`、`seller_profiles`(简介/头像)、`social_accounts` 目前都只读,需要补一个"个人资料"页面
-- **订单管理页缺失**:买家/卖家都看不到自己的订单列表,只能去 Supabase 后台肉眼查 `orders` 表
-- **`campaigns` 表未使用**:订单确认后买家提交广告创意素材的流程还没做
+- **支付抽成/退款未做**:Stripe Connect 付款流程已接入(见"支付流程"一节),但没有平台抽成,也没有退款(`refunded`)入口
+- **没有强制卖家先连 Stripe 才能接单**:卖家没连 Stripe 账户也能正常发布广告位、收到预订请求,只是走到买家付款那一步会被挡住并提示"卖家还没完成收款设置"
+- **`campaigns` 表未使用**:订单确认/付款后买家提交广告创意素材的流程还没做
 - **图片管理简陋**:上传后不能删除单张、排序、换封面,只能整体重新提交
 - **日历只显示当月**:跨月的预订档期在视觉上看不到下个月部分(不影响预订本身是否成功,纯展示局限)
 - 未专门做移动端适配测试

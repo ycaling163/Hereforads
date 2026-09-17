@@ -37,6 +37,11 @@ export interface SellerProfile {
   bio: string | null;
   avatar_url: string | null;
   is_verified: boolean;
+  // Stripe Connect(Express 账户)相关字段,加之前读出来是 undefined。
+  // 见 README 支付章节的 SQL。
+  stripe_account_id: string | null;
+  stripe_charges_enabled: boolean;
+  stripe_payouts_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -63,5 +68,9 @@ export interface Order {
   status: string;
   start_date: string | null;
   end_date: string | null;
+  // Stripe Checkout / PaymentIntent 关联字段,加之前读出来是 undefined。
+  // 见 README 支付章节的 SQL。
+  stripe_checkout_session_id: string | null;
+  stripe_payment_intent_id: string | null;
   created_at: string;
 }

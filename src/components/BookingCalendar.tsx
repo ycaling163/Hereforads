@@ -167,7 +167,8 @@ export function BookingCalendar({
           )}
         </form>
         <p className="mt-2 text-xs text-zinc-400">
-          目前预订还不会真正扣款,提交后是&ldquo;待确认&rdquo;状态,后续接入支付后才会正式扣款。
+          提交后是&ldquo;待确认&rdquo;状态,还不会扣款;卖家确认后,请到
+          &ldquo;我的预订&rdquo;页完成支付。
         </p>
       </div>
     </div>
