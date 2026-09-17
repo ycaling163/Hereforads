@@ -18,13 +18,13 @@ export async function registerAction(
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
 
   if (!email || !password) {
-    return { error: "请填写邮箱和密码" };
+    return { error: "Please enter your email and password" };
   }
   if (password.length < 6) {
-    return { error: "密码至少需要 6 位" };
+    return { error: "Password must be at least 6 characters" };
   }
   if (password !== confirmPassword) {
-    return { error: "两次输入的密码不一致" };
+    return { error: "Passwords don't match" };
   }
 
   const supabase = await createClient();
@@ -35,7 +35,7 @@ export async function registerAction(
   }
 
   if (!data.user) {
-    return { error: "注册失败,请稍后再试" };
+    return { error: "Sign up failed, please try again" };
   }
 
   if (data.session) {
@@ -47,6 +47,6 @@ export async function registerAction(
   // 邮箱验证已开启:此时还没有 session,没法立刻写 profiles(RLS 需要 auth.uid()）。
   // 提示用户验证邮箱,真正的 profiles 记录会在其验证后首次登录时补建。
   return {
-    message: "注册成功!请查收邮箱完成验证,验证后即可登录。",
+    message: "Account created! Check your email to verify it, then log in.",
   };
 }

@@ -38,14 +38,15 @@ export default async function ProfilePage({
     <div className="flex flex-col gap-10">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
-          个人资料 / 卖家资料
+          Profile / Seller info
         </h1>
         <p className="mt-2 text-sm text-zinc-500">
-          买家在广告位详情页会看到这些信息。
+          Buyers will see this on your listing pages.
         </p>
         {error === "delete_failed" && (
           <p className="mt-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">
-            删除未生效,数据库拒绝了这次操作,请联系管理员检查权限策略。
+            Delete didn&apos;t go through — the database rejected the request.
+            Please contact an admin to check the permission policy.
           </p>
         )}
         <div className="mt-6 max-w-xl">
@@ -61,10 +62,11 @@ export default async function ProfilePage({
 
       <div>
         <h2 className="text-lg font-semibold tracking-tight text-zinc-900">
-          社交账号
+          Social accounts
         </h2>
         <p className="mt-2 text-sm text-zinc-500">
-          展示你的抖音、小红书等账号和粉丝数,提升买家信任度。
+          Show your Douyin, Xiaohongshu, and other accounts with follower
+          counts to build buyer trust.
         </p>
         <div className="mt-6 max-w-xl">
           <SocialAccountsManager

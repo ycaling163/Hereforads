@@ -31,16 +31,16 @@ export function ProfileForm({
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={initialAvatarUrl}
-              alt="头像"
+              alt="Avatar"
               className="h-full w-full object-cover"
             />
           ) : (
-            "无"
+            "None"
           )}
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="avatar" className={labelClass}>
-            更换头像(选填)
+            Change avatar (optional)
           </label>
           <input
             id="avatar"
@@ -54,7 +54,7 @@ export function ProfileForm({
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="display_name" className={labelClass}>
-          昵称
+          Display name
         </label>
         <input
           id="display_name"
@@ -67,27 +67,27 @@ export function ProfileForm({
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="bio" className={labelClass}>
-          卖家简介
+          Seller bio
         </label>
         <textarea
           id="bio"
           name="bio"
           rows={4}
           defaultValue={initialBio}
-          placeholder="介绍一下你自己和你的空间,提升买家信任度"
+          placeholder="Tell buyers about yourself and your space to build trust"
           className={inputClass}
         />
       </div>
 
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">已保存。</p>}
+      {state.success && <p className="text-sm text-green-700">Saved.</p>}
 
       <button
         type="submit"
         disabled={pending}
         className="mt-2 self-start rounded-full bg-zinc-900 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50"
       >
-        {pending ? "保存中..." : "保存资料"}
+        {pending ? "Saving…" : "Save profile"}
       </button>
     </form>
   );

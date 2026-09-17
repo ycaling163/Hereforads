@@ -38,7 +38,7 @@ export async function updateProfileAction(
       .upload(path, avatarFile, { contentType: avatarFile.type || undefined });
 
     if (uploadError) {
-      return { error: `头像上传失败:${uploadError.message}` };
+      return { error: `Avatar upload failed: ${uploadError.message}` };
     }
 
     const {
@@ -59,7 +59,7 @@ export async function updateProfileAction(
   if (!updatedProfile || updatedProfile.length === 0) {
     return {
       error:
-        "保存失败:数据库拒绝了这次更新(权限策略问题),请联系管理员检查 profiles 表的 UPDATE 权限策略(RLS)。",
+        "Save failed — the database rejected the update (permission policy issue). Please contact an admin to check the profiles table's UPDATE RLS policy.",
     };
   }
 
@@ -102,17 +102,17 @@ export async function addSocialAccountAction(
   const followerCountRaw = String(formData.get("follower_count") ?? "").trim();
 
   if (!SOCIAL_PLATFORMS.includes(platform as SocialPlatform)) {
-    return { error: "请选择平台" };
+    return { error: "Please choose a platform" };
   }
   if (!url && !handle) {
-    return { error: "账号名和主页链接至少填一个" };
+    return { error: "Fill in either a handle or a profile link" };
   }
 
   let followerCount: number | null = null;
   if (followerCountRaw) {
     followerCount = Number(followerCountRaw);
     if (Number.isNaN(followerCount) || followerCount < 0) {
-      return { error: "粉丝数请填写有效数字" };
+      return { error: "Please enter a valid follower count" };
     }
   }
 
@@ -151,17 +151,17 @@ export async function updateSocialAccountAction(
   const followerCountRaw = String(formData.get("follower_count") ?? "").trim();
 
   if (!SOCIAL_PLATFORMS.includes(platform as SocialPlatform)) {
-    return { error: "请选择平台" };
+    return { error: "Please choose a platform" };
   }
   if (!url && !handle) {
-    return { error: "账号名和主页链接至少填一个" };
+    return { error: "Fill in either a handle or a profile link" };
   }
 
   let followerCount: number | null = null;
   if (followerCountRaw) {
     followerCount = Number(followerCountRaw);
     if (Number.isNaN(followerCount) || followerCount < 0) {
-      return { error: "粉丝数请填写有效数字" };
+      return { error: "Please enter a valid follower count" };
     }
   }
 
@@ -182,7 +182,7 @@ export async function updateSocialAccountAction(
     return { error: error.message };
   }
   if (!updatedRows || updatedRows.length === 0) {
-    return { error: "保存失败,数据库拒绝了这次操作" };
+    return { error: "Save failed — the database rejected the request" };
   }
 
   redirect("/dashboard/profile");

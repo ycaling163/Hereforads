@@ -8,10 +8,10 @@ type NavEntry =
   | { type: "group"; label: string; items: { href: string; label: string }[] };
 
 const NAV: NavEntry[] = [
-  { type: "link", href: "/dashboard", label: "仪表盘" },
+  { type: "link", href: "/dashboard", label: "Dashboard" },
   {
     type: "group",
-    label: "广告管理",
+    label: "Ad Management",
     items: [
       { href: "/dashboard/new-listing", label: "Publish listing" },
       { href: "/dashboard/my-listings", label: "My listings" },
@@ -19,15 +19,15 @@ const NAV: NavEntry[] = [
   },
   {
     type: "group",
-    label: "交易管理",
+    label: "Transaction Management",
     items: [
       { href: "/dashboard/sales", label: "Sales" },
       { href: "/dashboard/purchases", label: "Purchases" },
     ],
   },
-  { type: "link", href: "/dashboard/stripe-connect", label: "支付管理" },
-  { type: "link", href: "/dashboard/messages", label: "消息" },
-  { type: "link", href: "/dashboard/profile", label: "个人资料" },
+  { type: "link", href: "/dashboard/stripe-connect", label: "Payment Management" },
+  { type: "link", href: "/dashboard/messages", label: "Messages" },
+  { type: "link", href: "/dashboard/profile", label: "Profile" },
 ];
 
 function isActive(pathname: string, href: string) {

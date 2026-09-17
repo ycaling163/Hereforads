@@ -37,12 +37,12 @@ export function SocialAccountRow({ account }: { account: SocialAccount }) {
             onClick={() => setIsEditing(true)}
             className="text-xs text-zinc-400 transition-colors hover:text-zinc-900"
           >
-            编辑
+            Edit
           </button>
           <ConfirmSubmitForm
             action={deleteSocialAccountAction.bind(null, account.id)}
-            confirmMessage="确定要删除这个社交账号吗?"
-            label="删除"
+            confirmMessage="Delete this social account?"
+            label="Delete"
             className="text-xs text-zinc-400 transition-colors hover:text-red-600"
           />
         </span>
@@ -55,7 +55,7 @@ export function SocialAccountRow({ account }: { account: SocialAccount }) {
       <form action={formAction} className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <label htmlFor={`platform-${account.id}`} className={labelClass}>
-            平台
+            Platform
           </label>
           <select
             id={`platform-${account.id}`}
@@ -73,7 +73,7 @@ export function SocialAccountRow({ account }: { account: SocialAccount }) {
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor={`handle-${account.id}`} className={labelClass}>
-            账号名(选填)
+            Handle (optional)
           </label>
           <input
             id={`handle-${account.id}`}
@@ -85,7 +85,8 @@ export function SocialAccountRow({ account }: { account: SocialAccount }) {
         </div>
         <div className="col-span-2 flex flex-col gap-1.5">
           <label htmlFor={`url-${account.id}`} className={labelClass}>
-            主页链接(选填,小红书等没有链接的平台可以只填账号名)
+            Profile link (optional — for platforms without shareable links
+            like Xiaohongshu, just fill in the handle)
           </label>
           <input
             id={`url-${account.id}`}
@@ -97,7 +98,7 @@ export function SocialAccountRow({ account }: { account: SocialAccount }) {
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor={`follower_count-${account.id}`} className={labelClass}>
-            粉丝数(选填)
+            Follower count (optional)
           </label>
           <input
             id={`follower_count-${account.id}`}
@@ -115,14 +116,14 @@ export function SocialAccountRow({ account }: { account: SocialAccount }) {
             disabled={pending}
             className="rounded-full border border-zinc-300 px-5 py-2 text-sm font-medium text-zinc-900 transition-colors hover:border-zinc-400 disabled:opacity-50"
           >
-            {pending ? "保存中..." : "保存"}
+            {pending ? "Saving…" : "Save"}
           </button>
           <button
             type="button"
             onClick={() => setIsEditing(false)}
             className="text-sm text-zinc-500 hover:text-zinc-900"
           >
-            取消
+            Cancel
           </button>
         </div>
       </form>

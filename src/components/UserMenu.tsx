@@ -24,7 +24,7 @@ export function UserMenu({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const name = displayName || "我的账号";
+  const name = displayName || "My account";
 
   return (
     <div ref={menuRef} className="relative">
@@ -55,14 +55,14 @@ export function UserMenu({
             onClick={() => setOpen(false)}
             className="block px-4 py-2 text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900"
           >
-            我的帐号
+            My account
           </Link>
           <form action={logoutAction}>
             <button
               type="submit"
               className="block w-full px-4 py-2 text-left text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900"
             >
-              退出登录
+              Log out
             </button>
           </form>
         </div>

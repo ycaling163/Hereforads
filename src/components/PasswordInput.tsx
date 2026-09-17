@@ -30,7 +30,7 @@ export function PasswordInput({
           onClick={() => setVisible((v) => !v)}
           className="text-xs font-medium text-zinc-500 hover:text-zinc-900"
         >
-          {visible ? "隐藏" : "显示"}
+          {visible ? "Hide" : "Show"}
         </button>
       </div>
       <input

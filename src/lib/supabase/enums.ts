@@ -20,15 +20,15 @@ export const SOCIAL_PLATFORMS = [
 export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
 
 export const SOCIAL_PLATFORM_LABELS: Record<SocialPlatform, string> = {
-  douyin: "抖音",
-  xiaohongshu: "小红书",
-  weibo: "微博",
-  wechat_channel: "微信视频号",
+  douyin: "Douyin",
+  xiaohongshu: "Xiaohongshu",
+  weibo: "Weibo",
+  wechat_channel: "WeChat Channels",
   youtube: "YouTube",
   instagram: "Instagram",
   tiktok: "TikTok",
-  bilibili: "哔哩哔哩",
-  other: "其他",
+  bilibili: "Bilibili",
+  other: "Other",
 };
 
 /**
@@ -100,9 +100,9 @@ export const LISTING_STATUSES = ["draft", "active", "paused"] as const;
 export type ListingStatus = (typeof LISTING_STATUSES)[number];
 
 export const LISTING_STATUS_LABELS: Record<ListingStatus, string> = {
-  draft: "草稿(Stripe 未开通,买家不可见)",
-  active: "已发布",
-  paused: "已下架",
+  draft: "Draft (hidden until Stripe is connected)",
+  active: "Live",
+  paused: "Paused",
 };
 
 // 托管式交易状态机,见产品方案文档"交易状态机"一节。
@@ -117,12 +117,12 @@ export const LISTING_ORDER_STATUSES = [
 export type ListingOrderStatus = (typeof LISTING_ORDER_STATUSES)[number];
 
 export const LISTING_ORDER_STATUS_LABELS: Record<ListingOrderStatus, string> = {
-  pending_payment: "待支付",
-  paid_in_escrow: "托管中",
-  delivered: "卖家已交付,待买家确认",
-  confirmed: "买家已确认",
-  released: "已放款",
-  expired_auto_confirmed: "超时自动确认",
+  pending_payment: "Awaiting payment",
+  paid_in_escrow: "In escrow",
+  delivered: "Delivered — awaiting buyer confirmation",
+  confirmed: "Confirmed",
+  released: "Paid out",
+  expired_auto_confirmed: "Auto-confirmed",
 };
 
 // 最低发布价 —— 纯技术防呆(留一点余量在 Stripe 自己的最低收款额 $0.50 之上),

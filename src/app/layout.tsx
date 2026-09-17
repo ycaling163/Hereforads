@@ -15,13 +15,14 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "hereforads",
-  description: "把你的实体空间变成广告位,轻松出租与发现广告位",
+  description:
+    "Turn your space into ad space — list it, rent it out, or find the perfect placement to advertise on.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="zh-CN"
+      lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-white text-zinc-900">

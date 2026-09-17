@@ -37,7 +37,7 @@ export function DailyCountdown() {
 
   return (
     <p className="mt-4 text-base text-zinc-500">
-      距离今日档期刷新还剩{" "}
+      Today&apos;s slot refreshes in{" "}
       <span className="text-xl font-semibold tabular-nums text-zinc-900">
         {formatDuration(remaining)}
       </span>

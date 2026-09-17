@@ -16,7 +16,7 @@ export async function loginAction(
   const password = String(formData.get("password") ?? "");
 
   if (!email || !password) {
-    return { error: "请填写邮箱和密码" };
+    return { error: "Please enter your email and password" };
   }
 
   const supabase = await createClient();
@@ -26,7 +26,7 @@ export async function loginAction(
   });
 
   if (error) {
-    return { error: "邮箱或密码不正确" };
+    return { error: "Incorrect email or password" };
   }
 
   if (data.user) {

@@ -17,7 +17,7 @@ export function LoginForm() {
     <form action={formAction} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <label htmlFor="email" className="text-sm font-medium text-zinc-700">
-          邮箱
+          Email
         </label>
         <input
           id="email"
@@ -31,7 +31,7 @@ export function LoginForm() {
       <PasswordInput
         id="password"
         name="password"
-        label="密码"
+        label="Password"
         autoComplete="current-password"
       />
 
@@ -44,13 +44,13 @@ export function LoginForm() {
         disabled={pending}
         className="mt-2 rounded-full bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50"
       >
-        {pending ? "登录中..." : "登录"}
+        {pending ? "Logging in…" : "Log in"}
       </button>
 
       <p className="text-center text-sm text-zinc-600">
-        还没有账号?{" "}
+        Don&apos;t have an account?{" "}
         <Link href="/register" className="font-medium text-zinc-900 underline">
-          去注册
+          Sign up
         </Link>
       </p>
     </form>

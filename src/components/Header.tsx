@@ -49,7 +49,7 @@ export async function Header() {
             <UserMenu displayName={displayName} avatarUrl={avatarUrl} />
           ) : (
             <Link href="/login" className="hover:text-zinc-900">
-              登录
+              Log in
             </Link>
           )}
         </nav>

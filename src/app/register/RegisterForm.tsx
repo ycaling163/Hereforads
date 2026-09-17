@@ -17,7 +17,7 @@ export function RegisterForm() {
     <form action={formAction} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <label htmlFor="email" className="text-sm font-medium text-zinc-700">
-          邮箱
+          Email
         </label>
         <input
           id="email"
@@ -31,14 +31,14 @@ export function RegisterForm() {
       <PasswordInput
         id="password"
         name="password"
-        label="密码"
+        label="Password"
         minLength={6}
         autoComplete="new-password"
       />
       <PasswordInput
         id="confirmPassword"
         name="confirmPassword"
-        label="确认密码"
+        label="Confirm password"
         minLength={6}
         autoComplete="new-password"
       />
@@ -53,13 +53,13 @@ export function RegisterForm() {
         disabled={pending}
         className="mt-2 rounded-full bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50"
       >
-        {pending ? "注册中..." : "注册"}
+        {pending ? "Signing up…" : "Sign up"}
       </button>
 
       <p className="text-center text-sm text-zinc-600">
-        已经有账号了?{" "}
+        Already have an account?{" "}
         <Link href="/login" className="font-medium text-zinc-900 underline">
-          去登录
+          Log in
         </Link>
       </p>
     </form>

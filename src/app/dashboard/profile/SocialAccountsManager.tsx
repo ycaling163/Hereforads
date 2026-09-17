@@ -38,7 +38,7 @@ export function SocialAccountsManager({
       >
         <div className="flex flex-col gap-1.5">
           <label htmlFor="platform" className={labelClass}>
-            平台
+            Platform
           </label>
           <select
             id="platform"
@@ -48,7 +48,7 @@ export function SocialAccountsManager({
             className={inputClass}
           >
             <option value="" disabled>
-              请选择
+              Choose a platform
             </option>
             {SOCIAL_PLATFORMS.map((platform) => (
               <option key={platform} value={platform}>
@@ -59,19 +59,20 @@ export function SocialAccountsManager({
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="handle" className={labelClass}>
-            账号名(选填)
+            Handle (optional)
           </label>
           <input id="handle" name="handle" type="text" className={inputClass} />
         </div>
         <div className="col-span-2 flex flex-col gap-1.5">
           <label htmlFor="url" className={labelClass}>
-            主页链接(选填,小红书等没有链接的平台可以只填账号名)
+            Profile link (optional — for platforms without shareable links
+            like Xiaohongshu, just fill in the handle)
           </label>
           <input id="url" name="url" type="url" className={inputClass} />
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="follower_count" className={labelClass}>
-            粉丝数(选填)
+            Follower count (optional)
           </label>
           <input
             id="follower_count"
@@ -90,7 +91,7 @@ export function SocialAccountsManager({
             disabled={pending}
             className="rounded-full border border-zinc-300 px-5 py-2 text-sm font-medium text-zinc-900 transition-colors hover:border-zinc-400 disabled:opacity-50"
           >
-            {pending ? "添加中..." : "+ 添加社交账号"}
+            {pending ? "Adding…" : "+ Add social account"}
           </button>
         </div>
       </form>

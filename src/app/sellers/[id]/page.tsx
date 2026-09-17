@@ -67,10 +67,10 @@ export default async function SellerProfilePage({
         )}
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-zinc-900">
-            {seller.display_name ?? "匿名卖家"}
+            {seller.display_name ?? "Anonymous seller"}
             {sellerExtra?.is_verified && (
               <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-                已认证
+                Verified
               </span>
             )}
           </h1>
@@ -85,7 +85,7 @@ export default async function SellerProfilePage({
       {accounts.length > 0 && (
         <div className="mt-8">
           <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
-            社交账号
+            Social accounts
           </h2>
           <ul className="mt-3 flex flex-col gap-2">
             {accounts.map((account) => (
@@ -102,10 +102,10 @@ export default async function SellerProfilePage({
 
       <div className="mt-10">
         <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
-          全部广告位
+          Listings
         </h2>
         {listings.length === 0 ? (
-          <p className="mt-4 text-sm text-zinc-500">还没有发布广告位。</p>
+          <p className="mt-4 text-sm text-zinc-500">No listings published yet.</p>
         ) : (
           <div className="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {listings.map((listing) => (

@@ -35,7 +35,7 @@ export async function startStripeOnboardingAction(
   if (!accountId) {
     const country = String(formData.get("country") ?? "");
     if (!isStripeSupportedCountry(country)) {
-      return { error: "请选择一个 Stripe 支持收款的国家/地区" };
+      return { error: "Please choose a country Stripe supports for payouts" };
     }
 
     const account = await stripe.accounts.create({
@@ -55,7 +55,7 @@ export async function startStripeOnboardingAction(
       .eq("id", user.id);
 
     if (saveError) {
-      return { error: `保存 Stripe 账户失败:${saveError.message}` };
+      return { error: `Failed to save Stripe account: ${saveError.message}` };
     }
   }
 
@@ -67,4 +67,29 @@ export async function startStripeOnboardingAction(
   });
 
   redirect(accountLink.url);
+}
+
+export async function openStripeDashboardAction(): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("stripe_connect_account_id")
+    .eq("id", user.id)
+    .single();
+
+  const accountId = profile?.stripe_connect_account_id;
+  if (!accountId) {
+    redirect("/dashboard/stripe-connect");
+  }
+
+  const loginLink = await stripe.accounts.createLoginLink(accountId);
+  redirect(loginLink.url);
 }

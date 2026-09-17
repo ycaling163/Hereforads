@@ -19,7 +19,7 @@ export function SocialAccountBadge({ account }: { account: SocialAccount }) {
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 rounded-full border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-600 transition-colors hover:border-zinc-900 hover:text-zinc-900"
         >
-          访问主页
+          Visit
           <svg
             viewBox="0 0 16 16"
             fill="none"
@@ -38,7 +38,7 @@ export function SocialAccountBadge({ account }: { account: SocialAccount }) {
       )}
       {typeof account.follower_count === "number" && (
         <span className="text-zinc-400">
-          {account.follower_count.toLocaleString()} 粉丝
+          {account.follower_count.toLocaleString()} followers
         </span>
       )}
     </>

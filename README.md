@@ -5,6 +5,8 @@
 技术栈: Next.js 16 (App Router) + TypeScript + Tailwind CSS 4 + Supabase (Auth / Postgres / Storage)。
 
 > **开始干活前先看 [`WORKLOG.md`](./WORKLOG.md) 最近几条 + 本文件的决策记录**,这个仓库好几个 session 在并行改,只看代码/git log 容易漏掉背景和已经拍板的决策(教训见 WORKLOG 2026-09-17 那条)。改完之后记得回 WORKLOG 补一条。
+>
+> **界面语言统一成英文了(2026-09-17)**:产品面向的是英文用户,之前中英文混杂(有些页面是早期原型阶段顺手写的中文)。以后新加页面/文案**一律写英文**,不要再顺手写中文 UI 文案——代码注释仍然可以是中文,给团队自己看,不影响这条规则。
 
 ## 已解决:webhook 收不到事件导致订单卡在"待支付"(2026-09-17)
 
@@ -62,7 +64,7 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 | `/dashboard` | 仪表盘总览:待处理订单数(需要交付/待确认收货)、近 30 天成交额、广告位状态分布 |
 | `/dashboard/new-listing` | 发布表单:英文标题/描述、类目多选、价格(最低 $0.99)、计价单位、媒体上传。卖家没开通 Stripe 也能提交,但落库状态强制是 `draft`,买家看不到 |
 | `/dashboard/my-listings` | 卖家自己发布的全部 listing(含 `draft`/`active`/`paused`),之前这里是空白(见旧版 WORKLOG"已知欠缺"),现在补上了 |
-| `/dashboard/stripe-connect` | Stripe Connect Express 开户入口,发布的 listing 要 `stripe_onboarded=true` 才会变成 `active` |
+| `/dashboard/stripe-connect`("Payment Management") | 没连 Stripe 时是 Express 开户入口(发布的 listing 要 `stripe_onboarded=true` 才会变成 `active`);连好之后改显示"Total sales"(`listing_orders` 里排除 `pending_payment` 的金额之和)、"Available to withdraw"/"Pending"(直接调 Stripe Balance API,`stripe.balance.retrieve({}, {stripeAccount})`,不是从自己数据库估算的)、一个跳到 Stripe Express 自带 Dashboard 的按钮(`stripe.accounts.createLoginLink`,真正管理提现/打款节奏在 Stripe 那边,这个项目不自建提现流程) |
 | `/dashboard/sales` | 卖家看到自己 listing 收到的订单,`paid_in_escrow` 状态下可以提交交付凭证链接把订单推进到 `delivered` |
 | `/dashboard/purchases` | 买家看到自己下的单,`delivered` 状态下可以"确认收到"触发放款(或 3 天后自动放款,见 `/api/cron/auto-confirm`) |
 | `/dashboard/messages`、`/dashboard/messages/[listingId]/[otherUserId]` | 绑在某个 listing 下的一对一消息,不是群聊 |
