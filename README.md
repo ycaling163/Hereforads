@@ -6,6 +6,38 @@
 
 > **开始干活前先看 [`WORKLOG.md`](./WORKLOG.md) 最近几条 + 本文件的决策记录**,这个仓库好几个 session 在并行改,只看代码/git log 容易漏掉背景和已经拍板的决策(教训见 WORKLOG 2026-09-17 那条)。改完之后记得回 WORKLOG 补一条。
 
+## 当前卡住的问题(2026-09-17,下一个 session 先看这个)
+
+**症状**:买家在 `/listings/[id]` 点"购买"、走完 Stripe Checkout 真实付款(已确认能看到 `checkout.stripe.com/c/pay/...` 付款页、输测试卡 `4242 4242 4242 4242`、点 Pay、成功跳转回 `/dashboard/purchases?checkout=success`),但订单在"Purchases"/"Sales"页面**一直显示 `待支付`(`pending_payment`)**,没有推进到 `paid_in_escrow`。代码逻辑(`src/app/listings/[id]/actions.ts` 的 `buyListingAction`、`src/app/api/stripe/webhook/route.ts` 的 `checkout.session.completed` 分支)已经过审查,看起来是对的——**问题不在代码,在域名/网络这一层**,`/api/stripe/webhook` 这个 URL 大概率没有真正被 Stripe 的服务器请求到。
+
+**已经排查确认的事实**:
+- Stripe 后台(Developers → Webhooks → 目的地 "hereforads-production",URL `https://hereforads.com/api/stripe/webhook`,订阅 `checkout.session.completed`,scope "Your account")在很长一段时间里 "Event deliveries" 一直是 **Total 0 / Failed 0**——不是"发了但失败",是 Stripe **压根没有尝试**投递,账户级别的 Events 日志里也搜不到这次购买对应的事件。
+- 域名 `hereforads.com` 在 **IONOS** 买的,但 **nameserver 指向 Cloudflare**,Cloudflare 管 DNS。
+- 排查发现 `hereforads.com`(不带 www)的 A 记录原本指向 `216.150.1.1`——这是 **IONOS 自己的服务器 IP,根本没有指向 Vercel**;`www.hereforads.com` 的 CNAME 倒是正确指向 Vercel(`...vercel-dns...`),但两条记录在 Cloudflare 里都开着**橙色云朵(Proxied)**。Vercel 项目的 Domains 页面对应显示 `hereforads.com` 是 "Invalid Configuration",`www.hereforads.com` 是 "Proxy Detected"。
+- 高度怀疑:Cloudflare 的代理/机器人防护把 Stripe 服务器对服务器发的 webhook POST 请求当成可疑流量拦截了(普通浏览器 GET 请求能过,是因为浏览器能配合过 Cloudflare 的验证;Stripe 的 webhook 没有浏览器,直接被挡)。
+
+**已经做的修复动作(但还没验证成功)**:
+1. 把 Cloudflare 里 `hereforads.com` 的 A 记录值改成了 Vercel 官方标准值 `76.76.21.21`(改对了)
+2. 删掉了多余的第二条 A 记录和一条无关的 AAAA 记录
+3. 在 Vercel 域名设置里把 `hereforads.com` 设成了 Primary/Production,`www.hereforads.com` 配成 308 跳转过去(中途误删过一次 `www.hereforads.com` 又用 "Add Existing" 加回来了,注意确认它还在)
+4. 尝试把 Cloudflare 里 `hereforads.com` 的 A 记录、`www.hereforads.com` 的 CNAME 记录云朵图标改成灰色(DNS only,绕开代理)——**用户反馈"没有用"**,最后一次确认截图里这两条云朵状态到底是灰是橙**没有得到清楚确认**,这是接下来最先要核实的事。
+
+**下一步建议(按顺序)**:
+1. 先截图确认 Cloudflare 里 `hereforads.com`(A,`76.76.21.21`)和 `www.hereforads.com`(CNAME)这两条记录的云朵图标现在到底是不是灰色(DNS only)。如果还是橙色,重新点一次云朵图标(不是 "Edit" 按钮,是云朵图标本身),这是个独立的开关。
+2. 灰色确认之后,等几分钟 DNS 生效,回 Vercel Domains 页面刷新,确认 `hereforads.com` 变成绿色 "Valid Configuration",不再显示 "Proxy Detected"。
+3. 如果切成 DNS only 后网站还是能正常访问(大概率没问题,因为 Vercel 自己也有基础的 DDoS 防护),重新测一次购买流程,然后去 Stripe 那个 webhook 目的地的 "Event deliveries" 标签看这次有没有出现新的投递记录、状态码是多少。
+4. 如果做完以上还是 Total 0,要考虑一个更彻底的方案:**这个阶段(还在测试,没正式上线)干脆先把 Cloudflare 从 nameserver 里去掉,DNS 直接托管在 Vercel 或者 IONOS**,减少一层可能出问题的中间环节——等支付流程全部验证通过、要正式上线时,再考虑要不要重新接入 Cloudflare(如果要接,记得单独给 `/api/stripe/webhook` 这个路径配一条 Cloudflare 防火墙放行规则,不要用默认的机器人防护规则挡住 Stripe)。
+5. 域名/网络问题解决、webhook 真正能收到事件之后,还需要验证:webhook 收到事件后 `SUPABASE_SERVICE_ROLE_KEY` 能不能正常写库(用户已确认填的是真实值,但还没有在 webhook 真正跑通的情况下验证过)。
+
+**这次顺带修好但跟这个问题无关的其他事**(不用重复排查):
+- Stripe 新账户默认不让用 Accounts v1 API 建连接账户,已经去 Stripe 后台 `Settings → Features → Accounts v1 support` 打开了这个开关,现在能正常建 Express 连接账户
+- `src/lib/stripe/server.ts` 之前在模块顶层直接 `new Stripe(...)`,导致 `STRIPE_SECRET_KEY` 没配置好时会把整个 Vercel 构建炸掉,已经改成 Proxy 惰性初始化,commit `7c1202c`
+
+**还没做、用户说"等会一起改"的功能缺口**(优先级在这个 webhook 问题之后):
+- 卖家没有"我的广告位"列表页,看不到自己发布的所有 listing(尤其是 `draft` 状态的)
+- Sales 页面点订单看不到买家身份/联系方式,也没有单独的订单详情页
+- 私信没有未读提示(`listing_messages` 表连"已读"字段都没有)
+
 ## 本地运行
 
 ```bash
