@@ -31,7 +31,7 @@ export default async function Home() {
           Turn your space into ad space.
         </h1>
         <p className="mt-6 max-w-md text-lg text-zinc-600">
-          List your physical or digital space and get paid by brands to
+          Create your ad space in minutes and get paid by brands to
           advertise on it.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
@@ -49,13 +49,13 @@ export default async function Home() {
             href="/listings"
             className="rounded-full bg-zinc-900 px-8 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
           >
-            Browse listings
+            Find ad space
           </Link>
           <Link
             href="/dashboard/new-listing"
             className="rounded-full border border-zinc-300 px-8 py-3 text-sm font-medium text-zinc-900 transition-colors hover:border-zinc-400"
           >
-            Publish your space
+            Sell ad space
           </Link>
         </div>
       </div>
