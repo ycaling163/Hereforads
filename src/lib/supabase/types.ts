@@ -90,6 +90,11 @@ export interface Payment {
   stripe_payment_intent_id: string | null;
   stripe_transfer_id: string | null;
   platform_fee_amount: number | null;
+  // Stripe 自己的处理手续费和卖家实际到手净额,只有订单走到 released(真正发起
+  // Transfer)那一步才知道,之前(paid_in_escrow/delivered/confirmed)读出来是 null。
+  // 见 README 支付章节和 src/lib/stripe/release.ts。
+  stripe_fee_amount: number | null;
+  net_amount: number | null;
   status: string;
   created_at: string;
 }

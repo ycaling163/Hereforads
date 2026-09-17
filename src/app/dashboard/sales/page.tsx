@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { DeliverOrderForm } from "@/components/DeliverOrderForm";
 import { LISTING_ORDER_STATUS_LABELS } from "@/lib/supabase/enums";
-import type { Listing, ListingOrder } from "@/lib/supabase/types";
+import type { Listing, ListingOrder, Payment } from "@/lib/supabase/types";
 
 export default async function SalesPage() {
   const supabase = await createClient();
@@ -23,12 +23,21 @@ export default async function SalesPage() {
 
   const orders = (orderRows ?? []) as ListingOrder[];
 
+  const orderIds = orders.map((o) => o.id);
   const listingIds = [...new Set(orders.map((o) => o.listing_id))];
-  const { data: listingRows } = listingIds.length
-    ? await supabase.from("listings").select("id,title").in("id", listingIds)
-    : { data: [] };
+  const [{ data: listingRows }, { data: paymentRows }] = await Promise.all([
+    listingIds.length
+      ? supabase.from("listings").select("id,title").in("id", listingIds)
+      : Promise.resolve({ data: [] as Pick<Listing, "id" | "title">[] }),
+    orderIds.length
+      ? supabase.from("payments").select("*").in("order_id", orderIds)
+      : Promise.resolve({ data: [] as Payment[] }),
+  ]);
   const listingsById = new Map(
     ((listingRows ?? []) as Pick<Listing, "id" | "title">[]).map((l) => [l.id, l.title])
+  );
+  const paymentsByOrderId = new Map(
+    ((paymentRows ?? []) as Payment[]).map((p) => [p.order_id, p])
   );
 
   return (
@@ -45,37 +54,80 @@ export default async function SalesPage() {
       )}
 
       <div className="mt-8 flex flex-col gap-4">
-        {orders.map((order) => (
-          <div key={order.id} className="rounded-xl border border-zinc-200 p-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Link
-                href={`/listings/${order.listing_id}`}
-                className="font-medium text-zinc-900 hover:underline"
-              >
-                {listingsById.get(order.listing_id) ?? "Listing"}
-              </Link>
-              <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600">
-                {LISTING_ORDER_STATUS_LABELS[order.status]}
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-zinc-500">
-              {order.amount} {order.currency}
-            </p>
-
-            {order.status === "paid_in_escrow" && (
-              <DeliverOrderForm orderId={order.id} />
-            )}
-
-            {order.proof_url && (
-              <p className="mt-3 text-sm text-zinc-500">
-                Proof:{" "}
-                <a href={order.proof_url} className="underline" target="_blank" rel="noreferrer">
-                  {order.proof_url}
-                </a>
+        {orders.map((order) => {
+          const payment = paymentsByOrderId.get(order.id);
+          return (
+            <div key={order.id} className="rounded-xl border border-zinc-200 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Link
+                  href={`/listings/${order.listing_id}`}
+                  className="font-medium text-zinc-900 hover:underline"
+                >
+                  {listingsById.get(order.listing_id) ?? "Listing"}
+                </Link>
+                <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600">
+                  {LISTING_ORDER_STATUS_LABELS[order.status]}
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-zinc-500">
+                {order.amount} {order.currency}
               </p>
-            )}
-          </div>
-        ))}
+
+              {payment && (
+                <div className="mt-3 rounded-lg bg-zinc-50 p-3 text-xs text-zinc-600">
+                  <div className="flex justify-between">
+                    <span>Gross sale</span>
+                    <span>
+                      {order.amount} {order.currency}
+                    </span>
+                  </div>
+                  {payment.platform_fee_amount !== null && (
+                    <div className="flex justify-between">
+                      <span>Platform fee</span>
+                      <span>
+                        −{payment.platform_fee_amount} {order.currency}
+                      </span>
+                    </div>
+                  )}
+                  {payment.stripe_fee_amount !== null ? (
+                    <div className="flex justify-between">
+                      <span>Stripe processing fee</span>
+                      <span>
+                        −{payment.stripe_fee_amount} {order.currency}
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-zinc-400">
+                      Stripe&apos;s processing fee and your exact payout show up
+                      once this order is released.
+                    </p>
+                  )}
+                  {payment.net_amount !== null && (
+                    <div className="mt-1 flex justify-between border-t border-zinc-200 pt-1 font-medium text-zinc-900">
+                      <span>You received</span>
+                      <span>
+                        {payment.net_amount} {order.currency}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {order.status === "paid_in_escrow" && (
+                <DeliverOrderForm orderId={order.id} />
+              )}
+
+              {order.proof_url && (
+                <p className="mt-3 text-sm text-zinc-500">
+                  Proof:{" "}
+                  <a href={order.proof_url} className="underline" target="_blank" rel="noreferrer">
+                    {order.proof_url}
+                  </a>
+                </p>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

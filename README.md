@@ -65,7 +65,7 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 | `/dashboard/new-listing` | 发布表单:英文标题/描述、类目多选、价格(最低 $0.99)、计价单位、媒体上传。卖家没开通 Stripe 也能提交,但落库状态强制是 `draft`,买家看不到 |
 | `/dashboard/my-listings` | 卖家自己发布的全部 listing(含 `draft`/`active`/`paused`),之前这里是空白(见旧版 WORKLOG"已知欠缺"),现在补上了 |
 | `/dashboard/stripe-connect`("Payment Management") | 没连 Stripe 时是 Express 开户入口(发布的 listing 要 `stripe_onboarded=true` 才会变成 `active`);连好之后改显示"Total sales"(`listing_orders` 里排除 `pending_payment` 的金额之和)、"Available to withdraw"/"Pending"(直接调 Stripe Balance API,`stripe.balance.retrieve({}, {stripeAccount})`,不是从自己数据库估算的)、一个跳到 Stripe Express 自带 Dashboard 的按钮(`stripe.accounts.createLoginLink`,真正管理提现/打款节奏在 Stripe 那边,这个项目不自建提现流程) |
-| `/dashboard/sales` | 卖家看到自己 listing 收到的订单,`paid_in_escrow` 状态下可以提交交付凭证链接把订单推进到 `delivered` |
+| `/dashboard/sales` | 卖家看到自己 listing 收到的订单,`paid_in_escrow` 状态下可以提交交付凭证链接把订单推进到 `delivered`;每个订单显示打款明细(总价 / 平台佣金 / Stripe 手续费 / 实际到手),后两项要等订单 `released` 才有值 |
 | `/dashboard/purchases` | 买家看到自己下的单,`delivered` 状态下可以"确认收到"触发放款(或 3 天后自动放款,见 `/api/cron/auto-confirm`) |
 | `/dashboard/messages`、`/dashboard/messages/[listingId]/[otherUserId]` | 绑在某个 listing 下的一对一消息,不是群聊 |
 | `/api/stripe/webhook` | Stripe webhook:`account.updated` 刷新 `stripe_onboarded`,`checkout.session.completed` 把订单推进到 `paid_in_escrow` |
@@ -452,6 +452,13 @@ with check (auth.uid() = sender_id);
 -- public.listing_category 枚举,不用新建类型。
 alter table public.seller_profiles
   add column if not exists content_categories public.listing_category[] not null default '{}';
+
+-- ===== payments.stripe_fee_amount / net_amount(打款明细,2026-09-17 加)=====
+-- 之前 release.ts 算完 Stripe 手续费和卖家净到手金额就直接拿去发 Transfer,没有存库,
+-- 卖家在 Sales 页看不到"100 英镑是怎么分的"。这两列在 released 之前读出来是 null
+-- (Stripe 手续费只有真正发起 Transfer 那一刻才知道),释放后才会填上。
+alter table public.payments add column if not exists stripe_fee_amount numeric;
+alter table public.payments add column if not exists net_amount numeric;
 ```
 
 Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。

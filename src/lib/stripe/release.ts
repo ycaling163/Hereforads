@@ -56,6 +56,9 @@ export async function releaseOrderPayout(order: {
 
   const platformFeeCents = Math.round(order.amount * PLATFORM_COMMISSION_RATE * 100);
   const transferAmountCents = Math.max(netCents - platformFeeCents, 0);
+  // balance_transaction.fee 是 Stripe 实报的处理手续费(卡组织+Stripe 自己那部分),
+  // 跟平台佣金是两笔完全独立的扣款,分开存起来才能在"你的收入"页给卖家拆明细。
+  const stripeFeeCents = balanceTransaction?.fee ?? 0;
 
   const transfer = await stripe.transfers.create({
     amount: transferAmountCents,
@@ -71,6 +74,8 @@ export async function releaseOrderPayout(order: {
     .update({
       stripe_transfer_id: transfer.id,
       platform_fee_amount: platformFeeCents / 100,
+      stripe_fee_amount: stripeFeeCents / 100,
+      net_amount: transferAmountCents / 100,
       status: "released",
     })
     .eq("order_id", order.id);
