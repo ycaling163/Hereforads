@@ -30,19 +30,27 @@ export default async function StripeConnectPage() {
 
   let onboarded = profile?.stripe_onboarded ?? false;
   const accountId = profile?.stripe_connect_account_id ?? null;
+  let payoutsEnabled = false;
+  let defaultCurrency: string | null = null;
 
-  // 如果账户已经建了,顺手用 Stripe 那边的实时状态兜底刷新一次 stripe_onboarded——
-  // webhook 没配好(比如本地开发没有公网地址接收 account.updated)的时候,
-  // 这里能保证页面看到的状态不会一直卡在过期的 false。
-  if (accountId && !onboarded) {
+  // 只要账户建了就查一次 Stripe 那边的实时状态:一是给 stripe_onboarded 兜底刷新
+  // (webhook 没配好的时候,比如本地开发没有公网地址接收 account.updated),
+  // 二是不管有没有 onboarded 都要知道 payouts_enabled/default_currency——
+  // charges_enabled(能收款)和 payouts_enabled(能提现到银行账户)是 Stripe 两个
+  // 独立的能力位,账户可以先能收款、还没填银行账户导致提现开不了,不能只看前者。
+  if (accountId) {
     try {
       const account = await stripe.accounts.retrieve(accountId);
-      onboarded = Boolean(account.charges_enabled && account.details_submitted);
-      if (onboarded) {
-        await supabase
-          .from("profiles")
-          .update({ stripe_onboarded: true })
-          .eq("id", user.id);
+      payoutsEnabled = Boolean(account.payouts_enabled);
+      defaultCurrency = account.default_currency?.toUpperCase() ?? null;
+      if (!onboarded) {
+        onboarded = Boolean(account.charges_enabled && account.details_submitted);
+        if (onboarded) {
+          await supabase
+            .from("profiles")
+            .update({ stripe_onboarded: true })
+            .eq("id", user.id);
+        }
       }
     } catch (err) {
       console.error("Failed to refresh Stripe account status:", err);
@@ -52,6 +60,7 @@ export default async function StripeConnectPage() {
   let totalSalesLabel = "$0";
   let availableLabel = "$0";
   let pendingLabel = "$0";
+  let hasForeignCurrencySales = false;
 
   if (onboarded && accountId) {
     const [{ data: orderRows }, balance] = await Promise.all([
@@ -79,6 +88,9 @@ export default async function StripeConnectPage() {
         : [...salesByCurrency.entries()]
             .map(([currency, amount]) => `${amount} ${currency}`)
             .join(" · ");
+    hasForeignCurrencySales = [...salesByCurrency.keys()].some(
+      (currency) => currency !== defaultCurrency
+    );
 
     if (balance) {
       availableLabel = formatBalance(balance.available);
@@ -107,6 +119,22 @@ export default async function StripeConnectPage() {
         </p>
       )}
 
+      {onboarded && !payoutsEnabled && (
+        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5">
+          <p className="text-sm text-amber-800">
+            You can publish listings and get paid, but Stripe still needs a
+            bank account before it can pay any of it out to you — that&apos;s
+            why there&apos;s no balance to withdraw yet.
+          </p>
+          <div className="mt-3">
+            <StripeConnectForm
+              hasAccount
+              submitLabel="Finish payout setup"
+            />
+          </div>
+        </div>
+      )}
+
       {onboarded ? (
         <>
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -114,6 +142,13 @@ export default async function StripeConnectPage() {
             <StatCard label="Available to withdraw" value={availableLabel} />
             <StatCard label="Pending" value={pendingLabel} />
           </div>
+          {defaultCurrency && hasForeignCurrencySales && (
+            <p className="mt-3 text-xs text-zinc-500">
+              Your payouts settle in {defaultCurrency}. Stripe automatically
+              converts sales in other currencies when it pays out, minus a
+              small conversion fee — you don&apos;t need to do anything.
+            </p>
+          )}
           <form action={openStripeDashboardAction} className="mt-6">
             <button
               type="submit"

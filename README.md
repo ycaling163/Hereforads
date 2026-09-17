@@ -81,6 +81,10 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 
 **本地测试 webhook**:装 [Stripe CLI](https://docs.stripe.com/stripe-cli),跑 `stripe listen --forward-to localhost:3000/api/stripe/webhook`,它会打印一个 `whsec_...`,填到 `.env.local` 的 `STRIPE_WEBHOOK_SECRET`。线上部署时去 Stripe 后台(注意现在 Stripe 用的是 **Sandboxes**,要在实际用来测试的那个 sandbox 里配,不是随便一个 Test mode)Developers → Webhooks 加一个指向 `https://hereforads.com/api/stripe/webhook` 的 endpoint,订阅 `checkout.session.completed` 和经典 `account.updated`(不是 Accounts v2 那组事件)这两个事件,把后台生成的 signing secret 填到部署环境的 `STRIPE_WEBHOOK_SECRET`。
 
+**`charges_enabled` 能收款,不代表 `payouts_enabled` 能提现——这是 Stripe 两个独立的能力位**:卖家开户时 Stripe 有可能先让账户能收款(能发布 listing、能被买),但银行账户还没填/还没审核完,这时候 `payouts_enabled` 是 `false`,卖家能卖但提不出钱。`/dashboard/stripe-connect`(Payment Management)页现在会分别查这两个字段,`payouts_enabled` 为 `false` 时会在页面顶部显示一条提示 + "Finish payout setup" 按钮,不会假装一切正常。**注意 `profiles.stripe_onboarded` 这个数据库字段目前只跟踪 `charges_enabled && details_submitted`,不包含 `payouts_enabled`**——这个是有意的(它原本的作用是"能不能把 listing 发布成 active",不是"能不能提现"),`payouts_enabled` 是每次进这个页面时实时从 Stripe 查的,没有存库。
+
+**打款币种是卖家自己银行账户决定的,不是这个项目里选的**:卖家在 Stripe 托管的开户表单里填的是银行账户(英国填 sort code,美国填 routing number),账户自带的默认结算币种(`account.default_currency`)就是打款币种。如果卖家的 listing 用了别的币种(比如英国卖家发布了一个标 USD 的 listing),钱会先以 USD 形式进 Stripe 账户余额,真正打款时 Stripe 自动换算成账户的默认币种,扣一笔小额换汇手续费——这个项目不用、也不该去手动处理换汇,Payment Management 页在检测到"卖了非默认币种"时会显示一行提示文字说明这件事。
+
 ## 数据库(Supabase 项目 `myadsspace`, ref `jnfllsllahunbfgpopfv`)
 
 这个 Supabase 项目是团队独立建的,不在这个开发环境的 MCP 直连列表里,所以下面的表结构是靠让人截图/贴 SQL 核对出来的,**不是**从 schema 自动生成,如果后续表结构变了这份文档要记得手动更新。
