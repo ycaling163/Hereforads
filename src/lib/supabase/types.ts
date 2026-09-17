@@ -25,6 +25,9 @@ export interface SellerProfile {
   bio: string | null;
   avatar_url: string | null;
   is_verified: boolean;
+  // 创作者自己的内容领域(比如"手工/创作类博主"),跟 Listing.categories(这个
+  // 广告位愿意接哪些品牌类目的广告)是两个独立概念,不要混用。加之前读出来是 undefined。
+  content_categories: ListingCategory[];
   // Stripe Connect(Express 账户)相关字段,加之前读出来是 undefined。
   // 见 README 支付章节的 SQL。
   stripe_account_id: string | null;

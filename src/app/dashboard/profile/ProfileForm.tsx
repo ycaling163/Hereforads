@@ -1,6 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
+import { LISTING_CATEGORIES, LISTING_CATEGORY_LABELS } from "@/lib/supabase/enums";
+import type { ListingCategory } from "@/lib/supabase/enums";
 import { updateProfileAction, type ProfileFormState } from "./actions";
 
 const initialState: ProfileFormState = {};
@@ -13,10 +15,12 @@ export function ProfileForm({
   initialDisplayName,
   initialBio,
   initialAvatarUrl,
+  initialContentCategories,
 }: {
   initialDisplayName: string;
   initialBio: string;
   initialAvatarUrl: string | null;
+  initialContentCategories: ListingCategory[];
 }) {
   const [state, formAction, pending] = useActionState(
     updateProfileAction,
@@ -77,6 +81,33 @@ export function ProfileForm({
           placeholder="Tell buyers about yourself and your space to build trust"
           className={inputClass}
         />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <p className={labelClass}>Your content niche</p>
+        <p className="text-xs text-zinc-500">
+          What kind of creator are you? This is about your own content — not
+          the same as the ad categories a listing accepts (set those when you
+          publish a listing, since one placement can take ads from brands
+          outside your niche).
+        </p>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+          {LISTING_CATEGORIES.map((category) => (
+            <label
+              key={category}
+              className="flex items-center gap-2 text-sm text-zinc-700"
+            >
+              <input
+                type="checkbox"
+                name="content_categories"
+                value={category}
+                defaultChecked={initialContentCategories.includes(category)}
+                className="h-4 w-4 rounded border-zinc-300"
+              />
+              {LISTING_CATEGORY_LABELS[category]}
+            </label>
+          ))}
+        </div>
       </div>
 
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}

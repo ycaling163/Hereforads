@@ -83,7 +83,10 @@ export default async function ListingDetailPage({
     <div className="mx-auto w-full max-w-7xl px-6 py-12">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <div className="flex flex-wrap items-center gap-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
+            Accepts ads from
+          </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
             {listing.categories.map((category) => (
               <span
                 key={category}

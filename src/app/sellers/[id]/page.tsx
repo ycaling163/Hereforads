@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SocialAccountBadge } from "@/components/SocialAccountBadge";
 import { ListingCard } from "@/components/ListingCard";
+import { LISTING_CATEGORY_LABELS } from "@/lib/supabase/enums";
 import type {
   Listing,
   Profile,
@@ -79,6 +80,19 @@ export default async function SellerProfilePage({
               {sellerExtra.bio}
             </p>
           )}
+          {sellerExtra?.content_categories &&
+            sellerExtra.content_categories.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {sellerExtra.content_categories.map((category) => (
+                  <span
+                    key={category}
+                    className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600"
+                  >
+                    {LISTING_CATEGORY_LABELS[category] ?? category}
+                  </span>
+                ))}
+              </div>
+            )}
         </div>
       </div>
 

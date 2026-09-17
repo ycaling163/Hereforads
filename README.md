@@ -89,7 +89,7 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 
 - **profiles**(`id` uuid PK, `role` user_role, `display_name` text, `created_at`, `updated_at`)——目前**没有任何页面能编辑 `display_name`**,所以卖家信息一直显示"匿名卖家"
 - **ad_spaces**、**orders**——老"实体广告位日历预订"流程的表,2026-09-17 随对应页面一起停用(见上面"页面一览"),表和数据都还在库里,只是**代码里已经没有任何地方读写它们**了(`src/app/api/stripe/webhook/route.ts` 里留了一段针对 `orders` 的死代码,见上面说明)
-- **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `is_verified` bool, `stripe_account_id` text, `stripe_charges_enabled` bool, `stripe_payouts_enabled` bool, ...)——`/dashboard/profile` 页可以编辑 `bio`/`avatar_url`,`is_verified` 仍只读(没有人工审核入口);`stripe_*` 三列是老流程接支付时加的,现在 `stripe_account_id`/`stripe_charges_enabled`/`stripe_payouts_enabled` 这三列也没代码在读写了(MVP v2 卖家收款状态存在 `profiles.stripe_connect_account_id`/`stripe_onboarded`),但 `bio`/`avatar_url`/`is_verified` 仍是当前 `/dashboard/profile`、`/sellers/[id]` 在用的字段
+- **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `is_verified` bool, `content_categories` `listing_category[]`(2026-09-17 新加,见下面"MVP v2 数据库变更"), `stripe_account_id` text, `stripe_charges_enabled` bool, `stripe_payouts_enabled` bool, ...)——`/dashboard/profile` 页可以编辑 `bio`/`avatar_url`/`content_categories`,`is_verified` 仍只读(没有人工审核入口);`stripe_*` 三列是老流程接支付时加的,现在 `stripe_account_id`/`stripe_charges_enabled`/`stripe_payouts_enabled` 这三列也没代码在读写了(MVP v2 卖家收款状态存在 `profiles.stripe_connect_account_id`/`stripe_onboarded`),但 `bio`/`avatar_url`/`is_verified`/`content_categories` 仍是当前 `/dashboard/profile`、`/sellers/[id]` 在用的字段。**`content_categories` 是创作者自己的内容领域,跟 `listings.categories`(这个具体广告位接哪些品牌类目的广告)是两个独立概念,不要混淆**
 - **social_accounts**(`id`, `user_id`→profiles, `platform` social_platform, `handle`, `url` text, `follower_count` integer 可空, ...)——`/dashboard/profile` 页可以新增/编辑/删除;`url` 和 `handle` 至少填一个
 
 ### 已知但本项目暂未使用的表
@@ -439,6 +439,15 @@ create policy "authenticated users can send messages"
 on public.listing_messages for insert
 to authenticated
 with check (auth.uid() = sender_id);
+
+-- ===== seller_profiles.content_categories(创作者自己的内容领域,2026-09-17 加)=====
+-- 跟 listings.categories 是两个独立概念,不要混:content_categories 描述"这个创作者
+-- 平时做什么内容"(卖家资料页填,买家在 /sellers/[id] 能看到);listings.categories
+-- 描述"这个具体广告位愿意接哪些品牌类目的广告"(发布 listing 时填,可以跟卖家自己的
+-- 内容领域完全不一样,比如手工博主也可以接时装/餐饮品牌的广告)。复用已有的
+-- public.listing_category 枚举,不用新建类型。
+alter table public.seller_profiles
+  add column if not exists content_categories public.listing_category[] not null default '{}';
 ```
 
 Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。

@@ -3,7 +3,12 @@
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { SOCIAL_PLATFORMS, type SocialPlatform } from "@/lib/supabase/enums";
+import {
+  LISTING_CATEGORIES,
+  SOCIAL_PLATFORMS,
+  type ListingCategory,
+  type SocialPlatform,
+} from "@/lib/supabase/enums";
 
 const AVATAR_BUCKET = "ad-space-photos";
 
@@ -28,6 +33,12 @@ export async function updateProfileAction(
   const displayName = String(formData.get("display_name") ?? "").trim();
   const bio = String(formData.get("bio") ?? "").trim();
   const avatarFile = formData.get("avatar");
+  const contentCategories = formData
+    .getAll("content_categories")
+    .map(String)
+    .filter((c): c is ListingCategory =>
+      (LISTING_CATEGORIES as readonly string[]).includes(c)
+    );
 
   let avatarUrl: string | undefined;
   if (avatarFile instanceof File && avatarFile.size > 0) {
@@ -67,6 +78,7 @@ export async function updateProfileAction(
     {
       user_id: user.id,
       bio: bio || null,
+      content_categories: contentCategories,
       ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
     },
     { onConflict: "user_id" }

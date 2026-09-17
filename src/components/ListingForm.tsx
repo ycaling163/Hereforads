@@ -68,7 +68,15 @@ export function ListingForm({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <p className={labelClass}>Categories</p>
+        <p className={labelClass}>Ad categories you accept</p>
+        <p className="text-xs text-zinc-500">
+          What kind of brands can advertise here? This doesn&apos;t have to
+          match your own content niche (set that on your{" "}
+          <a href="/dashboard/profile" className="underline">
+            profile
+          </a>
+          ) — e.g. a crafts creator can still take fashion or food ads.
+        </p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
           {LISTING_CATEGORIES.map((category) => (
             <label
