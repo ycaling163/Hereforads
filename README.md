@@ -6,28 +6,19 @@
 
 > **开始干活前先看 [`WORKLOG.md`](./WORKLOG.md) 最近几条 + 本文件的决策记录**,这个仓库好几个 session 在并行改,只看代码/git log 容易漏掉背景和已经拍板的决策(教训见 WORKLOG 2026-09-17 那条)。改完之后记得回 WORKLOG 补一条。
 
-## 当前卡住的问题(2026-09-17,下一个 session 先看这个)
+## 已解决:webhook 收不到事件导致订单卡在"待支付"(2026-09-17)
 
-**症状**:买家在 `/listings/[id]` 点"购买"、走完 Stripe Checkout 真实付款(已确认能看到 `checkout.stripe.com/c/pay/...` 付款页、输测试卡 `4242 4242 4242 4242`、点 Pay、成功跳转回 `/dashboard/purchases?checkout=success`),但订单在"Purchases"/"Sales"页面**一直显示 `待支付`(`pending_payment`)**,没有推进到 `paid_in_escrow`。代码逻辑(`src/app/listings/[id]/actions.ts` 的 `buyListingAction`、`src/app/api/stripe/webhook/route.ts` 的 `checkout.session.completed` 分支)已经过审查,看起来是对的——**问题不在代码,在域名/网络这一层**,`/api/stripe/webhook` 这个 URL 大概率没有真正被 Stripe 的服务器请求到。
+**症状**:买家在 `/listings/[id]` 点"购买"、走完 Stripe Checkout 真实付款(测试卡 `4242 4242 4242 4242`,成功跳转回 `/dashboard/purchases?checkout=success`),但订单一直显示 `待支付`(`pending_payment`),没有推进到 `paid_in_escrow`。代码逻辑(`buyListingAction`、`/api/stripe/webhook` 的 `checkout.session.completed` 分支)是对的,问题始终出在"Stripe 事件有没有真正被投递到我们的 endpoint"这一层。
 
-**已经排查确认的事实**:
-- Stripe 后台(Developers → Webhooks → 目的地 "hereforads-production",URL `https://hereforads.com/api/stripe/webhook`,订阅 `checkout.session.completed`,scope "Your account")在很长一段时间里 "Event deliveries" 一直是 **Total 0 / Failed 0**——不是"发了但失败",是 Stripe **压根没有尝试**投递,账户级别的 Events 日志里也搜不到这次购买对应的事件。
-- 域名 `hereforads.com` 在 **IONOS** 买的,但 **nameserver 指向 Cloudflare**,Cloudflare 管 DNS。
-- 排查发现 `hereforads.com`(不带 www)的 A 记录原本指向 `216.150.1.1`——这是 **IONOS 自己的服务器 IP,根本没有指向 Vercel**;`www.hereforads.com` 的 CNAME 倒是正确指向 Vercel(`...vercel-dns...`),但两条记录在 Cloudflare 里都开着**橙色云朵(Proxied)**。Vercel 项目的 Domains 页面对应显示 `hereforads.com` 是 "Invalid Configuration",`www.hereforads.com` 是 "Proxy Detected"。
-- 高度怀疑:Cloudflare 的代理/机器人防护把 Stripe 服务器对服务器发的 webhook POST 请求当成可疑流量拦截了(普通浏览器 GET 请求能过,是因为浏览器能配合过 Cloudflare 的验证;Stripe 的 webhook 没有浏览器,直接被挡)。
+**真正的根因(排查过程中一度走了弯路,记录一下避免下次重复排查)**:
 
-**已经做的修复动作(但还没验证成功)**:
-1. 把 Cloudflare 里 `hereforads.com` 的 A 记录值改成了 Vercel 官方标准值 `76.76.21.21`(改对了)
-2. 删掉了多余的第二条 A 记录和一条无关的 AAAA 记录
-3. 在 Vercel 域名设置里把 `hereforads.com` 设成了 Primary/Production,`www.hereforads.com` 配成 308 跳转过去(中途误删过一次 `www.hereforads.com` 又用 "Add Existing" 加回来了,注意确认它还在)
-4. 尝试把 Cloudflare 里 `hereforads.com` 的 A 记录、`www.hereforads.com` 的 CNAME 记录云朵图标改成灰色(DNS only,绕开代理)——**用户反馈"没有用"**,最后一次确认截图里这两条云朵状态到底是灰是橙**没有得到清楚确认**,这是接下来最先要核实的事。
+1. 排查过程中先发现域名 `hereforads.com`(IONOS 购买,nameserver 指向 Cloudflare)的 A 记录一度指向 IONOS 自己的服务器、且该记录和 `www` 的 CNAME 都开着 Cloudflare 橙色代理(Proxied)——这个问题**确实存在**,已经修好:A 记录改成 Vercel 官方 IP `76.76.21.21`,`hereforads.com`/`www.hereforads.com` 两条记录云朵图标都改成了灰色(DNS only)。但这个问题**不是订单卡住的直接原因**。
+2. 真正原因:Stripe 最近把测试环境重构成了 **Sandboxes**(独立隔离环境,每个 sandbox 有自己的一整套 API keys / webhook 配置 / 客户数据,跟以前"一个开关切换 Test/Live mode"不是一回事)。之前配置的 webhook destination 是在旧版 Test mode 或另一个 sandbox 下配的,当前这个"Hereforads" sandbox(买家测试购买实际使用的 sandbox)里 **Webhooks 页面完全是空的,一个 destination 都没有**——Stripe 根本没有地方可以投递 `checkout.session.completed`,Vercel 那边 `/api/stripe/webhook` 路由查日志也确认零请求记录,不是"投递了但失败"。
+3. 在当前 sandbox 里重新创建 webhook destination 时还踩了一个坑:新版创建界面默认建议勾选的是 "Accounts v2"(15 个事件),但代码里 `switch (event.type)` 判断的是经典 v1 事件名 `account.updated`,两者不是一回事——第一次没手动勾选 `account.updated`(只顾着勾 `checkout.session.completed`),导致 Connect 账户状态同步(`stripe_charges_enabled`/`stripe_onboarded`)那部分还是没生效,后来在 "All events" 里手动搜出经典 `account.updated` 补勾上才对。
 
-**下一步建议(按顺序)**:
-1. 先截图确认 Cloudflare 里 `hereforads.com`(A,`76.76.21.21`)和 `www.hereforads.com`(CNAME)这两条记录的云朵图标现在到底是不是灰色(DNS only)。如果还是橙色,重新点一次云朵图标(不是 "Edit" 按钮,是云朵图标本身),这是个独立的开关。
-2. 灰色确认之后,等几分钟 DNS 生效,回 Vercel Domains 页面刷新,确认 `hereforads.com` 变成绿色 "Valid Configuration",不再显示 "Proxy Detected"。
-3. 如果切成 DNS only 后网站还是能正常访问(大概率没问题,因为 Vercel 自己也有基础的 DDoS 防护),重新测一次购买流程,然后去 Stripe 那个 webhook 目的地的 "Event deliveries" 标签看这次有没有出现新的投递记录、状态码是多少。
-4. 如果做完以上还是 Total 0,要考虑一个更彻底的方案:**这个阶段(还在测试,没正式上线)干脆先把 Cloudflare 从 nameserver 里去掉,DNS 直接托管在 Vercel 或者 IONOS**,减少一层可能出问题的中间环节——等支付流程全部验证通过、要正式上线时,再考虑要不要重新接入 Cloudflare(如果要接,记得单独给 `/api/stripe/webhook` 这个路径配一条 Cloudflare 防火墙放行规则,不要用默认的机器人防护规则挡住 Stripe)。
-5. 域名/网络问题解决、webhook 真正能收到事件之后,还需要验证:webhook 收到事件后 `SUPABASE_SERVICE_ROLE_KEY` 能不能正常写库(用户已确认填的是真实值,但还没有在 webhook 真正跑通的情况下验证过)。
+**最终配置**(当前 "Hereforads" sandbox 下):webhook destination → Endpoint URL `https://hereforads.com/api/stripe/webhook`,订阅事件 `checkout.session.completed` + 经典 `account.updated`(不是 Accounts v2 那组);Vercel 环境变量 `STRIPE_WEBHOOK_SECRET` 已更新成这个 destination 的 signing secret 并重新部署。验证:再次测试购买后 Purchases 页面正确显示 `托管中`(`paid_in_escrow`)。
+
+**遗留小尾巴**:这次排查期间(webhook 还没配好时)测试产生的几条老订单永久卡在 `待支付`,因为对应的 Stripe 事件从未被投递、不会重新触发——这些是 sandbox 测试数据,不影响真实流程,不用管,也可以直接在 Supabase 里手动清掉。
 
 **这次顺带修好但跟这个问题无关的其他事**(不用重复排查):
 - Stripe 新账户默认不让用 Accounts v1 API 建连接账户,已经去 Stripe 后台 `Settings → Features → Accounts v1 support` 打开了这个开关,现在能正常建 Express 连接账户
