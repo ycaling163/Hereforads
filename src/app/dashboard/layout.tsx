@@ -1,16 +1,6 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-
-const NAV_ITEMS = [
-  { href: "/dashboard/new-listing", label: "Publish listing" },
-  { href: "/dashboard/my-listings", label: "My listings" },
-  { href: "/dashboard/sales", label: "Sales" },
-  { href: "/dashboard/purchases", label: "Purchases" },
-  { href: "/dashboard/messages", label: "Messages" },
-  { href: "/dashboard/stripe-connect", label: "Stripe payouts" },
-  { href: "/dashboard/profile", label: "个人资料" },
-];
+import { DashboardSidebar } from "@/components/DashboardSidebar";
 
 export default async function DashboardLayout({
   children,
@@ -27,19 +17,9 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 py-12">
-      <nav className="mb-10 flex flex-wrap gap-2 border-b border-zinc-200 pb-4">
-        {NAV_ITEMS.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="rounded-full px-4 py-1.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-          >
-            {item.label}
-          </Link>
-        ))}
-      </nav>
-      {children}
+    <div className="mx-auto flex w-full max-w-7xl gap-10 px-6 py-12">
+      <DashboardSidebar />
+      <main className="min-w-0 flex-1">{children}</main>
     </div>
   );
 }

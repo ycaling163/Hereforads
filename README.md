@@ -59,6 +59,7 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 | `/sellers/[id]` | 卖家公开主页:头像/简介/认证标记、全部社交账号、该卖家发布的全部 `listings`(卡片列表,只显示 `active`) |
 | `/listings` | 广告位/服务列表,读 `listings` 表(只显示 `status='active'` 的) |
 | `/listings/[id]` | 详情页:分类标签、价格、`pricing_unit='daily'` 时额外显示 `DailyCountdown`(每日档期刷新倒计时)、卖家信息、购买按钮(Stripe Checkout)、联系卖家 |
+| `/dashboard` | 仪表盘总览:待处理订单数(需要交付/待确认收货)、近 30 天成交额、广告位状态分布 |
 | `/dashboard/new-listing` | 发布表单:英文标题/描述、类目多选、价格(最低 $0.99)、计价单位、媒体上传。卖家没开通 Stripe 也能提交,但落库状态强制是 `draft`,买家看不到 |
 | `/dashboard/my-listings` | 卖家自己发布的全部 listing(含 `draft`/`active`/`paused`),之前这里是空白(见旧版 WORKLOG"已知欠缺"),现在补上了 |
 | `/dashboard/stripe-connect` | Stripe Connect Express 开户入口,发布的 listing 要 `stripe_onboarded=true` 才会变成 `active` |
@@ -466,6 +467,7 @@ Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。
 - **没做自动翻译**、**没做可嵌入组件**、**没做中国卖家收款通道**:都是产品方案里明确列的"预留但 MVP 不做"
 - **占用式(daily/weekly/monthly)listing 还没有真正的档期日历**:`pricing_unit` 已经支持这几个值,`listings/[id]` 页对 `daily` 会显示"距离今日档期刷新"倒计时(`DailyCountdown` 组件),但还没有像老流程那样"选日期、按档期占用、冲突检测"的日历 UI——`getBlockingRanges`/`isRangeFree` 这套逻辑在删除前的 commit 里可以直接抄
 - **`/dashboard/my-listings` 目前只是列表**,没有编辑/下架/重新提交入口,卖家要改 listing 内容还得联系人工
+- **`/dashboard` 总览页统计比较粗糙**:"近 30 天成交额"是按 `paid_at` 落在 30 天内的订单金额原样相加(没扣手续费/佣金,多币种是分开显示不是换算合计),没有做历史趋势图
 
 以下是已经解决、不用再查的老问题(留个记录):
 - ~~Stripe webhook 没配~~——见本文件顶部"已解决"一节
