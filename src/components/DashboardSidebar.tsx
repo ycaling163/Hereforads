@@ -34,23 +34,53 @@ function isActive(pathname: string, href: string) {
   return href === "/dashboard" ? pathname === href : pathname.startsWith(href);
 }
 
-function NavLink({ href, label, active }: { href: string; label: string; active: boolean }) {
+function NavBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold leading-none text-white">
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
+
+function NavLink({
+  href,
+  label,
+  active,
+  badgeCount,
+}: {
+  href: string;
+  label: string;
+  active: boolean;
+  badgeCount?: number;
+}) {
   return (
     <Link
       href={href}
-      className={`block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+      className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
         active
           ? "bg-zinc-900 text-white"
           : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
       }`}
     >
       {label}
+      {typeof badgeCount === "number" && <NavBadge count={badgeCount} />}
     </Link>
   );
 }
 
-export function DashboardSidebar() {
+export function DashboardSidebar({
+  unreadMessages = 0,
+  newOrders = 0,
+}: {
+  unreadMessages?: number;
+  newOrders?: number;
+}) {
   const pathname = usePathname();
+  const badgeByHref: Record<string, number> = {
+    "/dashboard/messages": unreadMessages,
+    "/dashboard/sales": newOrders,
+  };
 
   return (
     <nav className="flex w-48 shrink-0 flex-col gap-4">
@@ -61,6 +91,7 @@ export function DashboardSidebar() {
             href={entry.href}
             label={entry.label}
             active={isActive(pathname, entry.href)}
+            badgeCount={badgeByHref[entry.href]}
           />
         ) : (
           <div key={entry.label} className="flex flex-col gap-1">
@@ -73,6 +104,7 @@ export function DashboardSidebar() {
                 href={item.href}
                 label={item.label}
                 active={isActive(pathname, item.href)}
+                badgeCount={badgeByHref[item.href]}
               />
             ))}
           </div>

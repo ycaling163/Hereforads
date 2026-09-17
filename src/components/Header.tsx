@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getActionCounts } from "@/lib/supabase/notification-counts";
 import { UserMenu } from "./UserMenu";
 
 export async function Header() {
@@ -11,8 +12,9 @@ export async function Header() {
 
   let displayName: string | null = null;
   let avatarUrl: string | null = null;
+  let badgeCount = 0;
   if (user) {
-    const [{ data: profile }, { data: sellerProfile }] = await Promise.all([
+    const [{ data: profile }, { data: sellerProfile }, counts] = await Promise.all([
       supabase
         .from("profiles")
         .select("display_name")
@@ -23,9 +25,11 @@ export async function Header() {
         .select("avatar_url")
         .eq("user_id", user.id)
         .maybeSingle(),
+      getActionCounts(supabase, user.id),
     ]);
     displayName = profile?.display_name ?? null;
     avatarUrl = sellerProfile?.avatar_url ?? null;
+    badgeCount = counts.unreadMessages + counts.newOrders;
   }
 
   return (
@@ -46,7 +50,11 @@ export async function Header() {
             Listings
           </Link>
           {user ? (
-            <UserMenu displayName={displayName} avatarUrl={avatarUrl} />
+            <UserMenu
+              displayName={displayName}
+              avatarUrl={avatarUrl}
+              badgeCount={badgeCount}
+            />
           ) : (
             <Link href="/login" className="hover:text-zinc-900">
               Log in

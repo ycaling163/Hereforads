@@ -38,6 +38,18 @@ export default async function MessageThreadPage({
 
   const messages = (messageRows ?? []) as ListingMessage[];
 
+  // 打开这个会话就代表看过了,把对方发来、自己还没读过的消息标记已读,
+  // 好让账号头像/侧边栏的未读数字降下去。不等用户交互,静默做就行。
+  const unreadIncomingIds = messages
+    .filter((m) => m.sender_id === otherUserId && !m.read_at)
+    .map((m) => m.id);
+  if (unreadIncomingIds.length > 0) {
+    await supabase
+      .from("listing_messages")
+      .update({ read_at: new Date().toISOString() })
+      .in("id", unreadIncomingIds);
+  }
+
   return (
     <div className="max-w-2xl">
       <Link href="/dashboard/messages" className="text-sm text-zinc-500 hover:underline">

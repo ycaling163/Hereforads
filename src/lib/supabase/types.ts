@@ -106,5 +106,7 @@ export interface ListingMessage {
   sender_id: string;
   receiver_id: string;
   body: string;
+  // 收件人打开这条会话时才会补上这个时间戳,null 就是未读。加之前读出来是 undefined。
+  read_at: string | null;
   created_at: string;
 }

@@ -26,10 +26,7 @@
 - Stripe 新账户默认不让用 Accounts v1 API 建连接账户,已经去 Stripe 后台 `Settings → Features → Accounts v1 support` 打开了这个开关,现在能正常建 Express 连接账户
 - `src/lib/stripe/server.ts` 之前在模块顶层直接 `new Stripe(...)`,导致 `STRIPE_SECRET_KEY` 没配置好时会把整个 Vercel 构建炸掉,已经改成 Proxy 惰性初始化,commit `7c1202c`
 
-**还没做、用户说"等会一起改"的功能缺口**(优先级在这个 webhook 问题之后):
-- 卖家没有"我的广告位"列表页,看不到自己发布的所有 listing(尤其是 `draft` 状态的)
-- Sales 页面点订单看不到买家身份/联系方式,也没有单独的订单详情页
-- 私信没有未读提示(`listing_messages` 表连"已读"字段都没有)
+**"等会一起改"的功能缺口,2026-09-17 当天后来都补上了**:~~卖家没有"我的广告位"列表页~~(见 `/dashboard/my-listings`)、~~Sales 页面点订单看不到买家身份/联系方式~~(现在每张订单卡片显示买家昵称 + 私信链接,仍然没有单独的订单详情页)、~~私信没有未读提示~~(见下面 `listing_messages.read_at`)。
 
 ## 本地运行
 
@@ -65,9 +62,9 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 | `/dashboard/new-listing` | 发布表单:英文标题/描述、类目多选、价格(最低 $0.99)、计价单位、媒体上传。卖家没开通 Stripe 也能提交,但落库状态强制是 `draft`,买家看不到 |
 | `/dashboard/my-listings` | 卖家自己发布的全部 listing(含 `draft`/`active`/`paused`),之前这里是空白(见旧版 WORKLOG"已知欠缺"),现在补上了 |
 | `/dashboard/stripe-connect`("Payment Management") | 没连 Stripe 时是 Express 开户入口(发布的 listing 要 `stripe_onboarded=true` 才会变成 `active`);连好之后改显示"Total sales"(`listing_orders` 里排除 `pending_payment` 的金额之和)、"Available to withdraw"/"Pending"(直接调 Stripe Balance API,`stripe.balance.retrieve({}, {stripeAccount})`,不是从自己数据库估算的)、一个跳到 Stripe Express 自带 Dashboard 的按钮(`stripe.accounts.createLoginLink`,真正管理提现/打款节奏在 Stripe 那边,这个项目不自建提现流程) |
-| `/dashboard/sales` | 卖家看到自己 listing 收到的订单,`paid_in_escrow` 状态下可以提交交付凭证链接把订单推进到 `delivered`;每个订单显示打款明细(总价 / 平台佣金 / Stripe 手续费 / 实际到手),后两项要等订单 `released` 才有值 |
+| `/dashboard/sales` | 卖家看到自己 listing 收到的订单,按状态分成 New orders(`paid_in_escrow`,可以提交交付凭证链接把订单推进到 `delivered`)/In progress(`delivered`)/Awaiting payout(`confirmed`)/Completed(`released`/`expired_auto_confirmed`)/Awaiting payment(`pending_payment`)五组;每张订单卡片显示买家昵称、一个跳到跟买家私信页的链接、以及打款明细(总价 / 平台佣金 / Stripe 手续费 / 实际到手,后两项要等订单 `released` 才有值) |
 | `/dashboard/purchases` | 买家看到自己下的单,`delivered` 状态下可以"确认收到"触发放款(或 3 天后自动放款,见 `/api/cron/auto-confirm`) |
-| `/dashboard/messages`、`/dashboard/messages/[listingId]/[otherUserId]` | 绑在某个 listing 下的一对一消息,不是群聊 |
+| `/dashboard/messages`、`/dashboard/messages/[listingId]/[otherUserId]` | 绑在某个 listing 下的一对一消息,不是群聊;打开某个会话会把对方发来的未读消息标记已读 |
 | `/api/stripe/webhook` | Stripe webhook:`account.updated` 刷新 `stripe_onboarded`,`checkout.session.completed` 把订单推进到 `paid_in_escrow` |
 | `/api/cron/auto-confirm` | 需要外部定时器(Vercel Cron / Supabase pg_cron)调用,处理买家超时未确认的自动放款,见下面"收付款设计要点" |
 
@@ -459,6 +456,19 @@ alter table public.seller_profiles
 -- (Stripe 手续费只有真正发起 Transfer 那一刻才知道),释放后才会填上。
 alter table public.payments add column if not exists stripe_fee_amount numeric;
 alter table public.payments add column if not exists net_amount numeric;
+
+-- ===== listing_messages.read_at(未读消息提示,2026-09-17 加)=====
+-- 之前这张表连"已读"字段都没有,账号头像/侧边栏没法显示未读消息数。收件人打开
+-- 会话页时会把 read_at 补上当前时间,null 就代表还没读。之前只建过 select/insert
+-- 策略,没开 update 口子,收件人标记已读会被 RLS 拒绝(静默 0 行,不会报错但也不生效),
+-- 这次补一条。
+alter table public.listing_messages add column if not exists read_at timestamptz;
+
+create policy "receiver can mark their messages read"
+on public.listing_messages for update
+to authenticated
+using (auth.uid() = receiver_id)
+with check (auth.uid() = receiver_id);
 ```
 
 Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。
