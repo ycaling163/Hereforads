@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SocialAccountBadge } from "@/components/SocialAccountBadge";
-import { SpaceCard } from "@/components/SpaceCard";
+import { ListingCard } from "@/components/ListingCard";
 import type {
-  AdSpace,
+  Listing,
   Profile,
   SellerProfile,
   SocialAccount,
@@ -25,7 +25,7 @@ export default async function SellerProfilePage({
     notFound();
   }
 
-  const [{ data: sellerProfile }, { data: socialAccounts }, { data: spaces }] =
+  const [{ data: sellerProfile }, { data: socialAccounts }, { data: listingRows }] =
     await Promise.all([
       supabase
         .from("seller_profiles")
@@ -38,16 +38,17 @@ export default async function SellerProfilePage({
         .eq("user_id", id)
         .order("created_at", { ascending: false }),
       supabase
-        .from("ad_spaces")
+        .from("listings")
         .select("*")
         .eq("seller_id", id)
+        .eq("status", "active")
         .order("created_at", { ascending: false }),
     ]);
 
   const seller = profile as Profile;
   const sellerExtra = sellerProfile as SellerProfile | null;
   const accounts = (socialAccounts ?? []) as SocialAccount[];
-  const adSpaces = (spaces ?? []) as AdSpace[];
+  const listings = (listingRows ?? []) as Listing[];
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-12">
@@ -103,12 +104,12 @@ export default async function SellerProfilePage({
         <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
           全部广告位
         </h2>
-        {adSpaces.length === 0 ? (
+        {listings.length === 0 ? (
           <p className="mt-4 text-sm text-zinc-500">还没有发布广告位。</p>
         ) : (
           <div className="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {adSpaces.map((space) => (
-              <SpaceCard key={space.id} space={space} />
+            {listings.map((listing) => (
+              <ListingCard key={listing.id} listing={listing} />
             ))}
           </div>
         )}

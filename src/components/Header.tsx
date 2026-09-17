@@ -45,9 +45,6 @@ export async function Header() {
           <Link href="/listings" className="hover:text-zinc-900">
             Listings
           </Link>
-          <Link href="/spaces" className="hover:text-zinc-900">
-            浏览广告位(旧)
-          </Link>
           {user ? (
             <UserMenu displayName={displayName} avatarUrl={avatarUrl} />
           ) : (

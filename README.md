@@ -50,22 +50,17 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 
 ## 页面一览
 
+**老的"实体广告位日历预订"流程(`/spaces`、`/dashboard/new-space`、`/dashboard/spaces`、`/dashboard/orders`、`/dashboard/bookings`、`/dashboard/payments` 及对应的日历预订 UI)已于 2026-09-17 整体下线**,原因和细节见 WORKLOG 同日期条目——测试阶段这套流程没有真实订单数据,团队确认往后只维护下面这一套 MVP v2(`listings`)流程,继续留着两套并存的导航/页面只会造成混淆。`ad_spaces`/`orders` 两张表本身**没有删**(不动数据库),只是代码里不再有任何页面读写它们;`src/lib/booking.ts`(日期区间/档期冲突计算)和当时的日历 UI 代码在删除前的 commit 里还能找到,以后 `listings` 要做"按天/周/月占用式预订"的日历时可以照抄这套逻辑,不用重新设计。
+
 | 路径 | 说明 |
 | --- | --- |
-| `/` | 首页 |
+| `/` | 首页,推荐 `listings` 里 `status='active'` 的前几个 |
 | `/login`、`/register` | 邮箱密码登录/注册,密码框带显示/隐藏切换。注册成功后自动在 `profiles` 建一条记录(`role='both'`);如果 Supabase 开了邮箱验证、注册时还没有 session,会在验证后**首次登录**时补建 |
-| `/spaces` | 广告位卡片列表,读 `ad_spaces` 表 |
-| `/spaces/[id]` | 详情页:图片、关键词、状态、卖家信息(`profiles`+`seller_profiles`,头像/名字可点进 `/sellers/[id]`)、社交账号(`social_accounts`,可点击跳转)、**预订日历** |
-| `/sellers/[id]` | 卖家公开主页:头像/简介/认证标记、全部社交账号、该卖家发布的全部广告位(卡片列表) |
-| `/dashboard/new-space` | 卖家发布表单:标题/描述/关键词/城市/价格/币种/租期天数(卖家自定,不限 30 天)/图片(真实文件上传) |
-
-以上是老的"实体广告位日历预订"流程(参考 thewall.ink),线上还在跑,没有下线。下面是"HereForAds MVP 产品方案"确认稿(发布+交易工具,Stripe Connect 托管交易)对应的新页面,两套并存,数据模型互不相干(见下面"MVP v2 数据库变更"一节):
-
-| 路径 | 说明 |
-| --- | --- |
-| `/listings` | 新版广告位/服务列表,读 `listings` 表(只显示 `status='active'` 的) |
-| `/listings/[id]` | 详情页:分类标签、价格、卖家信息、购买按钮(Stripe Checkout)、联系卖家 |
+| `/sellers/[id]` | 卖家公开主页:头像/简介/认证标记、全部社交账号、该卖家发布的全部 `listings`(卡片列表,只显示 `active`) |
+| `/listings` | 广告位/服务列表,读 `listings` 表(只显示 `status='active'` 的) |
+| `/listings/[id]` | 详情页:分类标签、价格、`pricing_unit='daily'` 时额外显示 `DailyCountdown`(每日档期刷新倒计时)、卖家信息、购买按钮(Stripe Checkout)、联系卖家 |
 | `/dashboard/new-listing` | 发布表单:英文标题/描述、类目多选、价格(最低 $0.99)、计价单位、媒体上传。卖家没开通 Stripe 也能提交,但落库状态强制是 `draft`,买家看不到 |
+| `/dashboard/my-listings` | 卖家自己发布的全部 listing(含 `draft`/`active`/`paused`),之前这里是空白(见旧版 WORKLOG"已知欠缺"),现在补上了 |
 | `/dashboard/stripe-connect` | Stripe Connect Express 开户入口,发布的 listing 要 `stripe_onboarded=true` 才会变成 `active` |
 | `/dashboard/sales` | 卖家看到自己 listing 收到的订单,`paid_in_escrow` 状态下可以提交交付凭证链接把订单推进到 `delivered` |
 | `/dashboard/purchases` | 买家看到自己下的单,`delivered` 状态下可以"确认收到"触发放款(或 3 天后自动放款,见 `/api/cron/auto-confirm`) |
@@ -73,31 +68,15 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 | `/api/stripe/webhook` | Stripe webhook:`account.updated` 刷新 `stripe_onboarded`,`checkout.session.completed` 把订单推进到 `paid_in_escrow` |
 | `/api/cron/auto-confirm` | 需要外部定时器(Vercel Cron / Supabase pg_cron)调用,处理买家超时未确认的自动放款,见下面"收付款设计要点" |
 
-## 预订日历怎么工作的
+## 支付流程(Stripe Connect · Charges & Transfers)
 
-- 从 `orders` 表读出该广告位所有 `pending_payment` / `paid` / `in_progress` 状态的订单,算出哪些日期已被占用(`src/lib/booking.ts`)
-- 日历里点任意一个空闲日期,会高亮从那天起、连续 `duration_days` 天的整个档期;跟已有预订冲突会变红并禁止提交
-- 点"预订"提交后,`src/app/spaces/[id]/actions.ts` 会**用数据库里最新的订单重新校验一遍**该档期是否还空着(防止两人同时抢同一天),校验通过就插入一条 `status: pending_payment` 的订单
-- 卖家在"收到的预订请求"页确认后,状态变成 `confirmed`;买家在"我的预订"页对 `confirmed` 的订单会看到"去支付"按钮,走 Stripe Checkout 完成真正扣款(见下面"支付流程"一节),支付成功后 webhook 把状态推进到 `paid`
-
-## 支付流程(Stripe Connect)
-
-用的是 **Stripe Connect · Express 账户 + destination charge**:买家在 Stripe 托管的 Checkout 页付款,钱直接转进卖家的连接账户,平台不经手资金,也还没抽成(`payment_intent_data.transfer_data.destination` 转全额给卖家,没设置 `application_fee_amount`)。
-
-流程:
-
-1. 卖家在 `/dashboard/payments` 点"连接 Stripe 账户"(`src/app/dashboard/payments/actions.ts` → `startStripeOnboardingAction`),后端建一个 Stripe Express account、存 `stripe_account_id`,跳到 Stripe 托管的入驻表单(Account Link)
-2. 卖家资料填完、Stripe 审核通过后,Stripe 发 `account.updated` webhook,把 `seller_profiles.stripe_charges_enabled` / `stripe_payouts_enabled` 更新成 `true`
-3. 买家的订单被卖家确认(`confirmed`)后,在 `/dashboard/bookings` 点"去支付"(`src/app/dashboard/bookings/actions.ts` → `createCheckoutSessionAction`),后端校验订单属于当前买家且状态是 `confirmed`、卖家 `stripe_charges_enabled` 为真,才会建 Stripe Checkout Session 并跳转过去;卖家还没连好 Stripe 时会提示"卖家还没完成收款设置"
-4. 买家付款成功后,Stripe 发 `checkout.session.completed` webhook 到 `/api/stripe/webhook`(`src/app/api/stripe/webhook/route.ts`),校验签名后把订单从 `confirmed` 推进到 `paid`、记下 `stripe_payment_intent_id`
+现在只有 MVP v2 这一套支付流程,细节见下面"MVP v2 产品方案"和"收付款设计要点"两节。
 
 **Webhook 用的是 service_role key,不是 RLS**:Stripe 的 webhook 请求没有买家/卖家的登录态,没法靠 `auth.uid()` 的 RLS 策略去改别人的订单/资料,所以 `/api/stripe/webhook` 单独用 `SUPABASE_SERVICE_ROLE_KEY`(`src/lib/supabase/service.ts` → `createServiceClient`)绕过 RLS,安全性完全靠 `stripe.webhooks.constructEvent` 校验请求确实来自 Stripe、带着正确签名。这个 key 只应该出现在服务端环境变量里,不能加 `NEXT_PUBLIC_` 前缀,也不能在这个文件之外的地方 import `service.ts`。
 
-**这个 webhook 端点同时服务老流程和下面的 MVP v2**:Stripe 后台一个项目只挂得了一个 webhook 端点,`src/app/api/stripe/webhook/route.ts` 里 `account.updated` 会同时尝试更新 `seller_profiles`(老流程)和 `profiles`(MVP v2)两边的字段,`eq()` 匹配不到目标账户 id 的那一半就是无操作;`checkout.session.completed` 先按 `metadata.order_id` 试着把老流程的 `orders` 从 `confirmed` 推进到 `paid`,一行都没改到(说明这不是老流程的订单)才去按 MVP v2 的 `listing_orders` 处理。新增/修改任何一边的 webhook 逻辑时,注意别改坏另一边。
+**`src/app/api/stripe/webhook/route.ts` 里还留着一段老流程的死代码**:`checkout.session.completed` 分支一开始会先按 `metadata.order_id` 试着把老流程的 `orders` 表从 `confirmed` 推进到 `paid`——老流程的下单入口(`bookSpaceAction`)已经随上面的页面一起删了,所以这个分支理论上永远不会再匹配到任何行,纯粹是多打一次没用的 Supabase 查询。留着没删是因为这段代码是这次排查 webhook 故障时刚验证工作正常的部分,不想在同一次改动里动支付相关代码增加风险;后面确认没问题了可以连着 `orders` 表一起清掉。
 
-**本地测试 webhook**:装 [Stripe CLI](https://docs.stripe.com/stripe-cli),跑 `stripe listen --forward-to localhost:3000/api/stripe/webhook`,它会打印一个 `whsec_...`,填到 `.env.local` 的 `STRIPE_WEBHOOK_SECRET`。线上部署时去 Stripe 后台 Developers → Webhooks 加一个指向 `https://hereforads.com/api/stripe/webhook` 的 endpoint,订阅 `checkout.session.completed` 和 `account.updated` 这两个事件,把后台生成的 signing secret 填到部署环境的 `STRIPE_WEBHOOK_SECRET`。
-
-**还没做的**:卖家没连 Stripe 时依然可以正常发布广告位、收到预订请求(只是买家到付款那一步会被挡住),没有强制卖家先连好 Stripe 才能收预订;没有退款(`refunded`)流程;没有平台抽成。
+**本地测试 webhook**:装 [Stripe CLI](https://docs.stripe.com/stripe-cli),跑 `stripe listen --forward-to localhost:3000/api/stripe/webhook`,它会打印一个 `whsec_...`,填到 `.env.local` 的 `STRIPE_WEBHOOK_SECRET`。线上部署时去 Stripe 后台(注意现在 Stripe 用的是 **Sandboxes**,要在实际用来测试的那个 sandbox 里配,不是随便一个 Test mode)Developers → Webhooks 加一个指向 `https://hereforads.com/api/stripe/webhook` 的 endpoint,订阅 `checkout.session.completed` 和经典 `account.updated`(不是 Accounts v2 那组事件)这两个事件,把后台生成的 signing secret 填到部署环境的 `STRIPE_WEBHOOK_SECRET`。
 
 ## 数据库(Supabase 项目 `myadsspace`, ref `jnfllsllahunbfgpopfv`)
 
@@ -106,10 +85,9 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 ### 本项目用到的表
 
 - **profiles**(`id` uuid PK, `role` user_role, `display_name` text, `created_at`, `updated_at`)——目前**没有任何页面能编辑 `display_name`**,所以卖家信息一直显示"匿名卖家"
-- **ad_spaces**(`id`, `seller_id`→profiles, `space_type` ad_space_type, `title`, `description`, `keyword` text, `photo_urls` text[] NOT NULL, `city`, `latitude`/`longitude` numeric NOT NULL(现在恒为 0,表单已不采集,纯历史遗留字段), `price_amount`, `price_currency`, `duration_days` int NOT NULL, `status` ad_space_status, `created_at`, `updated_at`)
-- **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `is_verified` bool, `stripe_account_id` text, `stripe_charges_enabled` bool, `stripe_payouts_enabled` bool, ...)——`/dashboard/profile` 页可以编辑 `bio`/`avatar_url`,`is_verified` 仍只读(没有人工审核入口);`stripe_*` 三列是这次接支付新加的,见下面"支付流程"一节
+- **ad_spaces**、**orders**——老"实体广告位日历预订"流程的表,2026-09-17 随对应页面一起停用(见上面"页面一览"),表和数据都还在库里,只是**代码里已经没有任何地方读写它们**了(`src/app/api/stripe/webhook/route.ts` 里留了一段针对 `orders` 的死代码,见上面说明)
+- **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `is_verified` bool, `stripe_account_id` text, `stripe_charges_enabled` bool, `stripe_payouts_enabled` bool, ...)——`/dashboard/profile` 页可以编辑 `bio`/`avatar_url`,`is_verified` 仍只读(没有人工审核入口);`stripe_*` 三列是老流程接支付时加的,现在 `stripe_account_id`/`stripe_charges_enabled`/`stripe_payouts_enabled` 这三列也没代码在读写了(MVP v2 卖家收款状态存在 `profiles.stripe_connect_account_id`/`stripe_onboarded`),但 `bio`/`avatar_url`/`is_verified` 仍是当前 `/dashboard/profile`、`/sellers/[id]` 在用的字段
 - **social_accounts**(`id`, `user_id`→profiles, `platform` social_platform, `handle`, `url` text, `follower_count` integer 可空, ...)——`/dashboard/profile` 页可以新增/编辑/删除;`url` 和 `handle` 至少填一个
-- **orders**(`id`, `ad_space_id`, `buyer_id`, `seller_id`, `payment_channel`, `amount`, `currency`, `status` order_status, `start_date`/`end_date` date, `stripe_checkout_session_id` text, `stripe_payment_intent_id` text, ...)——预订日历在用,`start_date`/`end_date` 是早前加的列,`stripe_checkout_session_id`/`stripe_payment_intent_id` 是这次接支付新加的
 
 ### 已知但本项目暂未使用的表
 
@@ -118,12 +96,9 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 ### 枚举取值(Database → Enumerated Types 核对过)
 
 - `user_role`: `seller` / `buyer` / `both`(注册默认 `both`)
-- `ad_space_type`: `wall` / `picture_frame` / `clothing_pocket` / `clothing_back` / `face_left` / `face_right` / `other`——**产品上暂时只用 `wall` 一种**,发布表单没有分类选择器,`src/app/dashboard/new-space/actions.ts` 里写死了 `DEFAULT_SPACE_TYPE = "wall"`。真实取值和展示文案在 `src/lib/supabase/enums.ts`,以后要放开分类选择,改这一个文件+表单加个 `<select>` 就行
-- `ad_space_status`: `available` / `reserved` / `active_campaign` / `inactive`
 - `social_platform`: `douyin` / `xiaohongshu` / `weibo` / `wechat_channel` / `youtube` / `instagram` / `tiktok` / `bilibili` / `other`
-- `order_status`: `pending_payment` / `confirmed` / `rejected` / `paid` / `in_progress` / `completed` / `cancelled` / `refunded`(`confirmed`/`rejected` 是后加的值,见下面 RLS 策略章节的 `alter type` 语句,**这条还没确认在线上库里执行过**)
-- `payment_channel`: `stripe` / `wechat_pay` / `alipay`(预订时先硬编码成 `stripe` 占位,没有真实选择/扣款)
 - `payout_status`: `pending` / `paid` / `failed`
+- `ad_space_type`/`ad_space_status`/`order_status`/`payment_channel` 这几个是老流程的枚举,库里还在(没删表),但 `src/lib/supabase/enums.ts` 里对应的 TS 定义已经随老流程页面一起删了,不用再管
 
 ### RLS 策略(必须配置,否则对应功能会报"违反行级安全策略"或查出来是空的)
 
@@ -302,7 +277,7 @@ with check (
 
 这一节是"HereForAds MVP 产品方案"确认稿(定位:发布+交易工具,不是实体广告位日历预订)对应的新表结构,和上面 `ad_spaces`/`orders` 是两套**完全独立**的实体,新表都用了不会跟老表撞名的名字(`listings`/`listing_orders`/`listing_messages`),没有互相依赖,可以单独执行、单独回滚。
 
-要不要下线老的 `ad_spaces`/日历预订流程、`orders` 表怎么处理,这版没有自动做,是团队后面要拍板的事——这份 SQL 只新增,不删除任何东西。
+下线老流程的**代码**(页面/组件/类型定义)已经在 2026-09-17 做完(见上面"页面一览");`ad_spaces`/`orders` 这两张**表**要不要一起删,还是先留着当历史数据存档,是团队后面要拍板的事——这份 SQL 只新增,不删除任何东西。
 
 这个 Supabase 项目同样不在这个开发环境的 MCP 直连列表里(见上面"数据库"一节的说明),下面的 SQL 需要去 Supabase 后台手动执行。
 
@@ -481,19 +456,18 @@ Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。
 
 ## 已知欠缺 / 下一步 TODO
 
-- **支付抽成/退款未做**:Stripe Connect 付款流程已接入(见"支付流程"一节),但没有平台抽成,也没有退款(`refunded`)入口
-- **没有强制卖家先连 Stripe 才能接单**:卖家没连 Stripe 账户也能正常发布广告位、收到预订请求,只是走到买家付款那一步会被挡住并提示"卖家还没完成收款设置"
-- **`campaigns` 表未使用**:订单确认/付款后买家提交广告创意素材的流程还没做
-- **图片管理简陋**:上传后不能删除单张、排序、换封面,只能整体重新提交
-- **日历只显示当月**:跨月的预订档期在视觉上看不到下个月部分(不影响预订本身是否成功,纯展示局限)
-- 未专门做移动端适配测试
+**老流程(`ad_spaces`/`orders` 日历预订)已经整体下线,不再是活跃的 TODO**——2026-09-17 已经把对应的页面、组件、`enums.ts`/`types.ts` 里的类型都删了,详见上面"页面一览"和 WORKLOG 同日期条目。老流程原来遗留的几条 TODO(支付抽成/退款、卖家收款前置校验、`campaigns` 表、图片管理、跨月日历展示)如果以后要在 MVP v2 上重新做,当参考,不再是要修的 bug。
 
-以上是老流程的 TODO。下面是这版新搭的 MVP v2(`listings`/`listing_orders`)代码骨架的已知欠缺:
+下面是当前唯一在跑的 MVP v2(`listings`/`listing_orders`)已知欠缺:
 
-- **新旧两套流程并存,没有下线决定**:`/spaces` 和 `/listings` 现在都在跑,首页、Header 导航还没有二选一收敛,这是产品侧要拍板的事(见 README"MVP v2 数据库变更"一节开头的说明)
 - **SQL 迁移还没在真实 Supabase 项目跑过**:这个开发环境连不上 `myadsspace` 项目(也连不上任何跟 HereForAds 对应的项目),README 里的 SQL 是写好等人工去 Supabase 后台执行的,没有被验证过
-- **没配 Stripe webhook 端点**:`/api/stripe/webhook` 代码写了,但 Stripe 后台的 webhook 端点(或本地 `stripe listen`)还没配,`account.updated`/`checkout.session.completed` 不会真的送达 —— `/dashboard/stripe-connect` 页面加了一个兜底(打开页面时主动查一次 Stripe 账户状态),但支付确认(`checkout.session.completed`)完全依赖 webhook,不配的话订单会一直卡在 `pending_payment`
 - **没配自动放款的定时触发器**:`/api/cron/auto-confirm` 端点写了,处理买家超时 3 天未确认的自动放款,但没有实际的 Vercel Cron / Supabase pg_cron 去调用它
-- **没做真实的 Stripe 测试**:整条 Checkout → webhook → 托管 → 交付 → 确认 → Transfer 的链路只是照着 Stripe API 文档写的,没有用 Stripe 测试模式跑通过一次完整交易
 - **退款/纠纷仍是人工**:产品方案里明确 MVP 不做,出问题需要人工去 Stripe 后台处理
 - **没做自动翻译**、**没做可嵌入组件**、**没做中国卖家收款通道**:都是产品方案里明确列的"预留但 MVP 不做"
+- **占用式(daily/weekly/monthly)listing 还没有真正的档期日历**:`pricing_unit` 已经支持这几个值,`listings/[id]` 页对 `daily` 会显示"距离今日档期刷新"倒计时(`DailyCountdown` 组件),但还没有像老流程那样"选日期、按档期占用、冲突检测"的日历 UI——`getBlockingRanges`/`isRangeFree` 这套逻辑在删除前的 commit 里可以直接抄
+- **`/dashboard/my-listings` 目前只是列表**,没有编辑/下架/重新提交入口,卖家要改 listing 内容还得联系人工
+
+以下是已经解决、不用再查的老问题(留个记录):
+- ~~Stripe webhook 没配~~——见本文件顶部"已解决"一节
+- ~~没做真实的 Stripe 测试~~——已用 Stripe 测试卡跑通完整 Checkout → webhook → `paid_in_escrow` 链路
+- ~~新旧两套流程并存,没有下线决定~~——已下线老流程

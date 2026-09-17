@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { BuyListingButton } from "@/components/BuyListingButton";
 import { ContactSellerForm } from "@/components/ContactSellerForm";
+import { DailyCountdown } from "@/components/DailyCountdown";
 import {
   LISTING_CATEGORY_LABELS,
   LISTING_STATUS_LABELS,
@@ -189,6 +190,7 @@ export default async function ListingDetailPage({
                 </span>
               )}
             </div>
+            {listing.pricing_unit === "daily" && <DailyCountdown />}
 
             <div className="mt-4">
               {isOwnListing ? (

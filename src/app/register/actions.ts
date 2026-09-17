@@ -41,7 +41,7 @@ export async function registerAction(
   if (data.session) {
     // 邮箱验证已关闭:注册即登录,直接建 profiles 记录。
     await ensureProfile(supabase, data.user);
-    redirect("/spaces");
+    redirect("/listings");
   }
 
   // 邮箱验证已开启:此时还没有 session,没法立刻写 profiles(RLS 需要 auth.uid()）。

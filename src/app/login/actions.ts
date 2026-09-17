@@ -34,5 +34,5 @@ export async function loginAction(
     await ensureProfile(supabase, data.user);
   }
 
-  redirect("/spaces");
+  redirect("/listings");
 }
