@@ -3,9 +3,8 @@ import { ImageResponse } from "next/og";
 export const size = { width: 32, height: 32 };
 export const contentType = "image/png";
 
-// 品牌蓝取自 public/logo.png 里 "Ads" 那部分文字的实际像素颜色,跟 wordmark 保持一致。
-// 之前没有任何 favicon 文件,浏览器标签页显示的是各自的默认图标(通常是个黑色占位符),
-// 跟品牌完全没关系。
+// favicon 只有 32×32,四周的放射色块(见 apple-icon.tsx)在这个尺寸下会糊成噪点,
+// 保留最核心的元素:蓝色方块 + "Ad"。
 export default function Icon() {
   return new ImageResponse(
     (
@@ -19,12 +18,12 @@ export default function Icon() {
           background: "#0B5CFF",
           borderRadius: 7,
           color: "#ffffff",
-          fontSize: 22,
+          fontSize: 17,
           fontWeight: 800,
           fontFamily: "sans-serif",
         }}
       >
-        A
+        Ad
       </div>
     ),
     { ...size }
