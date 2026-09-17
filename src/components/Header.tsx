@@ -42,8 +42,11 @@ export async function Header() {
           />
         </Link>
         <nav className="flex items-center gap-4 text-sm text-zinc-600 sm:gap-6">
+          <Link href="/listings" className="hover:text-zinc-900">
+            Listings
+          </Link>
           <Link href="/spaces" className="hover:text-zinc-900">
-            浏览广告位
+            浏览广告位(旧)
           </Link>
           {user ? (
             <UserMenu displayName={displayName} avatarUrl={avatarUrl} />

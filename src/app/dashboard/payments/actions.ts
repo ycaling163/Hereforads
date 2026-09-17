@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getSiteUrl, getStripe } from "@/lib/stripe/server";
+import { getSiteUrl, stripe } from "@/lib/stripe/server";
 import type { SellerProfile } from "@/lib/supabase/types";
 
 // 卖家发起 / 继续 Stripe Connect(Express)账户的入驻流程。
@@ -25,7 +25,6 @@ export async function startStripeOnboardingAction(): Promise<void> {
     .maybeSingle();
 
   const sellerProfile = sellerProfileRow as SellerProfile | null;
-  const stripe = getStripe();
 
   let accountId = sellerProfile?.stripe_account_id ?? null;
 
@@ -85,7 +84,6 @@ export async function openStripeExpressDashboardAction(): Promise<void> {
     redirect("/dashboard/payments");
   }
 
-  const stripe = getStripe();
   const loginLink = await stripe.accounts.createLoginLink(accountId);
   redirect(loginLink.url);
 }

@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getSiteUrl, getStripe } from "@/lib/stripe/server";
+import { getSiteUrl, stripe } from "@/lib/stripe/server";
 import type { AdSpace, Order, SellerProfile } from "@/lib/supabase/types";
 
 // 买家在"我的预订"页,针对卖家已确认(status = confirmed)的订单发起付款。
@@ -49,7 +49,6 @@ export async function createCheckoutSessionAction(orderId: string): Promise<void
     redirect("/dashboard/bookings?error=seller_not_ready");
   }
 
-  const stripe = getStripe();
   const siteUrl = getSiteUrl();
 
   const session = await stripe.checkout.sessions.create({
