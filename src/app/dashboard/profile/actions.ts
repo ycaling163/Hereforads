@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { parseFollowerCount } from "@/lib/format";
+import { storagePathFromPublicUrl } from "@/lib/storage";
 import {
   LISTING_CATEGORIES,
   SOCIAL_PLATFORMS,
@@ -30,14 +31,6 @@ function normalizeWebsiteUrl(raw: string): { value: string | null } | { error: s
   } catch {
     return { error: "Please enter a valid website, e.g. example.com" };
   }
-}
-
-// Turns a public storage URL back into the bucket-relative path .remove()
-// wants, so replacing an avatar/banner doesn't leave the old file behind.
-function storagePathFromPublicUrl(url: string, bucket: string): string | null {
-  const marker = `/object/public/${bucket}/`;
-  const index = url.indexOf(marker);
-  return index === -1 ? null : url.slice(index + marker.length);
 }
 
 export async function updateProfileAction(

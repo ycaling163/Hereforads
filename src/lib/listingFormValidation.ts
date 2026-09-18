@@ -1,0 +1,94 @@
+import {
+  LISTING_CATEGORIES,
+  MIN_LISTING_PRICE,
+  PRICING_UNITS,
+  type ListingCategory,
+  type PricingUnit,
+} from "@/lib/supabase/enums";
+
+export interface ParsedListingFields {
+  title: string;
+  description: string | null;
+  categories: ListingCategory[];
+  priceAmount: number;
+  priceCurrency: string;
+  pricingUnit: PricingUnit;
+  socialAccountId: string | null;
+  isWebsitePlacement: boolean;
+}
+
+// Shared between createListingAction and updateListingAction — everything a
+// listing needs except media, which the two callers handle differently
+// (create only ever adds files; update also has to diff against what's
+// already stored).
+export function parseListingFormFields(
+  formData: FormData,
+  ownAccountIds: string[],
+  hasWebsite: boolean
+): { fields: ParsedListingFields } | { error: string } {
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const priceAmountRaw = String(formData.get("price_amount") ?? "").trim();
+  const priceCurrency = String(formData.get("price_currency") ?? "").trim();
+  const pricingUnitRaw = String(formData.get("pricing_unit") ?? "");
+  const categories = formData
+    .getAll("categories")
+    .map(String)
+    .filter((c): c is ListingCategory =>
+      (LISTING_CATEGORIES as readonly string[]).includes(c)
+    );
+  const placementRaw = String(formData.get("placement") ?? "");
+
+  if (!title) {
+    return { error: "Please enter a title" };
+  }
+  if (!placementRaw) {
+    return { error: "Please choose where this ad runs" };
+  }
+
+  // Validate against the seller's own accounts/website server-side — never
+  // trust a client-submitted account id without checking ownership.
+  let socialAccountId: string | null = null;
+  let isWebsitePlacement = false;
+  if (placementRaw === "website") {
+    if (!hasWebsite) {
+      return { error: "You don't have a website on file — add one on your profile first" };
+    }
+    isWebsitePlacement = true;
+  } else if (placementRaw !== "other") {
+    const accountId = placementRaw.startsWith("account:")
+      ? placementRaw.slice("account:".length)
+      : "";
+    if (!accountId || !ownAccountIds.includes(accountId)) {
+      return { error: "Please choose a valid ad placement" };
+    }
+    socialAccountId = accountId;
+  }
+
+  const priceAmount = Number(priceAmountRaw);
+  if (!priceAmountRaw || Number.isNaN(priceAmount) || priceAmount < MIN_LISTING_PRICE) {
+    return { error: `Please enter a valid price (minimum $${MIN_LISTING_PRICE})` };
+  }
+  if (!priceCurrency) {
+    return { error: "Please choose a currency" };
+  }
+  if (!(PRICING_UNITS as readonly string[]).includes(pricingUnitRaw)) {
+    return { error: "Please choose a pricing unit" };
+  }
+  if (categories.length === 0) {
+    return { error: "Please select at least one category" };
+  }
+
+  return {
+    fields: {
+      title,
+      description: description || null,
+      categories,
+      priceAmount,
+      priceCurrency,
+      pricingUnit: pricingUnitRaw as PricingUnit,
+      socialAccountId,
+      isWebsitePlacement,
+    },
+  };
+}

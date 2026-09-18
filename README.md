@@ -626,7 +626,7 @@ draft --(卖家连好 Stripe 提交)--> pending_review --(管理员 approve)--> 
 active --(管理员 remove)--> removed
 ```
 
-`draft`/`pending_review`/`rejected`/`removed` 这几个状态买家和首页都看不到(`isVisible = status==='active' || isOwnListing` 这条判断没变,新状态自然被挡住),卖家自己在 `/dashboard/my-listings` 能看到全部状态、包括是被拒绝还是被下架。**这版没有做"卖家收到拒绝理由后可以修改重新提交"的界面**——`rejected` 之后卖家没有编辑入口(`/dashboard/my-listings` 本来就还没做编辑功能,是已知欠缺),需要联系人工重新发布。
+`draft`/`pending_review`/`rejected`/`removed` 这几个状态买家和首页都看不到(`isVisible = status==='active' || isOwnListing` 这条判断没变,新状态自然被挡住),卖家自己在 `/dashboard/my-listings` 能看到全部状态、包括是被拒绝还是被下架。**2026-09-18 后期加了编辑入口**(`/dashboard/my-listings/[id]/edit`,见下面"卖家编辑/删除 listing"一节),但**`rejected` 状态编辑后不会自动改回 `pending_review` 重新排队**——只有 `active` 编辑后会(内容审核通过后又改了,需要重新审核,理由跟这条安全洞一样),`rejected`/`draft` 编辑后状态原样不变,卖家要重新提交审核目前还是得联系人工,这条没有一并做。
 
 `is_featured`(管理员推荐/置顶)跟 `status` 是两个独立的布尔量,只在 `status='active'` 时才有意义,首页"Featured listings"和 `/listings` 列表都是 `order(is_featured desc, created_at desc)`,标了 `is_featured` 的排在最前面,卡片和列表页角标一个 "⭐ Featured"。
 
@@ -696,11 +696,22 @@ revoke update (status, is_featured)
 
 ### 已知欠缺(这版管理员系统的)
 
-- 没有"卖家收到拒绝理由、修改后重新提交"的界面,`rejected` 是终态,只能联系人工
+- **2026-09-18 后期加了 listing 编辑入口**(见下面"卖家编辑/删除 listing"一节),卖家现在能改被拒绝的 listing 内容,但改完**不会自动把 `rejected` 改回 `pending_review` 重新进审核队列**——状态原样不变,卖家要重新提交审核目前还是得联系人工,不是完全没有编辑能力,是"编辑了也不会自动重新排队"
 - 管理员看不到 listing 被拒绝/下架的历史原因(没有存 reason 字段,只有状态本身)
 - 用户提到"管理员能定期发邮件或消息给用户"——这版没做,邮件通知本来就等 Resend 接入之后再说(见"已知欠缺"里的邮件通知那条);站内消息(`listing_messages`)是绑在某个 listing 下的一对一会话,不支持管理员群发/单独给某个用户发一条不挂靠 listing 的消息,这个需要额外设计(比如 `listing_id` 允许为 null),这版先没做
 - 用户提到"审核先人工、后期机器人审核"——这版只做了人工审核界面,自动化审核(比如接一个内容审核 API 自动初筛)完全没做,是未来的事
 - `/admin/orders` 只显示最近 200 条,没做分页/搜索/按状态筛选
+
+## 卖家编辑/删除自己的 listing(2026-09-18 加)
+
+之前 `/dashboard/my-listings` 只是列表,唯一的"改内容"手段是"Duplicate"(复制成一条全新的 listing,见"MVP v2 数据库变更"里 `social_account_id` 那条的说明)。这次补上了真正的编辑和删除:
+
+- **`/dashboard/my-listings/[id]/edit`**(`page.tsx` + `actions.ts` 的 `updateListingAction`):复用 `ListingForm.tsx`(跟发布新 listing 是同一个表单组件,`initialListing` 预填,不传 `duplicatedFromTitle` 所以不会出现复制那条的提示条),校验逻辑也复用了同一份(`src/lib/listingFormValidation.ts` 的 `parseListingFormFields`,从 `new-listing/actions.ts` 里抽出来的,创建和编辑共用,避免同一套校验写两遍)。进页面时会先查一次这条 listing 的 `seller_id` 是不是当前登录用户自己的,不是的话 `notFound()`,不依赖前端隐藏链接。
+- **图片能单张删除/追加**:`ListingForm.tsx` 里"已上传的媒体"从纯预览改成每张图右上角有个悬浮 ✕ 删除按钮(`useState` 管理,删了就不提交对应的隐藏 `existing_media` input),配合原有的"追加新文件"上传框,能做到"删掉旧封面、传一张新的"这种操作,不用做拖拽排序。保存时,提交上来的 `existing_media` 只认真的是这个用户自己在 `ad-space-photos` bucket 下的文件路径(校验路径里包含 `/object/public/ad-space-photos/{user_id}/`),没有无条件相信前端传来的 URL 字符串;新 `media_urls` 落库成功之后,才把这次被删掉的旧图从 storage 里真的删掉(先存库后删文件,顺序跟头像/banner 那次修复一样,避免存库失败但文件已经没了的情况)。
+- **编辑已经 `active` 的 listing 会自动退回 `pending_review`**:内容审核通过之后又被改了,如果不重新审核就等于审核形同虚设(跟上面"顺手补的一个安全洞"防的是同一类问题,只是这次是从"编辑"这个新入口冒出来的,得一起堵上)。`listings.status` 这一列已经被 `revoke update ... from authenticated` 收回了(见上面那条),所以这个状态回退用的是 `createServiceClient()`(服务端 service_role key),不是走普通登录态 client;即便用了绕过 RLS 的 service_role,查询上还是老老实实带了 `.eq("seller_id", user.id).eq("status", "active")` 这两个条件,不依赖 RLS 也不会变成一个可以被滥用的"通用改状态"入口。**`draft`/`rejected`/`pending_review`/`paused`/`removed` 编辑后状态不变**,只处理了 `active` 这一种情况,`rejected` 编辑后不会自动重新排队进审核(见上面"已知欠缺"里那条),这是刻意的范围控制,不是漏做。
+- **删除**:`/dashboard/my-listings` 每条 listing 旁边加了 "Delete"(复用现成的 `ConfirmSubmitForm` 弹确认框组件,列表页/社交账号删除按钮当年就是这个组件),`deleteListingAction` 先校验 `seller_id` 是自己的,删除数据库行走的是普通登录态 client(RLS 里 `sellers can delete own listings` 这条策略本来就有,不需要 service_role)。**`listing_orders.listing_id` 引用 `listings(id)` 时没有声明 `on delete cascade`**(默认是 `no action`/外键约束),所以一条有过任何订单(哪怕是很久以前已经完成的)的 listing 删不掉,Postgres 会直接拒绝、报外键约束错误——这是故意保留的行为,不是 bug:不然删掉 listing 会让买家的历史订单突然指向一条不存在的记录。代码里把这种情况识别出来(`error.message` 里包含 "foreign key"),转成友好提示"有订单历史,删不掉,需要联系管理员",而不是把 Postgres 原始报错糊到用户脸上。删除成功后,这条 listing 的 `media_urls` 也会跟着从 storage 里清掉(同样是"先确认数据库那边真的删了,再删文件"的顺序)。
+- **已知限制**:管理员的下架(`removed`)/推荐(`is_featured`)那两列还是只有 `/admin/listings` 能碰,这次没有给卖家开放"暂停/paused"这个自助操作(`listings.status` 整列都被 REVOKE 了,卖家自助暂停需要另外一个专门的 service_role action,这次没做,只做了用户明确要的"编辑"和"删除")。
+- 验证方式:`npm run build` + `npx eslint src` 全绿。这个开发环境连不上真实 Supabase 项目,没有用真实账号跑过"编辑一条 active listing → 确认状态真的退回 pending_review"、"删除一条有订单的 listing → 确认真的报错而不是误删"这两条关键路径,上线后建议人工各测一次。
 
 ## 部署(Vercel)
 

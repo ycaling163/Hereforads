@@ -125,3 +125,11 @@
   - **`ListingForm.tsx` 新增 `duplicatedFromTitle` 提示条**:复制进来时顶部会出现一个琥珀色提示框,写清楚"这是复制自《xxx》,每条广告只能对应一个平台,如果这条要发在别的平台,记得改下面的 Ad placement,需要多平台就发多条 listing,别指望一条覆盖所有平台"——Ad placement 下拉框本身默认还是会带出原来那条的平台(方便只是想改改文案/价格、平台没变的场景),不是清空强制重选,靠这条醒目提示 + 本来就有的必填校验来防止"复制完忘记改"这个操作失误。
   - **媒体(图片/视频)处理**:复制过来的图片默认整批带过来(卖家不用重新传一遍),但每张图右上角加了悬浮显示的 ✕ 删除按钮(纯前端 `useState` 管理,删了就不会提交对应的隐藏 input),配合原来就有的"再传几张新的,追加在后面"的上传框,卖家可以删掉第一张(默认是封面图)、再传一张平台专属的截图当新封面,达到"替换封面图"的效果,不用做拖拽排序这种更重的功能。`createListingAction` 服务端对提交上来的 `existing_media` 做了校验——只认真的是这个用户自己在 `ad-space-photos` bucket 底下的文件路径(`/object/public/ad-space-photos/{user_id}/...`),不会无脑相信前端传来的任意 URL 字符串。
   - 验证方式:`npm run build` + `npx eslint src` 全绿。这个开发环境没有真实 Supabase 数据,没有实际跑通"复制 → 改平台 → 发布"这条流程。
+
+- **加了真正的 listing 编辑 + 删除,补上之前用 Duplicate 绕开的那个缺口**:用户明确要求"需要建一个编辑按钮和删除",不再满足于上一条的 Duplicate 曲线救国方案。
+  - **`/dashboard/my-listings/[id]/edit`**(新增 `page.tsx` + `actions.ts`):复用 `ListingForm.tsx`(发布/复制/编辑三个场景现在共用同一个表单组件),也把 `new-listing/actions.ts` 里那一大段字段校验逻辑抽成了 `src/lib/listingFormValidation.ts` 的 `parseListingFormFields()`,创建和编辑两边调同一份,不重复写。
+  - **图片支持单张删除**:`ListingForm.tsx` 的"已上传媒体"从纯预览列表改成每张图带悬浮 ✕ 按钮(客户端 `useState`,配合隐藏的 `existing_media` input 告诉服务端要保留哪些),这样删掉旧封面、传一张新的就行,不用做拖拽排序。服务端只认提交上来的 `existing_media` 里真的是这个用户自己 storage 路径下的文件,不会无脑信任前端传来的任意 URL。
+  - **编辑 `active` 状态的 listing 会自动退回 `pending_review`**:这是主动加的一条安全考虑,不是用户提出来的细节——内容审核通过之后又被卖家改了如果不重新审核,等于审核形同虚设,是"顺手补的一个安全洞"(2026-09-18 早些时候那次 `listings.status` REVOKE)想防的同一类问题在编辑功能这个新口子上重新出现。`status` 这一列已经被 REVOKE 挡住普通登录态写入了,这里用 `createServiceClient()`(service_role)专门写这一列,但查询上还是老实带了 `seller_id`/原状态两个条件兜底,没有因为绕开 RLS 就变成一个通用的"改状态"后门。**`draft`/`rejected` 编辑后状态不变,不会自动重新排队进审核**——这个范围控制是刻意的,README"已知欠缺"里补了说明,不是漏做。
+  - **删除**(`/dashboard/my-listings` 新增 "Delete" 按钮,复用 `ConfirmSubmitForm`):`listing_orders.listing_id` 引用 `listings` 时没设 `on delete cascade`,所以有订单历史(哪怕很久以前已完成)的 listing 删不掉,Postgres 会报外键约束错误——这是故意保留的行为(防止买家历史订单突然指向不存在的 listing),代码识别这种情况转成友好提示,不是把原始报错甩给用户。删除成功后顺手清掉这条 listing 在 storage 里的图片文件,不留垃圾。
+  - **顺手做的小重构**:把 `dashboard/profile/actions.ts` 里原来私有的 `storagePathFromPublicUrl()` 挪到了新建的 `src/lib/storage.ts`,这次删 listing 图片时复用,不用再写一遍一样的 URL 解析逻辑。
+  - 验证方式:`npm run build` + `npx eslint src` 全绿。这个开发环境连不上真实 Supabase 项目,"编辑 active listing 后状态真的退回 pending_review"、"删有订单的 listing 真的会被拒绝而不是误删"这两条关键路径没有用真实数据跑过,上线后建议人工各测一次。

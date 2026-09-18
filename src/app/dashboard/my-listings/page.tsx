@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
 import { LISTING_STATUS_LABELS, PRICING_UNIT_LABELS } from "@/lib/supabase/enums";
 import type { Listing } from "@/lib/supabase/types";
+import { deleteListingAction } from "./actions";
 
 const STATUS_BADGE_CLASS: Record<Listing["status"], string> = {
   draft: "bg-amber-100 text-amber-800",
@@ -13,7 +15,18 @@ const STATUS_BADGE_CLASS: Record<Listing["status"], string> = {
   removed: "bg-red-100 text-red-700",
 };
 
-export default async function MyListingsPage() {
+const DELETE_ERROR_MESSAGES: Record<string, string> = {
+  delete_failed: "Delete didn't go through — the database rejected the request.",
+  delete_blocked_by_orders:
+    "Can't delete this listing — it has order history attached (even old or completed orders). Contact an admin if it really needs to be removed.",
+};
+
+export default async function MyListingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error: errorCode } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -39,6 +52,12 @@ export default async function MyListingsPage() {
       <p className="mt-2 text-zinc-600">
         Everything you&apos;ve published, including drafts buyers can&apos;t see yet.
       </p>
+
+      {errorCode && DELETE_ERROR_MESSAGES[errorCode] && (
+        <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
+          {DELETE_ERROR_MESSAGES[errorCode]}
+        </p>
+      )}
 
       {error && <p className="mt-8 text-sm text-red-600">{error.message}</p>}
 
@@ -80,11 +99,23 @@ export default async function MyListingsPage() {
                 {LISTING_STATUS_LABELS[listing.status]}
               </span>
               <Link
+                href={`/dashboard/my-listings/${listing.id}/edit`}
+                className="text-sm text-zinc-500 transition-colors hover:text-zinc-900"
+              >
+                Edit
+              </Link>
+              <Link
                 href={`/dashboard/new-listing?from=${listing.id}`}
                 className="text-sm text-zinc-500 transition-colors hover:text-zinc-900"
               >
                 Duplicate
               </Link>
+              <ConfirmSubmitForm
+                action={deleteListingAction.bind(null, listing.id)}
+                confirmMessage={`Delete "${listing.title}"? This can't be undone.`}
+                label="Delete"
+                className="text-sm text-zinc-500 transition-colors hover:text-red-600"
+              />
             </div>
           </div>
         ))}

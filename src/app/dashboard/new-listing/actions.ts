@@ -3,13 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import {
-  LISTING_CATEGORIES,
-  MIN_LISTING_PRICE,
-  PRICING_UNITS,
-  type ListingCategory,
-  type PricingUnit,
-} from "@/lib/supabase/enums";
+import { parseListingFormFields } from "@/lib/listingFormValidation";
 
 // listing 图片/视频复用已有的 ad-space-photos bucket,不用重新建。
 const MEDIA_BUCKET = "ad-space-photos";
@@ -42,17 +36,16 @@ export async function createListingAction(
       supabase.from("social_accounts").select("id").eq("user_id", user.id),
     ]);
 
-  const title = String(formData.get("title") ?? "").trim();
-  const description = String(formData.get("description") ?? "").trim();
-  const priceAmountRaw = String(formData.get("price_amount") ?? "").trim();
-  const priceCurrency = String(formData.get("price_currency") ?? "").trim();
-  const pricingUnitRaw = String(formData.get("pricing_unit") ?? "");
-  const categories = formData
-    .getAll("categories")
-    .map(String)
-    .filter((c): c is ListingCategory =>
-      (LISTING_CATEGORIES as readonly string[]).includes(c)
-    );
+  const parsed = parseListingFormFields(
+    formData,
+    (ownAccounts ?? []).map((account) => account.id),
+    !!sellerProfile?.website_url
+  );
+  if ("error" in parsed) {
+    return { error: parsed.error };
+  }
+  const { fields } = parsed;
+
   const mediaFiles = formData
     .getAll("media")
     .filter((entry): entry is File => entry instanceof File && entry.size > 0);
@@ -64,48 +57,6 @@ export async function createListingAction(
     .getAll("existing_media")
     .map(String)
     .filter((url) => url.includes(ownedMediaMarker));
-  const placementRaw = String(formData.get("placement") ?? "");
-
-  if (!title) {
-    return { error: "Please enter a title" };
-  }
-  if (!placementRaw) {
-    return { error: "Please choose where this ad runs" };
-  }
-
-  // Validate against the seller's own accounts/website server-side — never
-  // trust a client-submitted account id without checking ownership.
-  let socialAccountId: string | null = null;
-  let isWebsitePlacement = false;
-  if (placementRaw === "website") {
-    if (!sellerProfile?.website_url) {
-      return { error: "You don't have a website on file — add one on your profile first" };
-    }
-    isWebsitePlacement = true;
-  } else if (placementRaw !== "other") {
-    const accountId = placementRaw.startsWith("account:")
-      ? placementRaw.slice("account:".length)
-      : "";
-    const ownsAccount = (ownAccounts ?? []).some((account) => account.id === accountId);
-    if (!accountId || !ownsAccount) {
-      return { error: "Please choose a valid ad placement" };
-    }
-    socialAccountId = accountId;
-  }
-  const priceAmount = Number(priceAmountRaw);
-  if (!priceAmountRaw || Number.isNaN(priceAmount) || priceAmount < MIN_LISTING_PRICE) {
-    return { error: `Please enter a valid price (minimum $${MIN_LISTING_PRICE})` };
-  }
-  if (!priceCurrency) {
-    return { error: "Please choose a currency" };
-  }
-  if (!(PRICING_UNITS as readonly string[]).includes(pricingUnitRaw)) {
-    return { error: "Please choose a pricing unit" };
-  }
-  const pricingUnit = pricingUnitRaw as PricingUnit;
-  if (categories.length === 0) {
-    return { error: "Please select at least one category" };
-  }
 
   const mediaUrls: string[] = [...existingMediaUrls];
   try {
@@ -141,16 +92,16 @@ export async function createListingAction(
     .from("listings")
     .insert({
       seller_id: user.id,
-      title,
-      description: description || null,
-      categories,
-      price_amount: priceAmount,
-      price_currency: priceCurrency,
-      pricing_unit: pricingUnit,
+      title: fields.title,
+      description: fields.description,
+      categories: fields.categories,
+      price_amount: fields.priceAmount,
+      price_currency: fields.priceCurrency,
+      pricing_unit: fields.pricingUnit,
       media_urls: mediaUrls,
       status,
-      social_account_id: socialAccountId,
-      is_website_placement: isWebsitePlacement,
+      social_account_id: fields.socialAccountId,
+      is_website_placement: fields.isWebsitePlacement,
     })
     .select("id")
     .single();
