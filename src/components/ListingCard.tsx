@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Listing, Profile, SellerProfile, SocialAccount } from "@/lib/supabase/types";
-import { LISTING_CATEGORY_LABELS, PRICING_UNIT_LABELS } from "@/lib/supabase/enums";
+import { PRICING_UNIT_LABELS } from "@/lib/supabase/enums";
 import { SocialStatChip, WebsiteStatChip } from "@/components/SocialStatChip";
 
 export function ListingCard({
@@ -18,13 +18,15 @@ export function ListingCard({
   placementAccount?: SocialAccount | null;
 }) {
   const cover = listing.media_urls?.[0];
-  const contentCategories = (sellerExtra?.content_categories ?? []).slice(0, 2);
 
   return (
-    <Link
-      href={`/listings/${listing.id}`}
-      className="group flex flex-col overflow-hidden rounded-2xl border border-zinc-200 transition-shadow hover:shadow-lg"
-    >
+    <div className="group relative flex flex-col overflow-hidden rounded-2xl border border-zinc-200 transition-shadow hover:shadow-lg">
+      <Link
+        href={`/listings/${listing.id}`}
+        className="absolute inset-0 z-10"
+        aria-label={listing.title}
+      />
+
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-zinc-100">
         {listing.is_featured && (
           <span className="absolute left-2 top-2 z-10 rounded-full bg-zinc-900/80 px-2 py-0.5 text-xs font-medium text-white">
@@ -49,7 +51,10 @@ export function ListingCard({
       </div>
 
       <div className="flex flex-1 flex-col gap-3 p-4">
-        <div className="flex items-center gap-2">
+        <Link
+          href={`/sellers/${listing.seller_id}`}
+          className="relative z-20 flex w-fit items-center gap-2 hover:underline"
+        >
           {sellerExtra?.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -81,20 +86,7 @@ export function ListingCard({
               />
             </svg>
           )}
-        </div>
-
-        {contentCategories.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {contentCategories.map((category) => (
-              <span
-                key={category}
-                className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600"
-              >
-                {LISTING_CATEGORY_LABELS[category] ?? category}
-              </span>
-            ))}
-          </div>
-        )}
+        </Link>
 
         {(listing.is_website_placement || placementAccount) && (
           <div className="flex flex-wrap items-center gap-3">
@@ -135,6 +127,6 @@ export function ListingCard({
           </span>
         </div>
       </div>
-    </Link>
+    </div>
   );
 }
