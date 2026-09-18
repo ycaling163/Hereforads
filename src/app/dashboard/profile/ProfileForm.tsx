@@ -16,11 +16,13 @@ export function ProfileForm({
   initialBio,
   initialAvatarUrl,
   initialContentCategories,
+  initialWebsiteUrl,
 }: {
   initialDisplayName: string;
   initialBio: string;
   initialAvatarUrl: string | null;
   initialContentCategories: ListingCategory[];
+  initialWebsiteUrl: string;
 }) {
   const [state, formAction, pending] = useActionState(
     updateProfileAction,
@@ -79,6 +81,25 @@ export function ProfileForm({
           rows={4}
           defaultValue={initialBio}
           placeholder="Tell buyers about yourself and your space to build trust"
+          className={inputClass}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="website_url" className={labelClass}>
+          Website (optional)
+        </label>
+        <p className="text-xs text-zinc-500">
+          Shown on your public profile page only — not on listing cards or
+          listing pages, where buyers care more about platform follower
+          counts.
+        </p>
+        <input
+          id="website_url"
+          name="website_url"
+          type="text"
+          defaultValue={initialWebsiteUrl}
+          placeholder="e.g. example.com"
           className={inputClass}
         />
       </div>

@@ -31,6 +31,11 @@ export interface SellerProfile {
   // 创作者自己的内容领域(比如"手工/创作类博主"),跟 Listing.categories(这个
   // 广告位愿意接哪些品牌类目的广告)是两个独立概念,不要混用。加之前读出来是 undefined。
   content_categories: ListingCategory[];
+  // 卖家自己的网站/媒体主页(跟 social_accounts 分开——那是具体的社交平台账号,
+  // 这个是没有固定平台归属的个人站点)。只在 /sellers/[id] 个人主页展示,不上
+  // 列表卡片/listing 详情页侧栏,那两处空间紧、买家更关心的是平台粉丝数。
+  // 加之前读出来是 undefined。
+  website_url: string | null;
   // Stripe Connect(Express 账户)相关字段,加之前读出来是 undefined。
   // 见 README 支付章节的 SQL。
   stripe_account_id: string | null;

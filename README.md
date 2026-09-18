@@ -92,7 +92,7 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 
 - **profiles**(`id` uuid PK, `role` user_role, `display_name` text, `created_at`, `updated_at`)——目前**没有任何页面能编辑 `display_name`**,所以卖家信息一直显示"匿名卖家"
 - **ad_spaces**、**orders**——老"实体广告位日历预订"流程的表,2026-09-17 随对应页面一起停用(见上面"页面一览"),表和数据都还在库里,只是**代码里已经没有任何地方读写它们**了(`src/app/api/stripe/webhook/route.ts` 里留了一段针对 `orders` 的死代码,见上面说明)
-- **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `is_verified` bool, `content_categories` `listing_category[]`(2026-09-17 新加,见下面"MVP v2 数据库变更"), `stripe_account_id` text, `stripe_charges_enabled` bool, `stripe_payouts_enabled` bool, ...)——`/dashboard/profile` 页可以编辑 `bio`/`avatar_url`/`content_categories`,`is_verified` 仍只读(没有人工审核入口);`stripe_*` 三列是老流程接支付时加的,现在 `stripe_account_id`/`stripe_charges_enabled`/`stripe_payouts_enabled` 这三列也没代码在读写了(MVP v2 卖家收款状态存在 `profiles.stripe_connect_account_id`/`stripe_onboarded`),但 `bio`/`avatar_url`/`is_verified`/`content_categories` 仍是当前 `/dashboard/profile`、`/sellers/[id]` 在用的字段。**`content_categories` 是创作者自己的内容领域,跟 `listings.categories`(这个具体广告位接哪些品牌类目的广告)是两个独立概念,不要混淆**
+- **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `is_verified` bool, `content_categories` `listing_category[]`(2026-09-17 新加,见下面"MVP v2 数据库变更"), `website_url` text 可空(2026-09-18 新加), `stripe_account_id` text, `stripe_charges_enabled` bool, `stripe_payouts_enabled` bool, ...)——`/dashboard/profile` 页可以编辑 `bio`/`avatar_url`/`content_categories`/`website_url`,`is_verified` 仍只读(没有人工审核入口);`stripe_*` 三列是老流程接支付时加的,现在 `stripe_account_id`/`stripe_charges_enabled`/`stripe_payouts_enabled` 这三列也没代码在读写了(MVP v2 卖家收款状态存在 `profiles.stripe_connect_account_id`/`stripe_onboarded`),但 `bio`/`avatar_url`/`is_verified`/`content_categories`/`website_url` 仍是当前 `/dashboard/profile`、`/sellers/[id]` 在用的字段。**`content_categories` 是创作者自己的内容领域,跟 `listings.categories`(这个具体广告位接哪些品牌类目的广告)是两个独立概念,不要混淆**。**`website_url` 只在 `/sellers/[id]` 个人主页展示,不上列表卡片/listing 详情页侧栏**(那两处空间紧,买家更关心平台粉丝数)
 - **social_accounts**(`id`, `user_id`→profiles, `platform` social_platform, `handle`, `url` text, `follower_count` integer 可空, ...)——`/dashboard/profile` 页可以新增/编辑/删除;`url` 和 `handle` 至少填一个
 
 ### 已知但本项目暂未使用的表
@@ -475,6 +475,55 @@ with check (auth.uid() = receiver_id);
 -- ===== listing_messages.image_url(私信发图片,2026-09-17 加)=====
 -- 沟通交付细节经常需要甩参考图/效果图,body 允许是空字符串(纯发图不写字)。
 alter table public.listing_messages add column if not exists image_url text;
+
+-- ===== social_accounts:重建 UPDATE 策略(2026-09-18 加,修复"Save failed")=====
+-- 用户编辑已有社交账号时反复报"Save failed — the database rejected the
+-- request"——服务端没收到具体的 Postgres 报错,只是 UPDATE 影响了 0 行,这是
+-- RLS 静默拒绝的典型信号。这条策略在最初建 social_accounts 表时理论上加过
+-- (见上面"social_accounts: 个人资料页...要的策略"那段),但线上库的实际状态
+-- 跟这份文档对不上(要么当时没跑成功,要么后来被手动改过)。这条 drop+create
+-- 是幂等的,可以放心重复执行。
+drop policy if exists "users can update own social_accounts" on public.social_accounts;
+create policy "users can update own social_accounts"
+on public.social_accounts for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+-- ===== seller_profiles.website_url(卖家个人网站,2026-09-18 加)=====
+-- 跟 social_accounts 是两个概念:那张表是具体的社交平台账号(Instagram/
+-- TikTok/...),这一列是没有固定平台归属的个人网站/媒体主页。只在
+-- /sellers/[id] 个人主页展示一行链接,不上列表卡片/listing 详情页侧栏(那两
+-- 处空间紧,买家更关心平台粉丝数)。
+alter table public.seller_profiles add column if not exists website_url text;
+
+-- ===== seller_profiles:补齐 SELECT/INSERT/UPDATE 策略(2026-09-18 加,预防性)=====
+-- 发现 social_accounts 的 UPDATE 策略在线上库跟文档对不上之后(见上面那条),
+-- 回头查这份文档,才发现 seller_profiles 这张表从建表到现在**从来没有在这份
+-- README 里记录过任何 RLS 策略**——bio/avatar_url/content_categories 目前能
+-- 存能读,大概率是线上库某个时间点手动配过,但配的是什么、跟下面这三条是否
+-- 完全一致,没人能确认。这三条 drop+create 都是幂等的,执行后能确保这张表的
+-- 权限跟 social_accounts/其他表用同一套标准(按 user_id 授权,公开可读),不
+-- 会因为"文档缺失、实际配置成谜"这个问题在 website_url 这个新列上重演一遍
+-- "Save failed"。
+drop policy if exists "anyone can view seller_profiles" on public.seller_profiles;
+create policy "anyone can view seller_profiles"
+on public.seller_profiles for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "users can insert own seller_profiles" on public.seller_profiles;
+create policy "users can insert own seller_profiles"
+on public.seller_profiles for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+drop policy if exists "users can update own seller_profiles" on public.seller_profiles;
+create policy "users can update own seller_profiles"
+on public.seller_profiles for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
 ```
 
 Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。

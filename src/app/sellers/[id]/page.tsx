@@ -82,6 +82,16 @@ export default async function SellerProfilePage({
               {sellerExtra.bio}
             </p>
           )}
+          {sellerExtra?.website_url && (
+            <a
+              href={sellerExtra.website_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1.5 inline-flex items-center gap-1 text-sm text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-900"
+            >
+              {sellerExtra.website_url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+            </a>
+          )}
           {sellerExtra?.content_categories &&
             sellerExtra.content_categories.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-1.5">

@@ -59,6 +59,9 @@ export default async function ProfilePage({
             initialContentCategories={
               (sellerProfile as SellerProfile | null)?.content_categories ?? []
             }
+            initialWebsiteUrl={
+              (sellerProfile as SellerProfile | null)?.website_url ?? ""
+            }
           />
         </div>
       </div>

@@ -18,6 +18,20 @@ export interface ProfileFormState {
   success?: boolean;
 }
 
+// Sellers usually type "example.com" rather than "https://example.com" —
+// add the scheme before validating instead of rejecting the common case.
+function normalizeWebsiteUrl(raw: string): { value: string | null } | { error: string } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { value: null };
+
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    return { value: new URL(withScheme).toString() };
+  } catch {
+    return { error: "Please enter a valid website, e.g. example.com" };
+  }
+}
+
 export async function updateProfileAction(
   _prevState: ProfileFormState,
   formData: FormData
@@ -40,6 +54,13 @@ export async function updateProfileAction(
     .filter((c): c is ListingCategory =>
       (LISTING_CATEGORIES as readonly string[]).includes(c)
     );
+
+  const websiteResult = normalizeWebsiteUrl(
+    String(formData.get("website_url") ?? "")
+  );
+  if ("error" in websiteResult) {
+    return { error: websiteResult.error };
+  }
 
   let avatarUrl: string | undefined;
   if (avatarFile instanceof File && avatarFile.size > 0) {
@@ -80,6 +101,7 @@ export async function updateProfileAction(
       user_id: user.id,
       bio: bio || null,
       content_categories: contentCategories,
+      website_url: websiteResult.value,
       ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
     },
     { onConflict: "user_id" }
