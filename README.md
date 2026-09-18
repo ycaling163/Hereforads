@@ -719,7 +719,7 @@ revoke update (status, is_featured)
 - **退款/纠纷仍是人工**:产品方案里明确 MVP 不做,出问题需要人工去 Stripe 后台处理
 - **没做自动翻译**、**没做可嵌入组件**、**没做中国卖家收款通道**:都是产品方案里明确列的"预留但 MVP 不做"
 - **占用式(daily/weekly/monthly)listing 还没有真正的档期日历**:`pricing_unit` 已经支持这几个值,`listings/[id]` 页对 `daily` 会显示"距离今日档期刷新"倒计时(`DailyCountdown` 组件),但还没有像老流程那样"选日期、按档期占用、冲突检测"的日历 UI——`getBlockingRanges`/`isRangeFree` 这套逻辑在删除前的 commit 里可以直接抄
-- **`/dashboard/my-listings` 目前只是列表**,没有编辑/下架/重新提交入口,卖家要改 listing 内容还得联系人工——2026-09-18 加的 `listings.social_account_id`/`is_website_placement`(广告具体投放在哪个账号,见"MVP v2 数据库变更")受这个缺口直接影响:这两列只有 `/dashboard/new-listing` 发布新 listing 的表单在填,这次改动之前已经发布的老 listing 没有入口能补填,卡片上会一直显示"未指定平台",要等做出编辑页才能让卖家自己修正
+- **`/dashboard/my-listings` 仍然没有真正的"编辑"入口**,2026-09-18 后期加了一个 "Duplicate" 链接(跳到 `/dashboard/new-listing?from={listingId}`,用另一条 listing 的内容预填发布表单、提交后插入全新一行,不改动原来那条),能部分绕开这个缺口——包括帮老 listing(`social_account_id`/`is_website_placement` 还是空的那些)补上投放平台:复制一遍、在预填表单里选好平台再发布。**但复制出来的是并列的新 listing,不是"修好"了原来那条**,原来那条(卡片仍会显示"未指定平台")没有下架/删除入口,只能联系管理员在 `/admin/listings` 处理,不是卖家自己能操作的;卖家要改 listing 已有字段(标题、价格、封面图等)也仍然没有就地编辑的入口,只能用 Duplicate 曲线救国(发一条新的、把旧的晾着)
 - **`/dashboard` 总览页统计比较粗糙**:"近 30 天成交额"是按 `paid_at` 落在 30 天内的订单金额原样相加(没扣手续费/佣金,多币种是分开显示不是换算合计),没有做历史趋势图
 - **没有邮件通知**:新私信、新订单只能靠登录后看账号头像/侧边栏的红点提示,没有发邮件提醒——用户已经明确说这个先不做,等要做的时候需要去注册 [Resend](https://resend.com)(或类似邮件服务)拿 API key
 - **OG 分享图直接用的是 `logo.png`**:那张图是 968×157 的窄长 wordmark,不是标准 OG 图推荐的 1200×630 比例,分享到社交媒体/群聊时缩略图会比较小或者留白——以后如果要做得更好看,可以像 `src/app/icon.tsx` 那样用 `next/og` 的 `ImageResponse` 单独生成一张标准比例的分享卡片(`src/app/opengraph-image.tsx`),这次先用现成的 logo 顶上,没有另外做设计

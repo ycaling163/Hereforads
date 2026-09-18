@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import type { Listing, SocialAccount } from "@/lib/supabase/types";
 import {
   LISTING_CATEGORIES,
@@ -24,6 +24,7 @@ const CURRENCIES = ["USD", "GBP", "EUR", "CAD", "AUD", "SGD", "HKD", "JPY"];
 export function ListingForm({
   action,
   initialListing,
+  duplicatedFromTitle,
   socialAccounts,
   websiteUrl,
   submitLabel,
@@ -34,12 +35,17 @@ export function ListingForm({
     formData: FormData
   ) => Promise<ListingFormState>;
   initialListing?: Listing;
+  // Set when this form was pre-filled by copying another listing (not
+  // editing it) — shows a reminder to double-check fields that shouldn't
+  // just be carried over blindly, like which platform this new one is for.
+  duplicatedFromTitle?: string;
   socialAccounts: SocialAccount[];
   websiteUrl: string | null;
   submitLabel: string;
   pendingLabel: string;
 }) {
   const [state, formAction, pending] = useActionState(action, {});
+  const [keptMedia, setKeptMedia] = useState(initialListing?.media_urls ?? []);
 
   const defaultPlacement = initialListing?.social_account_id
     ? `account:${initialListing.social_account_id}`
@@ -51,6 +57,23 @@ export function ListingForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-5">
+      {duplicatedFromTitle && (
+        <div className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="font-medium">
+            This is a copy of &ldquo;{duplicatedFromTitle}&rdquo;.
+          </p>
+          <p className="mt-1">
+            Every listing is tied to exactly one platform. If this ad runs
+            somewhere different from the original (e.g. the original was
+            YouTube and this one is TikTok), update the{" "}
+            <strong>Ad placement</strong> field below — and swap the cover
+            image if it&apos;s platform-specific. To offer the same ad on
+            multiple platforms, publish one listing per platform rather than
+            listing them all under one.
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-col gap-1.5">
         <label htmlFor="title" className={labelClass}>
           Title
@@ -203,18 +226,38 @@ export function ListingForm({
         </div>
       </div>
 
-      {initialListing && initialListing.media_urls.length > 0 && (
+      {keptMedia.length > 0 && (
         <div className="flex flex-col gap-1.5">
-          <p className={labelClass}>Uploaded media</p>
+          <p className={labelClass}>
+            {duplicatedFromTitle ? "Copied media" : "Uploaded media"}
+          </p>
+          {duplicatedFromTitle && (
+            <p className="text-xs text-zinc-500">
+              The first image is used as the cover. Remove and re-upload to
+              replace it (e.g. with a platform-specific screenshot).
+            </p>
+          )}
           <div className="grid grid-cols-4 gap-3">
-            {initialListing.media_urls.map((url) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={url}
-                src={url}
-                alt=""
-                className="aspect-square w-full rounded-lg object-cover"
-              />
+            {keptMedia.map((url) => (
+              <div key={url} className="group relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={url}
+                  alt=""
+                  className="aspect-square w-full rounded-lg object-cover"
+                />
+                <input type="hidden" name="existing_media" value={url} />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setKeptMedia((current) => current.filter((kept) => kept !== url))
+                  }
+                  aria-label="Remove image"
+                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-zinc-900/70 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                >
+                  ✕
+                </button>
+              </div>
             ))}
           </div>
         </div>
@@ -222,8 +265,8 @@ export function ListingForm({
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="media" className={labelClass}>
-          {initialListing
-            ? "Add more media (optional, appended after existing ones)"
+          {keptMedia.length > 0
+            ? "Add more media (optional, appended after the ones above)"
             : "Media (optional, multiple allowed)"}
         </label>
         <input

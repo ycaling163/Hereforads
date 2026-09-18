@@ -2,10 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ListingForm } from "@/components/ListingForm";
-import type { SocialAccount } from "@/lib/supabase/types";
+import type { Listing, SocialAccount } from "@/lib/supabase/types";
 import { createListingAction } from "./actions";
 
-export default async function NewListingPage() {
+export default async function NewListingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string }>;
+}) {
+  const { from } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -15,7 +20,7 @@ export default async function NewListingPage() {
     redirect("/login");
   }
 
-  const [{ data: profile }, { data: sellerProfile }, { data: socialAccounts }] =
+  const [{ data: profile }, { data: sellerProfile }, { data: socialAccounts }, { data: sourceListingRow }] =
     await Promise.all([
       supabase
         .from("profiles")
@@ -32,16 +37,27 @@ export default async function NewListingPage() {
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false }),
+      from
+        ? supabase.from("listings").select("*").eq("id", from).maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
+
+  // Only duplicate a listing that's actually the current user's own — RLS
+  // would let them read someone else's *active* listing, but not copy it.
+  const sourceListing =
+    sourceListingRow && (sourceListingRow as Listing).seller_id === user.id
+      ? (sourceListingRow as Listing)
+      : null;
 
   return (
     <div className="max-w-2xl">
       <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
-        Publish a listing
+        {sourceListing ? "Duplicate listing" : "Publish a listing"}
       </h1>
       <p className="mt-2 text-zinc-600">
-        Describe the ad space or service you&apos;re offering. Please write in
-        English — this marketplace doesn&apos;t auto-translate listings yet.
+        {sourceListing
+          ? "Fields are pre-filled from the listing you're copying — check the ad placement below before publishing."
+          : "Describe the ad space or service you're offering. Please write in English — this marketplace doesn't auto-translate listings yet."}
       </p>
 
       {!profile?.stripe_onboarded ? (
@@ -63,6 +79,8 @@ export default async function NewListingPage() {
       <div className="mt-8">
         <ListingForm
           action={createListingAction}
+          initialListing={sourceListing ?? undefined}
+          duplicatedFromTitle={sourceListing?.title}
           socialAccounts={(socialAccounts ?? []) as SocialAccount[]}
           websiteUrl={sellerProfile?.website_url ?? null}
           submitLabel="Publish"

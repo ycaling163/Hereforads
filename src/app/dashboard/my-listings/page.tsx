@@ -73,11 +73,19 @@ export default async function MyListingsPage() {
                   : ""}
               </p>
             </div>
-            <span
-              className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_BADGE_CLASS[listing.status]}`}
-            >
-              {LISTING_STATUS_LABELS[listing.status]}
-            </span>
+            <div className="flex shrink-0 items-center gap-3">
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_BADGE_CLASS[listing.status]}`}
+              >
+                {LISTING_STATUS_LABELS[listing.status]}
+              </span>
+              <Link
+                href={`/dashboard/new-listing?from=${listing.id}`}
+                className="text-sm text-zinc-500 transition-colors hover:text-zinc-900"
+              >
+                Duplicate
+              </Link>
+            </div>
           </div>
         ))}
       </div>

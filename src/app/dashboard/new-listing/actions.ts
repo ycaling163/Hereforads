@@ -56,6 +56,14 @@ export async function createListingAction(
   const mediaFiles = formData
     .getAll("media")
     .filter((entry): entry is File => entry instanceof File && entry.size > 0);
+  // Carried over when duplicating another listing (ListingForm's hidden
+  // "existing_media" inputs) — only accept ones that are actually this
+  // user's own storage objects, never an arbitrary client-submitted URL.
+  const ownedMediaMarker = `/object/public/${MEDIA_BUCKET}/${user.id}/`;
+  const existingMediaUrls = formData
+    .getAll("existing_media")
+    .map(String)
+    .filter((url) => url.includes(ownedMediaMarker));
   const placementRaw = String(formData.get("placement") ?? "");
 
   if (!title) {
@@ -99,7 +107,7 @@ export async function createListingAction(
     return { error: "Please select at least one category" };
   }
 
-  const mediaUrls: string[] = [];
+  const mediaUrls: string[] = [...existingMediaUrls];
   try {
     for (const file of mediaFiles) {
       const ext = file.name.split(".").pop() || "jpg";
