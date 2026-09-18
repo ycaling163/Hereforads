@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { ListingCard } from "@/components/ListingCard";
+import { attachSellerInfo } from "@/lib/listingCards";
 import { LISTING_CATEGORY_LABELS } from "@/lib/supabase/enums";
 import type { Listing } from "@/lib/supabase/types";
 
@@ -24,6 +25,7 @@ export default async function Home() {
     .limit(8);
 
   const recommended = (data ?? []) as Listing[];
+  const cards = await attachSellerInfo(supabase, recommended);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -71,8 +73,14 @@ export default async function Home() {
           </p>
         ) : (
           <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {recommended.map((listing) => (
-              <ListingCard key={listing.id} listing={listing} />
+            {cards.map((card) => (
+              <ListingCard
+                key={card.listing.id}
+                listing={card.listing}
+                seller={card.seller}
+                sellerExtra={card.sellerExtra}
+                socialAccounts={card.socialAccounts}
+              />
             ))}
           </div>
         )}

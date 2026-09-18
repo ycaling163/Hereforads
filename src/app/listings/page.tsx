@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { ListingCard } from "@/components/ListingCard";
+import { attachSellerInfo } from "@/lib/listingCards";
 import type { Listing } from "@/lib/supabase/types";
 
 export const metadata: Metadata = {
@@ -19,6 +20,7 @@ export default async function ListingsPage() {
     .order("created_at", { ascending: false });
 
   const listings = (data ?? []) as Listing[];
+  const cards = await attachSellerInfo(supabase, listings);
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-12">
@@ -46,8 +48,14 @@ export default async function ListingsPage() {
       )}
 
       <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {listings.map((listing) => (
-          <ListingCard key={listing.id} listing={listing} />
+        {cards.map((card) => (
+          <ListingCard
+            key={card.listing.id}
+            listing={card.listing}
+            seller={card.seller}
+            sellerExtra={card.sellerExtra}
+            socialAccounts={card.socialAccounts}
+          />
         ))}
       </div>
     </div>
