@@ -7,7 +7,7 @@ import { registerAction, type RegisterState } from "./actions";
 
 const initialState: RegisterState = {};
 
-export function RegisterForm() {
+export function RegisterForm({ next }: { next?: string }) {
   const [state, formAction, pending] = useActionState(
     registerAction,
     initialState
@@ -15,6 +15,7 @@ export function RegisterForm() {
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
+      {next && <input type="hidden" name="next" value={next} />}
       <div className="flex flex-col gap-1.5">
         <label htmlFor="email" className="text-sm font-medium text-zinc-700">
           Email
@@ -58,7 +59,10 @@ export function RegisterForm() {
 
       <p className="text-center text-sm text-zinc-600">
         Already have an account?{" "}
-        <Link href="/login" className="font-medium text-zinc-900 underline">
+        <Link
+          href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
+          className="font-medium text-zinc-900 underline"
+        >
           Log in
         </Link>
       </p>

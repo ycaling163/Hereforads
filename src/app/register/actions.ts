@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ensureProfile } from "@/lib/supabase/ensure-profile";
+import { safeRedirectPath } from "@/lib/safeRedirect";
 
 export interface RegisterState {
   error?: string;
@@ -16,6 +17,7 @@ export async function registerAction(
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
+  const next = safeRedirectPath(formData.get("next") as string | null, "/listings");
 
   if (!email || !password) {
     return { error: "Please enter your email and password" };
@@ -41,7 +43,7 @@ export async function registerAction(
   if (data.session) {
     // 邮箱验证已关闭:注册即登录,直接建 profiles 记录。
     await ensureProfile(supabase, data.user);
-    redirect("/listings");
+    redirect(next);
   }
 
   // 邮箱验证已开启:此时还没有 session,没法立刻写 profiles(RLS 需要 auth.uid()）。
