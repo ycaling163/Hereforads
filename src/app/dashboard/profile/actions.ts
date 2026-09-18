@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { parseFollowerCount } from "@/lib/format";
 import { storagePathFromPublicUrl } from "@/lib/storage";
+import { normalizeUsername } from "@/lib/username";
 import {
   LISTING_CATEGORIES,
   SOCIAL_PLATFORMS,
@@ -64,6 +65,11 @@ export async function updateProfileAction(
     return { error: websiteResult.error };
   }
 
+  const usernameResult = normalizeUsername(String(formData.get("username") ?? ""));
+  if ("error" in usernameResult) {
+    return { error: usernameResult.error };
+  }
+
   const { data: existingSellerProfile } = await supabase
     .from("seller_profiles")
     .select("avatar_url, banner_url")
@@ -106,11 +112,15 @@ export async function updateProfileAction(
 
   const { data: updatedProfile, error: profileError } = await supabase
     .from("profiles")
-    .update({ display_name: displayName || null })
+    .update({ display_name: displayName || null, username: usernameResult.value })
     .eq("id", user.id)
     .select("id");
 
   if (profileError) {
+    // Postgres unique_violation — someone else already has this username.
+    if (profileError.code === "23505") {
+      return { error: "That username is already taken — please choose another." };
+    }
     return { error: profileError.message };
   }
   if (!updatedProfile || updatedProfile.length === 0) {

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { ListingCard } from "@/components/ListingCard";
 import { attachSellerInfo } from "@/lib/listingCards";
@@ -40,9 +41,9 @@ export default async function ListingsPage() {
       {!error && listings.length === 0 && (
         <p className="mt-16 text-center text-zinc-500">
           No listings yet — be the{" "}
-          <a href="/dashboard/new-listing" className="mx-1 underline">
+          <Link href="/dashboard/new-listing" className="mx-1 underline">
             first to publish one
-          </a>
+          </Link>
           .
         </p>
       )}

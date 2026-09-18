@@ -55,7 +55,8 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 | --- | --- |
 | `/` | 首页,推荐 `listings` 里 `status='active'` 的前几个 |
 | `/login`、`/register` | 邮箱密码登录/注册,密码框带显示/隐藏切换。注册成功后自动在 `profiles` 建一条记录(`role='both'`);如果 Supabase 开了邮箱验证、注册时还没有 session,会在验证后**首次登录**时补建。都支持 `?next=` 查询参数(2026-09-18 加,给 `/publishers/join` 用):登录/注册成功后跳去 `next` 指定的路径,不传就还是原来的 `/listings`;`next` 会在 register/login 两个表单互相跳转的链接之间保留,校验逻辑在 `src/lib/safeRedirect.ts`(只认站内相对路径,防止被拼成跳到外部域名的开放重定向) |
-| `/sellers/[id]` | 公开主页:头像/简介/认证标记/内容领域、全部社交账号、该用户发布的全部 `listings`(卡片列表,只显示 `active`)。路由名叫 `sellers` 但代码里没有按 `role` 做区分,任何 `profiles.id`(包括纯买家)都能查看,Sales 页拿这个路由给买家做个人主页链接 |
+| `/sellers/[id]` | 公开主页:头像/简介/认证标记/内容领域、全部社交账号、该用户发布的全部 `listings`(卡片列表,只显示 `active`)。路由名叫 `sellers` 但代码里没有按 `role` 做区分,任何 `profiles.id`(包括纯买家)都能查看,Sales 页拿这个路由给买家做个人主页链接。页面渲染逻辑抽成了 `src/components/SellerProfileView.tsx`,跟下面 `/[username]` 共用 |
+| `/[username]` | 同一个主页的"好记链接"版本(2026-09-18 加,用户原话是"发到其他账号个人主页或发给客户更方便",不想让别人分享的是 `/sellers/32537926-...` 这种 UUID)。按 `profiles.username`(小写)查,查不到 `notFound()`;`username` 是可选字段,默认没有,要在 `/dashboard/profile` 自己设置。**没有做 `/sellers/[id]` → `/[username]` 的自动跳转/canonical**——两个链接会一直并存,已经在分享/收藏旧链接的人不受影响,单纯多一个更好看的入口。顶层路由是不是会跟别的静态路由(`/login`、`/admin` 等)撞名靠 `src/lib/username.ts` 的保留字表在存的时候就挡掉,Next.js 本身"静态路由优先于同级动态路由"的规则也兜底了一层(哪怕保留字表漏了什么,真撞上了也是静态页面赢,不会意外把别的页面覆盖掉) |
 | `/publishers` | 发布者网格(2026-09-18 加,原叫 "Creators"/`/creators`,同日改名成 "Publishers",理由见 WORKLOG 同日期条目):只展示至少有一条 `active` listing 的卖家,卡片显示头像/名字/认证标记/内容领域标签/各社交平台粉丝数(最多 4 个,超出显示 "+N more")/广告数/价格(单条 listing 显示单价,多条显示该卖家最便宜那个币种内的 min–max 区间),点击跳到 `/sellers/[id]`。聚合逻辑在 `src/lib/publisherCards.ts`。页面右上角 + 空状态都有一个跳到 `/publishers/join` 的按钮 |
 | `/publishers/join` | 招募落地页(2026-09-18 加):冷启动期这个平台上还没有真实卖家,用户明确说了不做"空卡片放着等人 claim"(风险见 WORKLOG 同日期条目),改成一个可以直接发给潜在创作者(私信/外联用)的落地页——大白话讲清楚"免费加入、免费发布、托管放款安全、自己定价",CTA 直接跳注册(带 `next` 参数,注册/登录成功后直接落到 `/dashboard/new-listing` 而不是默认的 `/listings`,减少"注册完不知道去哪发布"这一步流失),已登录用户点 CTA 直接跳发布页。纯静态内容,没有另建"预注册/等待名单"这类需要人工再联系一遍的中间表——注册本身已经免费、不需要先接 Stripe 才能建 `draft` listing,加一层预注册反而多一道转化损耗 |
 | `/listings` | "Ad spaces" 广告位/服务列表,读 `listings` 表(只显示 `status='active'` 的) |
@@ -94,7 +95,7 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 
 ### 本项目用到的表
 
-- **profiles**(`id` uuid PK, `role` user_role, `display_name` text, `created_at`, `updated_at`)——目前**没有任何页面能编辑 `display_name`**,所以卖家信息一直显示"匿名卖家"
+- **profiles**(`id` uuid PK, `role` user_role, `display_name` text, `username` text 可空且唯一(2026-09-18 新加,见下面"MVP v2 数据库变更"), `created_at`, `updated_at`)——`display_name`/`username` 都能在 `/dashboard/profile` 编辑(上面这条"没有页面能编辑 display_name"是旧笔记,已经不对,`ProfileForm.tsx` 早就有这个字段了)
 - **ad_spaces**、**orders**——老"实体广告位日历预订"流程的表,2026-09-17 随对应页面一起停用(见上面"页面一览"),表和数据都还在库里,只是**代码里已经没有任何地方读写它们**了(`src/app/api/stripe/webhook/route.ts` 里留了一段针对 `orders` 的死代码,见上面说明)
 - **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `banner_url` text 可空(2026-09-18 新加), `is_verified` bool, `content_categories` `listing_category[]`(2026-09-17 新加,见下面"MVP v2 数据库变更"), `website_url` text 可空(2026-09-18 新加), `stripe_account_id` text, `stripe_charges_enabled` bool, `stripe_payouts_enabled` bool, ...)——`/dashboard/profile` 页可以编辑 `bio`/`avatar_url`/`banner_url`/`content_categories`/`website_url`,`is_verified` 仍只读(没有人工审核入口);`stripe_*` 三列是老流程接支付时加的,现在 `stripe_account_id`/`stripe_charges_enabled`/`stripe_payouts_enabled` 这三列也没代码在读写了(MVP v2 卖家收款状态存在 `profiles.stripe_connect_account_id`/`stripe_onboarded`),但 `bio`/`avatar_url`/`banner_url`/`is_verified`/`content_categories`/`website_url` 仍是当前 `/dashboard/profile`、`/sellers/[id]` 在用的字段。**`content_categories` 是创作者自己的内容领域,跟 `listings.categories`(这个具体广告位接哪些品牌类目的广告)是两个独立概念,不要混淆**。**`website_url` 只在 `/sellers/[id]` 个人主页展示,不上列表卡片/listing 详情页侧栏**(那两处空间紧,买家更关心平台粉丝数)。**`banner_url` 也只在 `/sellers/[id]` 顶部展示,全宽横幅**;头像/横幅换新图时,`updateProfileAction` 会在新图存库成功后删掉 storage 里的旧文件(`storagePathFromPublicUrl()` 从公开 URL 反解出 bucket 内路径),避免旧文件永远留在 `ad-space-photos` 这个 bucket 里占空间
 - **social_accounts**(`id`, `user_id`→profiles, `platform` social_platform, `handle`, `url` text, `follower_count` integer 可空, ...)——`/dashboard/profile` 页可以新增/编辑/删除;`url` 和 `handle` 至少填一个
@@ -605,6 +606,23 @@ create policy "anyone can submit a contact message"
 on public.contact_messages for insert
 to anon, authenticated
 with check (true);
+
+-- ===== profiles.username(好记的公开链接,2026-09-18 加)=====
+-- 用户要求:分享出去的链接不该是 /sellers/32537926-0d6d-... 这种 UUID,
+-- 应该能设成 hereforads.com/7smile-linda 这种。可选字段,默认 null(老账号/
+-- 没设置的人继续只有 /sellers/[id] 这一个入口)。格式校验(小写字母/数字/连字符,
+-- 3-30 位)和保留字表(不能跟 /login、/admin 这些已有顶层路由撞名)都在
+-- src/lib/username.ts 里,这条 check 约束是数据库层面的兜底,防止校验被绕过
+-- (比如有人拿自己的 session 直接调 REST API,不经过这次新加的表单)。
+-- unique 约束允许多行都是 null(Postgres 的 unique 语义本来就不管 null 之间
+-- 是否相等),不用额外写 partial unique index。
+alter table public.profiles add column if not exists username text;
+
+alter table public.profiles add constraint profiles_username_unique unique (username);
+
+alter table public.profiles add constraint profiles_username_format check (
+  username is null or username ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'
+);
 ```
 
 Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。

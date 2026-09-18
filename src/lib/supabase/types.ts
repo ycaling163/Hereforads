@@ -11,6 +11,12 @@ export interface Profile {
   id: string;
   role: UserRole;
   display_name: string | null;
+  // Optional pretty-URL slug for /[username] (e.g. "7smile-linda" ->
+  // hereforads.com/7smile-linda), an alternative to the /sellers/[id] link
+  // for sharing off-platform. Lowercased and validated in
+  // src/lib/username.ts before it ever reaches the DB. Null until the user
+  // sets one on /dashboard/profile. Added 2026-09-18, see README.
+  username: string | null;
   // MVP v2 新增字段,见 README 里的 schema 迁移说明。老账号这三个字段读出来是 null,
   // 代表还没走过新流程 —— country 未填、stripe_onboarded 视为 false。
   country: string | null;

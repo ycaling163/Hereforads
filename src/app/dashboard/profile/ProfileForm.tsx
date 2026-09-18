@@ -13,6 +13,7 @@ const labelClass = "text-sm font-medium text-zinc-700";
 
 export function ProfileForm({
   initialDisplayName,
+  initialUsername,
   initialBio,
   initialAvatarUrl,
   initialBannerUrl,
@@ -20,6 +21,7 @@ export function ProfileForm({
   initialWebsiteUrl,
 }: {
   initialDisplayName: string;
+  initialUsername: string;
   initialBio: string;
   initialAvatarUrl: string | null;
   initialBannerUrl: string | null;
@@ -98,6 +100,39 @@ export function ProfileForm({
           defaultValue={initialDisplayName}
           className={inputClass}
         />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="username" className={labelClass}>
+          Public profile link (optional)
+        </label>
+        <p className="text-xs text-zinc-500">
+          A link that&rsquo;s easier to share than a random ID — lowercase
+          letters, numbers, and hyphens only.
+        </p>
+        <div className="flex overflow-hidden rounded-lg border border-zinc-300 focus-within:border-zinc-900">
+          <span className="flex shrink-0 items-center bg-zinc-50 px-3 text-sm text-zinc-500">
+            hereforads.com/
+          </span>
+          <input
+            id="username"
+            name="username"
+            type="text"
+            defaultValue={initialUsername}
+            placeholder="your-name"
+            className="min-w-0 flex-1 px-3 py-2 text-sm outline-none"
+          />
+        </div>
+        {initialUsername && (
+          <a
+            href={`/${initialUsername}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-900"
+          >
+            View your public profile →
+          </a>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">
