@@ -531,6 +531,23 @@ on public.seller_profiles for update
 to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+-- ===== listings.social_account_id / is_website_placement(广告位放在哪个账号,2026-09-18 加)=====
+-- 之前广告网格卡片/listing 详情页展示的是"卖家名下所有社交账号",买家很容易
+-- 误以为一份广告会同时在卖家所有平台投放——实际上一条 listing 只对应一个具体
+-- 投放位置。这两列让卖家发布 listing 时二选一(互斥,不做 check 约束,靠
+-- ListingForm.tsx 的单选下拉框保证互斥):`social_account_id` 指定具体是
+-- social_accounts 里哪一个账号,或者 `is_website_placement=true` 表示投放在
+-- seller_profiles.website_url 那个网站。两个都是空/false 就是"其他/未指定"。
+-- `on delete set null`:卖家如果删掉了对应的社交账号,不会连带把已发布的
+-- listing 也炸掉,只是这条 listing 的展示会退化成"未指定平台"。
+-- **这次改动之前发布的 listing,这两列会是 null/false(未指定)**——建这条
+-- SQL 时项目还没有 listing 编辑页(见"MVP v2 骨架已知欠缺"),老 listing 没有
+-- 入口补填这个字段,后续要做编辑页才能让卖家自己修正。
+alter table public.listings
+  add column if not exists social_account_id uuid references public.social_accounts(id) on delete set null;
+alter table public.listings
+  add column if not exists is_website_placement boolean not null default false;
 ```
 
 Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。
@@ -702,7 +719,7 @@ revoke update (status, is_featured)
 - **退款/纠纷仍是人工**:产品方案里明确 MVP 不做,出问题需要人工去 Stripe 后台处理
 - **没做自动翻译**、**没做可嵌入组件**、**没做中国卖家收款通道**:都是产品方案里明确列的"预留但 MVP 不做"
 - **占用式(daily/weekly/monthly)listing 还没有真正的档期日历**:`pricing_unit` 已经支持这几个值,`listings/[id]` 页对 `daily` 会显示"距离今日档期刷新"倒计时(`DailyCountdown` 组件),但还没有像老流程那样"选日期、按档期占用、冲突检测"的日历 UI——`getBlockingRanges`/`isRangeFree` 这套逻辑在删除前的 commit 里可以直接抄
-- **`/dashboard/my-listings` 目前只是列表**,没有编辑/下架/重新提交入口,卖家要改 listing 内容还得联系人工
+- **`/dashboard/my-listings` 目前只是列表**,没有编辑/下架/重新提交入口,卖家要改 listing 内容还得联系人工——2026-09-18 加的 `listings.social_account_id`/`is_website_placement`(广告具体投放在哪个账号,见"MVP v2 数据库变更")受这个缺口直接影响:这两列只有 `/dashboard/new-listing` 发布新 listing 的表单在填,这次改动之前已经发布的老 listing 没有入口能补填,卡片上会一直显示"未指定平台",要等做出编辑页才能让卖家自己修正
 - **`/dashboard` 总览页统计比较粗糙**:"近 30 天成交额"是按 `paid_at` 落在 30 天内的订单金额原样相加(没扣手续费/佣金,多币种是分开显示不是换算合计),没有做历史趋势图
 - **没有邮件通知**:新私信、新订单只能靠登录后看账号头像/侧边栏的红点提示,没有发邮件提醒——用户已经明确说这个先不做,等要做的时候需要去注册 [Resend](https://resend.com)(或类似邮件服务)拿 API key
 - **OG 分享图直接用的是 `logo.png`**:那张图是 968×157 的窄长 wordmark,不是标准 OG 图推荐的 1200×630 比例,分享到社交媒体/群聊时缩略图会比较小或者留白——以后如果要做得更好看,可以像 `src/app/icon.tsx` 那样用 `next/og` 的 `ImageResponse` 单独生成一张标准比例的分享卡片(`src/app/opengraph-image.tsx`),这次先用现成的 logo 顶上,没有另外做设计

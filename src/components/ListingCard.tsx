@@ -1,28 +1,24 @@
 import Link from "next/link";
-import type {
-  Listing,
-  Profile,
-  SellerProfile,
-  SocialAccount,
-} from "@/lib/supabase/types";
+import type { Listing, Profile, SellerProfile, SocialAccount } from "@/lib/supabase/types";
 import { LISTING_CATEGORY_LABELS, PRICING_UNIT_LABELS } from "@/lib/supabase/enums";
-import { SocialStatChip } from "@/components/SocialStatChip";
+import { SocialStatChip, WebsiteStatChip } from "@/components/SocialStatChip";
 
 export function ListingCard({
   listing,
   seller = null,
   sellerExtra = null,
-  socialAccounts = [],
+  placementAccount = null,
 }: {
   listing: Listing;
   seller?: Profile | null;
   sellerExtra?: SellerProfile | null;
-  socialAccounts?: SocialAccount[];
+  // The one social account (or website) this specific listing is placed on —
+  // not every account the seller owns, so buyers don't assume an ad runs
+  // everywhere the seller has a presence.
+  placementAccount?: SocialAccount | null;
 }) {
   const cover = listing.media_urls?.[0];
   const contentCategories = (sellerExtra?.content_categories ?? []).slice(0, 2);
-
-  const socialChips = socialAccounts.slice(0, 3);
 
   return (
     <Link
@@ -100,11 +96,13 @@ export function ListingCard({
           </div>
         )}
 
-        {socialChips.length > 0 && (
+        {(listing.is_website_placement || placementAccount) && (
           <div className="flex flex-wrap items-center gap-3">
-            {socialChips.map((account) => (
-              <SocialStatChip key={account.id} account={account} />
-            ))}
+            {listing.is_website_placement ? (
+              <WebsiteStatChip />
+            ) : (
+              placementAccount && <SocialStatChip account={placementAccount} />
+            )}
           </div>
         )}
 

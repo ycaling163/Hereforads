@@ -1,13 +1,14 @@
 "use client";
 
 import { useActionState } from "react";
-import type { Listing } from "@/lib/supabase/types";
+import type { Listing, SocialAccount } from "@/lib/supabase/types";
 import {
   LISTING_CATEGORIES,
   LISTING_CATEGORY_LABELS,
   MIN_LISTING_PRICE,
   PRICING_UNITS,
   PRICING_UNIT_LABELS,
+  SOCIAL_PLATFORM_LABELS,
 } from "@/lib/supabase/enums";
 
 export interface ListingFormState {
@@ -23,6 +24,8 @@ const CURRENCIES = ["USD", "GBP", "EUR", "CAD", "AUD", "SGD", "HKD", "JPY"];
 export function ListingForm({
   action,
   initialListing,
+  socialAccounts,
+  websiteUrl,
   submitLabel,
   pendingLabel,
 }: {
@@ -31,10 +34,20 @@ export function ListingForm({
     formData: FormData
   ) => Promise<ListingFormState>;
   initialListing?: Listing;
+  socialAccounts: SocialAccount[];
+  websiteUrl: string | null;
   submitLabel: string;
   pendingLabel: string;
 }) {
   const [state, formAction, pending] = useActionState(action, {});
+
+  const defaultPlacement = initialListing?.social_account_id
+    ? `account:${initialListing.social_account_id}`
+    : initialListing?.is_website_placement
+      ? "website"
+      : initialListing
+        ? "other"
+        : "";
 
   return (
     <form action={formAction} className="flex flex-col gap-5">
@@ -51,6 +64,45 @@ export function ListingForm({
           placeholder="e.g. Bio-link placement on my Instagram (50k followers)"
           className={inputClass}
         />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="placement" className={labelClass}>
+          Ad placement
+        </label>
+        <p className="text-xs text-zinc-500">
+          Exactly where this specific listing runs. Buyers only see this one
+          platform on the listing — not your other accounts — so be precise;
+          it&apos;s what they&apos;re paying for.
+        </p>
+        <select
+          id="placement"
+          name="placement"
+          required
+          defaultValue={defaultPlacement}
+          className={inputClass}
+        >
+          <option value="" disabled>
+            Choose where this ad runs
+          </option>
+          {socialAccounts.map((account) => (
+            <option key={account.id} value={`account:${account.id}`}>
+              {SOCIAL_PLATFORM_LABELS[account.platform] ?? account.platform}
+              {account.handle ? ` · ${account.handle}` : ""}
+            </option>
+          ))}
+          {websiteUrl && <option value="website">My website</option>}
+          <option value="other">Other / not tied to a specific account</option>
+        </select>
+        {socialAccounts.length === 0 && !websiteUrl && (
+          <p className="text-xs text-zinc-500">
+            No social accounts or website on file yet — add one on your{" "}
+            <a href="/dashboard/profile" className="underline">
+              profile
+            </a>{" "}
+            for buyers to see exactly where this ad runs.
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">

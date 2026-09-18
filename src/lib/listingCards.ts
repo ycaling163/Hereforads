@@ -10,12 +10,15 @@ export interface ListingCardData {
   listing: Listing;
   seller: Profile | null;
   sellerExtra: SellerProfile | null;
-  socialAccounts: SocialAccount[];
+  // The one social account this specific listing is placed on — not every
+  // account the seller owns. Showing all of a seller's accounts on a single
+  // listing implies the ad runs on all of them, which it doesn't.
+  placementAccount: SocialAccount | null;
 }
 
-// The card template needs seller identity (avatar/verified/content niche) and
-// social reach (platform/follower counts), so batch-fetch those by seller_id
-// once instead of querying per card.
+// The card template needs seller identity (avatar/verified/content niche)
+// plus the single social account this listing is actually placed on, so
+// batch-fetch both by id once instead of querying per card.
 export async function attachSellerInfo(
   supabase: SupabaseClient,
   listings: Listing[]
@@ -28,11 +31,21 @@ export async function attachSellerInfo(
     return [];
   }
 
+  const placementAccountIds = Array.from(
+    new Set(
+      listings
+        .map((listing) => listing.social_account_id)
+        .filter((id): id is string => id !== null)
+    )
+  );
+
   const [{ data: profiles }, { data: sellerProfiles }, { data: socialAccounts }] =
     await Promise.all([
       supabase.from("profiles").select("*").in("id", sellerIds),
       supabase.from("seller_profiles").select("*").in("user_id", sellerIds),
-      supabase.from("social_accounts").select("*").in("user_id", sellerIds),
+      placementAccountIds.length > 0
+        ? supabase.from("social_accounts").select("*").in("id", placementAccountIds)
+        : Promise.resolve({ data: [] as SocialAccount[] }),
     ]);
 
   const profileById = new Map(
@@ -44,17 +57,19 @@ export async function attachSellerInfo(
       extra,
     ])
   );
-  const accountsBySeller = new Map<string, SocialAccount[]>();
-  for (const account of (socialAccounts ?? []) as SocialAccount[]) {
-    const list = accountsBySeller.get(account.user_id) ?? [];
-    list.push(account);
-    accountsBySeller.set(account.user_id, list);
-  }
+  const accountById = new Map(
+    ((socialAccounts ?? []) as SocialAccount[]).map((account) => [
+      account.id,
+      account,
+    ])
+  );
 
   return listings.map((listing) => ({
     listing,
     seller: profileById.get(listing.seller_id) ?? null,
     sellerExtra: sellerExtraById.get(listing.seller_id) ?? null,
-    socialAccounts: accountsBySeller.get(listing.seller_id) ?? [],
+    placementAccount: listing.social_account_id
+      ? accountById.get(listing.social_account_id) ?? null
+      : null,
   }));
 }

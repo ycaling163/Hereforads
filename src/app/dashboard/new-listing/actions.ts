@@ -31,11 +31,16 @@ export async function createListingAction(
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("stripe_onboarded")
-    .eq("id", user.id)
-    .single();
+  const [{ data: profile }, { data: sellerProfile }, { data: ownAccounts }] =
+    await Promise.all([
+      supabase.from("profiles").select("stripe_onboarded").eq("id", user.id).single(),
+      supabase
+        .from("seller_profiles")
+        .select("website_url")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      supabase.from("social_accounts").select("id").eq("user_id", user.id),
+    ]);
 
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
@@ -51,9 +56,33 @@ export async function createListingAction(
   const mediaFiles = formData
     .getAll("media")
     .filter((entry): entry is File => entry instanceof File && entry.size > 0);
+  const placementRaw = String(formData.get("placement") ?? "");
 
   if (!title) {
     return { error: "Please enter a title" };
+  }
+  if (!placementRaw) {
+    return { error: "Please choose where this ad runs" };
+  }
+
+  // Validate against the seller's own accounts/website server-side — never
+  // trust a client-submitted account id without checking ownership.
+  let socialAccountId: string | null = null;
+  let isWebsitePlacement = false;
+  if (placementRaw === "website") {
+    if (!sellerProfile?.website_url) {
+      return { error: "You don't have a website on file — add one on your profile first" };
+    }
+    isWebsitePlacement = true;
+  } else if (placementRaw !== "other") {
+    const accountId = placementRaw.startsWith("account:")
+      ? placementRaw.slice("account:".length)
+      : "";
+    const ownsAccount = (ownAccounts ?? []).some((account) => account.id === accountId);
+    if (!accountId || !ownsAccount) {
+      return { error: "Please choose a valid ad placement" };
+    }
+    socialAccountId = accountId;
   }
   const priceAmount = Number(priceAmountRaw);
   if (!priceAmountRaw || Number.isNaN(priceAmount) || priceAmount < MIN_LISTING_PRICE) {
@@ -112,6 +141,8 @@ export async function createListingAction(
       pricing_unit: pricingUnit,
       media_urls: mediaUrls,
       status,
+      social_account_id: socialAccountId,
+      is_website_placement: isWebsitePlacement,
     })
     .select("id")
     .single();

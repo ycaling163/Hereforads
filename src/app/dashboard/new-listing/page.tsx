@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ListingForm } from "@/components/ListingForm";
+import type { SocialAccount } from "@/lib/supabase/types";
 import { createListingAction } from "./actions";
 
 export default async function NewListingPage() {
@@ -14,11 +15,24 @@ export default async function NewListingPage() {
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("stripe_onboarded")
-    .eq("id", user.id)
-    .single();
+  const [{ data: profile }, { data: sellerProfile }, { data: socialAccounts }] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("stripe_onboarded")
+        .eq("id", user.id)
+        .single(),
+      supabase
+        .from("seller_profiles")
+        .select("website_url")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("social_accounts")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false }),
+    ]);
 
   return (
     <div className="max-w-2xl">
@@ -49,6 +63,8 @@ export default async function NewListingPage() {
       <div className="mt-8">
         <ListingForm
           action={createListingAction}
+          socialAccounts={(socialAccounts ?? []) as SocialAccount[]}
+          websiteUrl={sellerProfile?.website_url ?? null}
           submitLabel="Publish"
           pendingLabel="Publishing…"
         />

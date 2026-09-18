@@ -50,6 +50,7 @@ export default async function SellerProfilePage({
   const sellerExtra = sellerProfile as SellerProfile | null;
   const accounts = (socialAccounts ?? []) as SocialAccount[];
   const listings = (listingRows ?? []) as Listing[];
+  const accountById = new Map(accounts.map((account) => [account.id, account]));
 
   return (
     <div>
@@ -145,7 +146,11 @@ export default async function SellerProfilePage({
                   listing={listing}
                   seller={seller}
                   sellerExtra={sellerExtra}
-                  socialAccounts={accounts}
+                  placementAccount={
+                    listing.social_account_id
+                      ? accountById.get(listing.social_account_id) ?? null
+                      : null
+                  }
                 />
               ))}
             </div>

@@ -74,6 +74,16 @@ export interface Listing {
   status: ListingStatus;
   // 管理员"推荐/置顶",跟 status 一样只有 service_role(管理员操作)能改。
   is_featured: boolean;
+  // 这条 listing 具体是在卖家哪一个社交账号上投放的(2026-09-18 加)。跟
+  // seller_profiles 展示的"这个卖家所有社交账号"是两回事——买家在广告网格/详情
+  // 页只应该看到这一条广告实际会投放的那一个平台,不然会误以为花一份钱能在
+  // 卖家的全部社交媒体同时投放,容易产生纠纷。发布时二选一,互斥:
+  // social_account_id 指定具体账号,或者 is_website_placement=true 表示投放在
+  // 卖家自己的网站(seller_profiles.website_url)。两个都是 falsy 就是"未指定
+  // /其他",发布表单里叫 "Other"(旧数据、没有走过新发布表单的 listing 也会是
+  // 这个状态)。加之前读出来是 undefined。
+  social_account_id: string | null;
+  is_website_placement: boolean;
   created_at: string;
   updated_at: string;
 }

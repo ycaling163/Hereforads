@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { BuyListingButton } from "@/components/BuyListingButton";
 import { ContactSellerForm } from "@/components/ContactSellerForm";
 import { DailyCountdown } from "@/components/DailyCountdown";
-import { SocialStatChip } from "@/components/SocialStatChip";
+import { SocialStatChip, WebsiteStatChip } from "@/components/SocialStatChip";
 import {
   LISTING_CATEGORY_LABELS,
   LISTING_STATUS_LABELS,
@@ -59,7 +59,7 @@ export default async function ListingDetailPage({
   const [
     { data: profile },
     { data: sellerProfile },
-    { data: socialAccounts },
+    { data: placementAccountRow },
     {
       data: { user },
     },
@@ -70,13 +70,21 @@ export default async function ListingDetailPage({
       .select("*")
       .eq("user_id", listing.seller_id)
       .maybeSingle(),
-    supabase.from("social_accounts").select("*").eq("user_id", listing.seller_id),
+    // Only this listing's own placement — not every account the seller owns,
+    // so buyers don't assume the ad runs everywhere the seller has a presence.
+    listing.social_account_id
+      ? supabase
+          .from("social_accounts")
+          .select("*")
+          .eq("id", listing.social_account_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
     supabase.auth.getUser(),
   ]);
 
   const seller = profile as Profile | null;
   const sellerExtra = sellerProfile as SellerProfile | null;
-  const accounts = (socialAccounts ?? []) as SocialAccount[];
+  const placementAccount = placementAccountRow as SocialAccount | null;
 
   const media = listing.media_urls ?? [];
   const isOwnListing = user?.id === listing.seller_id;
@@ -140,14 +148,16 @@ export default async function ListingDetailPage({
                 </span>
               )}
             </p>
-            {accounts.length > 0 ? (
-              <div className="mt-1.5 flex flex-wrap items-center justify-end gap-3">
-                {accounts.slice(0, 3).map((account) => (
-                  <SocialStatChip key={account.id} account={account} />
-                ))}
+            {listing.is_website_placement ? (
+              <div className="mt-1.5 flex items-center justify-end">
+                <WebsiteStatChip />
+              </div>
+            ) : placementAccount ? (
+              <div className="mt-1.5 flex items-center justify-end">
+                <SocialStatChip account={placementAccount} />
               </div>
             ) : (
-              <p className="mt-0.5 text-xs text-zinc-500">No social accounts yet</p>
+              <p className="mt-0.5 text-xs text-zinc-500">Placement not specified</p>
             )}
           </div>
         </Link>

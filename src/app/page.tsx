@@ -79,7 +79,7 @@ export default async function Home() {
                 listing={card.listing}
                 seller={card.seller}
                 sellerExtra={card.sellerExtra}
-                socialAccounts={card.socialAccounts}
+                placementAccount={card.placementAccount}
               />
             ))}
           </div>

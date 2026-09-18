@@ -54,7 +54,7 @@ export default async function ListingsPage() {
             listing={card.listing}
             seller={card.seller}
             sellerExtra={card.sellerExtra}
-            socialAccounts={card.socialAccounts}
+            placementAccount={card.placementAccount}
           />
         ))}
       </div>

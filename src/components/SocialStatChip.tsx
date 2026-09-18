@@ -1,3 +1,4 @@
+import { HiOutlineGlobeAlt } from "react-icons/hi2";
 import type { SocialAccount } from "@/lib/supabase/types";
 import { formatFollowerCount } from "@/lib/format";
 import { SocialPlatformIcon } from "@/components/SocialPlatformIcon";
@@ -12,6 +13,18 @@ export function SocialStatChip({ account }: { account: SocialAccount }) {
       <SocialPlatformIcon platform={account.platform} />
       {typeof account.follower_count === "number" &&
         formatFollowerCount(account.follower_count)}
+    </span>
+  );
+}
+
+// Same visual language for a listing placed on the seller's own website
+// rather than a specific social account — there's no platform icon or
+// follower count for that, just a plain "Website" label.
+export function WebsiteStatChip() {
+  return (
+    <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
+      <HiOutlineGlobeAlt className="h-4 w-4 shrink-0 text-zinc-500" />
+      Website
     </span>
   );
 }
