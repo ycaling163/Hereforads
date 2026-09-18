@@ -1,12 +1,12 @@
 import Link from "next/link";
-import type { CreatorCardData } from "@/lib/creatorCards";
+import type { PublisherCardData } from "@/lib/publisherCards";
 import { LISTING_CATEGORY_LABELS } from "@/lib/supabase/enums";
 import { SocialStatChip } from "@/components/SocialStatChip";
 
-export function CreatorCard({ creator }: { creator: CreatorCardData }) {
-  const { profile, sellerExtra, socialAccounts, listingCount, priceRange } = creator;
+export function PublisherCard({ publisher }: { publisher: PublisherCardData }) {
+  const { profile, sellerExtra, socialAccounts, listingCount, priceRange } = publisher;
   const contentCategories = (sellerExtra?.content_categories ?? []).slice(0, 3);
-  // Cap the chips shown so a creator with many linked accounts doesn't blow
+  // Cap the chips shown so a publisher with many linked accounts doesn't blow
   // out the card height — the profile page is where the full list lives.
   const visibleAccounts = socialAccounts.slice(0, 4);
   const extraAccountCount = socialAccounts.length - visibleAccounts.length;
@@ -21,18 +21,18 @@ export function CreatorCard({ creator }: { creator: CreatorCardData }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={sellerExtra.avatar_url}
-            alt={profile.display_name ?? "creator"}
+            alt={profile.display_name ?? "publisher"}
             className="h-12 w-12 shrink-0 rounded-full object-cover"
           />
         ) : (
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-lg font-medium text-zinc-500">
-            {(profile.display_name ?? "C")[0]}
+            {(profile.display_name ?? "P")[0]}
           </div>
         )}
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <span className="truncate font-medium text-zinc-900">
-              {profile.display_name ?? "Anonymous creator"}
+              {profile.display_name ?? "Anonymous publisher"}
             </span>
             {sellerExtra?.is_verified && (
               <svg
