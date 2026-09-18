@@ -32,7 +32,7 @@ export default async function DashboardIndexPage() {
         .from("listing_orders")
         .select("status")
         .eq("buyer_id", user.id)
-        .eq("status", "delivered"),
+        .eq("status", "paid_in_escrow"),
     ]);
 
   const listings = (listingRows ?? []) as Pick<Listing, "id" | "status">[];
@@ -40,7 +40,7 @@ export default async function DashboardIndexPage() {
     ListingOrder,
     "amount" | "currency" | "status" | "paid_at"
   >[];
-  const pendingConfirmCount = (buyerOrderRows ?? []).length;
+  const purchasesInEscrowCount = (buyerOrderRows ?? []).length;
 
   const listingCountByStatus = Object.fromEntries(
     LISTING_STATUSES.map((status) => [
@@ -49,7 +49,7 @@ export default async function DashboardIndexPage() {
     ])
   );
 
-  const pendingDeliveryCount = sellerOrders.filter(
+  const salesInEscrowCount = sellerOrders.filter(
     (o) => o.status === "paid_in_escrow"
   ).length;
 
@@ -79,13 +79,13 @@ export default async function DashboardIndexPage() {
 
       <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
-          label="Orders awaiting delivery"
-          value={String(pendingDeliveryCount)}
+          label="Sales in escrow"
+          value={String(salesInEscrowCount)}
           href="/dashboard/sales"
         />
         <StatCard
-          label="Purchases awaiting your confirmation"
-          value={String(pendingConfirmCount)}
+          label="Purchases in escrow"
+          value={String(purchasesInEscrowCount)}
           href="/dashboard/purchases"
         />
         <StatCard label="Gross volume (last 30 days)" value={revenueLabel} />

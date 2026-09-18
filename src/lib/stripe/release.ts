@@ -4,7 +4,10 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { PLATFORM_COMMISSION_RATE } from "@/lib/supabase/enums";
 
 /**
- * 买家确认收货(或超时自动确认)后,真正把钱从平台账户转给卖家的 Connect 账户。
+ * 买家提前主动放款,或资金冻结期(ESCROW_HOLD_DAYS)到了自动放款,触发的都是这一个
+ * 函数 —— 真正把钱从平台账户转给卖家的 Connect 账户。平台不裁定"是否已交付",这里
+ * 不检查任何交付状态,调用方(release action / 定时任务)已经用条件更新把 listing_orders
+ * 锁到 confirmed 状态,保证同一笔订单不会被并发触发两次转账。
  * 用 service_role client 写 payments/listing_orders —— 这两张表故意没给认证用户开
  * insert/update 的 RLS 口子(payments 完全没有,listing_orders 的状态流转合法性也
  * 不该交给前端 session 的 client 来把关),调用方(手动确认 action / 定时任务)已经

@@ -119,7 +119,12 @@ export const LISTING_STATUS_LABELS: Record<ListingStatus, string> = {
   removed: "Removed by moderation",
 };
 
-// 托管式交易状态机,见产品方案文档"交易状态机"一节。
+// 托管式交易状态机(2026-09-18 起简化,见 README"平台责任边界"一节的决策记录):
+// 平台不再对"卖家是否已交付"做裁定,`delivered`/`expired_auto_confirmed` 这两个值
+// 保留在数据库枚举里只是为了兼容可能已存在的历史行,新流程不会再往这两个状态迁移。
+// 新流程只有 pending_payment -> paid_in_escrow -> confirmed(内部锁定态,发起 Stripe
+// transfer 前的一个原子性保护,不代表买家真的做了什么确认动作)-> released 这条线,
+// 触发 confirmed 的可以是买家主动提前放款,也可以是定时任务在短暂冻结期后自动放款。
 export const LISTING_ORDER_STATUSES = [
   "pending_payment",
   "paid_in_escrow",
@@ -133,10 +138,10 @@ export type ListingOrderStatus = (typeof LISTING_ORDER_STATUSES)[number];
 export const LISTING_ORDER_STATUS_LABELS: Record<ListingOrderStatus, string> = {
   pending_payment: "Awaiting payment",
   paid_in_escrow: "In escrow",
-  delivered: "Delivered — awaiting buyer confirmation",
-  confirmed: "Confirmed",
+  delivered: "In escrow", // 历史遗留状态,新流程不再产生,展示上并入"In escrow"
+  confirmed: "Releasing…",
   released: "Paid out",
-  expired_auto_confirmed: "Auto-confirmed",
+  expired_auto_confirmed: "Paid out", // 历史遗留状态,新流程不再产生,展示上并入"Paid out"
 };
 
 // 最低发布价 —— 纯技术防呆(留一点余量在 Stripe 自己的最低收款额 $0.50 之上),
@@ -147,5 +152,7 @@ export const MIN_LISTING_PRICE = 0.99;
 // 平台佣金比例,参考 Etsy(6.5% 交易费+3%+$0.25 支付处理费,总负担约 10-12%)取上限。
 export const PLATFORM_COMMISSION_RATE = 0.12;
 
-// 买家交付后未确认的自动放款超时天数,对齐 Fiverr。
-export const AUTO_CONFIRM_DAYS = 3;
+// 资金进平台账户后,冻结几天再自动放款给卖家 —— 不是等"交付确认"(平台不裁定履约
+// 结果),纯粹是留一个应对盗卡/拒付的操作窗口(见 README"平台责任边界"一节)。
+// 买家随时可以提前主动放款,不用等这个天数。
+export const ESCROW_HOLD_DAYS = 3;

@@ -67,7 +67,9 @@ export async function buyListingAction(
 
   // Charges & Transfers 模式:钱先收进平台自己的账户,不是 destination charge,
   // 所以这里不带 transfer_data/application_fee_amount —— 真正转给卖家的 Transfer
-  // 要等买家确认收货(或超时自动确认)才发起,见 dashboard/purchases 的 confirm action。
+  // 要等一个短暂的资金冻结期(ESCROW_HOLD_DAYS)过后自动发起,或买家提前主动放款,
+  // 见 dashboard/purchases 的 release action。平台不对交付结果做裁定,这个冻结期
+  // 只是给拒付/欺诈留操作窗口,不是"等交付确认"(见 README"平台责任边界"一节)。
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     line_items: [

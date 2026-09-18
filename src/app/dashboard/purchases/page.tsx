@@ -2,8 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
-import { LISTING_ORDER_STATUS_LABELS } from "@/lib/supabase/enums";
-import { confirmReceiptAction } from "./actions";
+import { ESCROW_HOLD_DAYS, LISTING_ORDER_STATUS_LABELS } from "@/lib/supabase/enums";
+import { releaseNowAction } from "./actions";
 import type { Listing, ListingOrder } from "@/lib/supabase/types";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -53,7 +53,9 @@ export default async function PurchasesPage({
 
       {checkout === "success" && (
         <p className="mt-4 rounded-xl bg-green-50 px-4 py-2 text-sm text-green-700">
-          Payment received — it&apos;s held in escrow until the seller delivers.
+          Payment received — it&apos;s held for {ESCROW_HOLD_DAYS} days before
+          paying out to the seller. You can release it sooner once you&apos;re
+          happy.
         </p>
       )}
       {error && ERROR_MESSAGES[error] && (
@@ -83,7 +85,7 @@ export default async function PurchasesPage({
                 {order.amount} {order.currency}
               </p>
 
-              {order.status === "delivered" && (
+              {order.status === "paid_in_escrow" && (
                 <div className="mt-3 flex flex-col gap-2">
                   {order.proof_url && (
                     <a
@@ -92,17 +94,18 @@ export default async function PurchasesPage({
                       rel="noreferrer"
                       className="text-sm text-zinc-600 underline"
                     >
-                      Check delivery: {order.proof_url}
+                      Link from the seller: {order.proof_url}
                     </a>
                   )}
                   <ConfirmSubmitForm
-                    action={confirmReceiptAction.bind(null, order.id)}
-                    confirmMessage="Confirm you received this? This releases payment to the seller."
-                    label="Confirm receipt"
+                    action={releaseNowAction.bind(null, order.id)}
+                    confirmMessage="Release payment to the seller now? We don't mediate ad-space disputes, so only do this once you're satisfied."
+                    label="Release payment now"
                     className="self-start rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
                   />
                   <p className="text-xs text-zinc-400">
-                    Auto-confirms 3 days after delivery if you don&apos;t respond.
+                    Otherwise this releases automatically {ESCROW_HOLD_DAYS} days
+                    after payment.
                   </p>
                 </div>
               )}
