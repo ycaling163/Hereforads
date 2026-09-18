@@ -15,12 +15,14 @@ export function ProfileForm({
   initialDisplayName,
   initialBio,
   initialAvatarUrl,
+  initialBannerUrl,
   initialContentCategories,
   initialWebsiteUrl,
 }: {
   initialDisplayName: string;
   initialBio: string;
   initialAvatarUrl: string | null;
+  initialBannerUrl: string | null;
   initialContentCategories: ListingCategory[];
   initialWebsiteUrl: string;
 }) {
@@ -31,6 +33,33 @@ export function ProfileForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="banner" className={labelClass}>
+          Profile banner (optional)
+        </label>
+        <p className="text-xs text-zinc-500">
+          Shown across the top of your public profile page. Uploading a new
+          one replaces and deletes the old one.
+        </p>
+        <div className="h-24 w-full overflow-hidden rounded-xl bg-zinc-100">
+          {initialBannerUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={initialBannerUrl}
+              alt="Banner"
+              className="h-full w-full object-cover"
+            />
+          )}
+        </div>
+        <input
+          id="banner"
+          name="banner"
+          type="file"
+          accept="image/*"
+          className={inputClass}
+        />
+      </div>
+
       <div className="flex items-center gap-4">
         <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-100 text-zinc-400">
           {initialAvatarUrl ? (

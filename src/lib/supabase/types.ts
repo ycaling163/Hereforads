@@ -36,6 +36,8 @@ export interface SellerProfile {
   // 列表卡片/listing 详情页侧栏,那两处空间紧、买家更关心的是平台粉丝数。
   // 加之前读出来是 undefined。
   website_url: string | null;
+  // 个人主页顶部的横幅图,只在 /sellers/[id] 展示。加之前读出来是 undefined。
+  banner_url: string | null;
   // Stripe Connect(Express 账户)相关字段,加之前读出来是 undefined。
   // 见 README 支付章节的 SQL。
   stripe_account_id: string | null;

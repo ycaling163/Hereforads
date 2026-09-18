@@ -32,6 +32,14 @@ function normalizeWebsiteUrl(raw: string): { value: string | null } | { error: s
   }
 }
 
+// Turns a public storage URL back into the bucket-relative path .remove()
+// wants, so replacing an avatar/banner doesn't leave the old file behind.
+function storagePathFromPublicUrl(url: string, bucket: string): string | null {
+  const marker = `/object/public/${bucket}/`;
+  const index = url.indexOf(marker);
+  return index === -1 ? null : url.slice(index + marker.length);
+}
+
 export async function updateProfileAction(
   _prevState: ProfileFormState,
   formData: FormData
@@ -48,6 +56,7 @@ export async function updateProfileAction(
   const displayName = String(formData.get("display_name") ?? "").trim();
   const bio = String(formData.get("bio") ?? "").trim();
   const avatarFile = formData.get("avatar");
+  const bannerFile = formData.get("banner");
   const contentCategories = formData
     .getAll("content_categories")
     .map(String)
@@ -62,22 +71,44 @@ export async function updateProfileAction(
     return { error: websiteResult.error };
   }
 
-  let avatarUrl: string | undefined;
-  if (avatarFile instanceof File && avatarFile.size > 0) {
-    const ext = avatarFile.name.split(".").pop() || "jpg";
-    const path = `${user.id}/avatar/${randomUUID()}.${ext}`;
+  const { data: existingSellerProfile } = await supabase
+    .from("seller_profiles")
+    .select("avatar_url, banner_url")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  async function uploadImage(
+    file: File,
+    folder: "avatar" | "banner"
+  ): Promise<string | { error: string }> {
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `${user!.id}/${folder}/${randomUUID()}.${ext}`;
     const { error: uploadError } = await supabase.storage
       .from(AVATAR_BUCKET)
-      .upload(path, avatarFile, { contentType: avatarFile.type || undefined });
+      .upload(path, file, { contentType: file.type || undefined });
 
     if (uploadError) {
-      return { error: `Avatar upload failed: ${uploadError.message}` };
+      return { error: `${folder === "avatar" ? "Avatar" : "Banner"} upload failed: ${uploadError.message}` };
     }
 
     const {
       data: { publicUrl },
     } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
-    avatarUrl = publicUrl;
+    return publicUrl;
+  }
+
+  let avatarUrl: string | undefined;
+  if (avatarFile instanceof File && avatarFile.size > 0) {
+    const result = await uploadImage(avatarFile, "avatar");
+    if (typeof result !== "string") return result;
+    avatarUrl = result;
+  }
+
+  let bannerUrl: string | undefined;
+  if (bannerFile instanceof File && bannerFile.size > 0) {
+    const result = await uploadImage(bannerFile, "banner");
+    if (typeof result !== "string") return result;
+    bannerUrl = result;
   }
 
   const { data: updatedProfile, error: profileError } = await supabase
@@ -103,12 +134,26 @@ export async function updateProfileAction(
       content_categories: contentCategories,
       website_url: websiteResult.value,
       ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+      ...(bannerUrl ? { banner_url: bannerUrl } : {}),
     },
     { onConflict: "user_id" }
   );
 
   if (sellerError) {
     return { error: sellerError.message };
+  }
+
+  // Only remove the old file once the new URL is safely saved, so a storage
+  // hiccup never leaves the profile pointing at a file we've deleted.
+  const oldPathsToDelete = [
+    avatarUrl ? existingSellerProfile?.avatar_url : null,
+    bannerUrl ? existingSellerProfile?.banner_url : null,
+  ]
+    .map((url) => (url ? storagePathFromPublicUrl(url, AVATAR_BUCKET) : null))
+    .filter((path): path is string => path !== null);
+
+  if (oldPathsToDelete.length > 0) {
+    await supabase.storage.from(AVATAR_BUCKET).remove(oldPathsToDelete);
   }
 
   return { success: true };

@@ -92,7 +92,7 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 
 - **profiles**(`id` uuid PK, `role` user_role, `display_name` text, `created_at`, `updated_at`)——目前**没有任何页面能编辑 `display_name`**,所以卖家信息一直显示"匿名卖家"
 - **ad_spaces**、**orders**——老"实体广告位日历预订"流程的表,2026-09-17 随对应页面一起停用(见上面"页面一览"),表和数据都还在库里,只是**代码里已经没有任何地方读写它们**了(`src/app/api/stripe/webhook/route.ts` 里留了一段针对 `orders` 的死代码,见上面说明)
-- **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `is_verified` bool, `content_categories` `listing_category[]`(2026-09-17 新加,见下面"MVP v2 数据库变更"), `website_url` text 可空(2026-09-18 新加), `stripe_account_id` text, `stripe_charges_enabled` bool, `stripe_payouts_enabled` bool, ...)——`/dashboard/profile` 页可以编辑 `bio`/`avatar_url`/`content_categories`/`website_url`,`is_verified` 仍只读(没有人工审核入口);`stripe_*` 三列是老流程接支付时加的,现在 `stripe_account_id`/`stripe_charges_enabled`/`stripe_payouts_enabled` 这三列也没代码在读写了(MVP v2 卖家收款状态存在 `profiles.stripe_connect_account_id`/`stripe_onboarded`),但 `bio`/`avatar_url`/`is_verified`/`content_categories`/`website_url` 仍是当前 `/dashboard/profile`、`/sellers/[id]` 在用的字段。**`content_categories` 是创作者自己的内容领域,跟 `listings.categories`(这个具体广告位接哪些品牌类目的广告)是两个独立概念,不要混淆**。**`website_url` 只在 `/sellers/[id]` 个人主页展示,不上列表卡片/listing 详情页侧栏**(那两处空间紧,买家更关心平台粉丝数)
+- **seller_profiles**(`user_id`→profiles, `bio`, `avatar_url`, `banner_url` text 可空(2026-09-18 新加), `is_verified` bool, `content_categories` `listing_category[]`(2026-09-17 新加,见下面"MVP v2 数据库变更"), `website_url` text 可空(2026-09-18 新加), `stripe_account_id` text, `stripe_charges_enabled` bool, `stripe_payouts_enabled` bool, ...)——`/dashboard/profile` 页可以编辑 `bio`/`avatar_url`/`banner_url`/`content_categories`/`website_url`,`is_verified` 仍只读(没有人工审核入口);`stripe_*` 三列是老流程接支付时加的,现在 `stripe_account_id`/`stripe_charges_enabled`/`stripe_payouts_enabled` 这三列也没代码在读写了(MVP v2 卖家收款状态存在 `profiles.stripe_connect_account_id`/`stripe_onboarded`),但 `bio`/`avatar_url`/`banner_url`/`is_verified`/`content_categories`/`website_url` 仍是当前 `/dashboard/profile`、`/sellers/[id]` 在用的字段。**`content_categories` 是创作者自己的内容领域,跟 `listings.categories`(这个具体广告位接哪些品牌类目的广告)是两个独立概念,不要混淆**。**`website_url` 只在 `/sellers/[id]` 个人主页展示,不上列表卡片/listing 详情页侧栏**(那两处空间紧,买家更关心平台粉丝数)。**`banner_url` 也只在 `/sellers/[id]` 顶部展示,全宽横幅**;头像/横幅换新图时,`updateProfileAction` 会在新图存库成功后删掉 storage 里的旧文件(`storagePathFromPublicUrl()` 从公开 URL 反解出 bucket 内路径),避免旧文件永远留在 `ad-space-photos` 这个 bucket 里占空间
 - **social_accounts**(`id`, `user_id`→profiles, `platform` social_platform, `handle`, `url` text, `follower_count` integer 可空, ...)——`/dashboard/profile` 页可以新增/编辑/删除;`url` 和 `handle` 至少填一个
 
 ### 已知但本项目暂未使用的表
@@ -489,6 +489,13 @@ on public.social_accounts for update
 to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+-- ===== seller_profiles.banner_url(个人主页横幅图,2026-09-18 加)=====
+-- 只在 /sellers/[id] 顶部展示,全宽横幅,不影响列表卡片/listing 详情页(那两
+-- 处没有 banner 的展示位)。跟 avatar_url 复用同一个 ad-space-photos bucket,
+-- 路径规则一致(`{user_id}/banner/{uuid}.{ext}`)。不需要新的 RLS 策略,跟
+-- avatar_url/website_url 走同一条 seller_profiles UPDATE 策略(见下面那条)。
+alter table public.seller_profiles add column if not exists banner_url text;
 
 -- ===== seller_profiles.website_url(卖家个人网站,2026-09-18 加)=====
 -- 跟 social_accounts 是两个概念:那张表是具体的社交平台账号(Instagram/

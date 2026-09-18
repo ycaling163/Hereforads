@@ -56,6 +56,9 @@ export default async function ProfilePage({
             initialAvatarUrl={
               (sellerProfile as SellerProfile | null)?.avatar_url ?? null
             }
+            initialBannerUrl={
+              (sellerProfile as SellerProfile | null)?.banner_url ?? null
+            }
             initialContentCategories={
               (sellerProfile as SellerProfile | null)?.content_categories ?? []
             }
