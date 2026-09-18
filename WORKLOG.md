@@ -91,3 +91,5 @@
   - 代码基本是把上一条记录里改过的几个文件改回原样:`/api/cron/auto-confirm` 触发条件改回 `delivered`/`delivered_at`,`markDeliveredAction`/`DeliverOrderForm.tsx` 恢复原名和原逻辑(状态推进,不只是写 `proof_url`),`releaseNowAction`(原 `confirmReceiptAction`)的守卫条件改回 `status === "delivered"`,`/dashboard/sales`/`/dashboard/purchases`/`/dashboard`/`/dashboard/stripe-connect` 的文案和分组也改了回去。`ESCROW_HOLD_DAYS` 这个改名保留下来了(名字本身没问题,只是语义注释改回"交付后"),`releaseNowAction` 这个改名也保留了(单纯改名,逻辑跟原来的 `confirmReceiptAction` 一致)。README"平台责任边界"一节已经更新成反映这个最终状态,不是两次改动叠加的中间状态。
   - **教训**:这次说明"平台不对交易结果负责"不能简单等同于"不需要任何交付层面的信号"——即使不裁定质量,至少需要一个能证明"卖家做了动作"的最低限度信号来做超时放款的前提,不然自动化机制本身会变成新的欺诈路径。
   - 验证方式:`npm run build` + `npx eslint src` 全绿。
+
+- **纯文档记录,没有代码改动**:讨论"线下交易能不能防住"时确认了一点——只要买卖双方能在平台私信里沟通,随时可以交换联系方式跑去线下交易,这个技术上防不住(Upwork/Fiverr/Airbnb 这些平台也一样防不住)。这不推翻上面的决策,反而是"不要主动开放线下选项"的另一层理由:关键不是"能不能完全防住",是"这条路是不是平台自己设计提供的"——平台主动开的口子担责任,用户自己违反条款私下操作则不算平台设计或纵容。把接下来要做的三件事记进了 README"平台责任边界"一节新增的"线下交易技术上防不住"小节,标注了是给以后写 Terms of Service / Privacy Policy 用的备忘,这轮只是记录结论,没有写正式条款也没有落地成代码:①Terms 里要写清楚平台保护只覆盖 Stripe 完成的交易;②私信里做联系方式检测提醒(不做硬拦截,防不住但留个"平台提醒过"的记录),这个一旦做了会涉及"平台扫描私信内容"的隐私披露,需要专门写进 Privacy Policy;③把走 Stripe 这条路做得足够顺、有吸引力,减少用户绕开平台的动机。
