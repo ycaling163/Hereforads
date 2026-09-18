@@ -52,6 +52,7 @@ export default async function ProfilePage({
         <div className="mt-6 max-w-xl">
           <ProfileForm
             initialDisplayName={(profile as Profile | null)?.display_name ?? ""}
+            initialUsername={(profile as Profile | null)?.username ?? ""}
             initialBio={(sellerProfile as SellerProfile | null)?.bio ?? ""}
             initialAvatarUrl={
               (sellerProfile as SellerProfile | null)?.avatar_url ?? null

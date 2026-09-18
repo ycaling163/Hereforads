@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import type { Listing, SocialAccount } from "@/lib/supabase/types";
 import {
   LISTING_CATEGORIES,
@@ -120,9 +121,9 @@ export function ListingForm({
         {socialAccounts.length === 0 && !websiteUrl && (
           <p className="text-xs text-zinc-500">
             No social accounts or website on file yet — add one on your{" "}
-            <a href="/dashboard/profile" className="underline">
+            <Link href="/dashboard/profile" className="underline">
               profile
-            </a>{" "}
+            </Link>{" "}
             for buyers to see exactly where this ad runs.
           </p>
         )}
@@ -147,9 +148,9 @@ export function ListingForm({
         <p className="text-xs text-zinc-500">
           What kind of brands can advertise here? This doesn&apos;t have to
           match your own content niche (set that on your{" "}
-          <a href="/dashboard/profile" className="underline">
+          <Link href="/dashboard/profile" className="underline">
             profile
-          </a>
+          </Link>
           ) — e.g. a crafts creator can still take fashion or food ads.
         </p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">

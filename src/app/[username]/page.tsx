@@ -8,21 +8,28 @@ import type {
   SocialAccount,
 } from "@/lib/supabase/types";
 
-export default async function SellerProfilePage({
+// The pretty alternative to /sellers/[id] — only reachable once a user sets
+// a username on /dashboard/profile (see src/lib/username.ts for the
+// reserved-word list keeping this from ever shadowing a real top-level
+// route like /login or /admin; a static route always wins over this
+// catch-all at the same level, so those stay safe regardless).
+export default async function PublicUsernamePage({
   params,
-}: PageProps<"/sellers/[id]">) {
-  const { id } = await params;
+}: PageProps<"/[username]">) {
+  const { username } = await params;
   const supabase = await createClient();
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("*")
-    .eq("id", id)
+    .eq("username", username.toLowerCase())
     .maybeSingle();
 
   if (!profile) {
     notFound();
   }
+
+  const id = (profile as Profile).id;
 
   const [{ data: sellerProfile }, { data: socialAccounts }, { data: listingRows }] =
     await Promise.all([
