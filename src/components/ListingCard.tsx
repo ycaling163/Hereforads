@@ -6,8 +6,7 @@ import type {
   SocialAccount,
 } from "@/lib/supabase/types";
 import { LISTING_CATEGORY_LABELS, PRICING_UNIT_LABELS } from "@/lib/supabase/enums";
-import { formatFollowerCount } from "@/lib/format";
-import { SocialPlatformIcon } from "@/components/SocialPlatformIcon";
+import { SocialStatChip } from "@/components/SocialStatChip";
 
 export function ListingCard({
   listing,
@@ -23,9 +22,7 @@ export function ListingCard({
   const cover = listing.media_urls?.[0];
   const contentCategories = (sellerExtra?.content_categories ?? []).slice(0, 2);
 
-  const socialStats = socialAccounts
-    .filter((account) => typeof account.follower_count === "number")
-    .slice(0, 3);
+  const socialChips = socialAccounts.slice(0, 3);
 
   return (
     <Link
@@ -103,16 +100,10 @@ export function ListingCard({
           </div>
         )}
 
-        {socialStats.length > 0 && (
+        {socialChips.length > 0 && (
           <div className="flex flex-wrap items-center gap-3">
-            {socialStats.map((account) => (
-              <span
-                key={account.id}
-                className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700"
-              >
-                <SocialPlatformIcon platform={account.platform} />
-                {formatFollowerCount(account.follower_count as number)}
-              </span>
+            {socialChips.map((account) => (
+              <SocialStatChip key={account.id} account={account} />
             ))}
           </div>
         )}

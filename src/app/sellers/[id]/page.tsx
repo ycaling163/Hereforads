@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { SocialAccountBadge } from "@/components/SocialAccountBadge";
 import { ListingCard } from "@/components/ListingCard";
+import { SocialStatCard } from "@/components/SocialStatCard";
 import { LISTING_CATEGORY_LABELS } from "@/lib/supabase/enums";
 import type {
   Listing,
@@ -53,20 +53,22 @@ export default async function SellerProfilePage({
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-12">
-      <div className="flex items-start gap-4">
+      <div className="h-32 w-full rounded-2xl bg-gradient-to-r from-zinc-900 via-zinc-700 to-zinc-500 sm:h-44" />
+
+      <div className="flex flex-col items-start gap-4 px-2 sm:flex-row sm:items-end">
         {sellerExtra?.avatar_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={sellerExtra.avatar_url}
             alt={seller.display_name ?? "seller"}
-            className="h-16 w-16 shrink-0 rounded-full object-cover"
+            className="-mt-12 h-24 w-24 shrink-0 rounded-full object-cover ring-4 ring-white sm:h-28 sm:w-28"
           />
         ) : (
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-xl text-zinc-500">
+          <div className="-mt-12 flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-2xl text-zinc-500 ring-4 ring-white sm:h-28 sm:w-28">
             {(seller.display_name ?? "S")[0]}
           </div>
         )}
-        <div>
+        <div className="pb-1">
           <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-zinc-900">
             {seller.display_name ?? "Anonymous seller"}
             {sellerExtra?.is_verified && (
@@ -99,24 +101,19 @@ export default async function SellerProfilePage({
       {accounts.length > 0 && (
         <div className="mt-8">
           <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
-            Social accounts
+            Social reach
           </h2>
-          <ul className="mt-3 flex flex-col gap-2">
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {accounts.map((account) => (
-              <li
-                key={account.id}
-                className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200 px-4 py-2.5 text-sm"
-              >
-                <SocialAccountBadge account={account} />
-              </li>
+              <SocialStatCard key={account.id} account={account} />
             ))}
-          </ul>
+          </div>
         </div>
       )}
 
       <div className="mt-10">
         <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
-          Listings
+          Ad spaces
         </h2>
         {listings.length === 0 ? (
           <p className="mt-4 text-sm text-zinc-500">No listings published yet.</p>

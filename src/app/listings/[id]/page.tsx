@@ -5,11 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { BuyListingButton } from "@/components/BuyListingButton";
 import { ContactSellerForm } from "@/components/ContactSellerForm";
 import { DailyCountdown } from "@/components/DailyCountdown";
+import { SocialStatChip } from "@/components/SocialStatChip";
 import {
   LISTING_CATEGORY_LABELS,
   LISTING_STATUS_LABELS,
   PRICING_UNIT_LABELS,
-  SOCIAL_PLATFORM_LABELS,
 } from "@/lib/supabase/enums";
 import type {
   Listing,
@@ -88,18 +88,6 @@ export default async function ListingDetailPage({
     notFound();
   }
 
-  const socialSummary = accounts
-    .slice(0, 2)
-    .map((account) => {
-      const label = SOCIAL_PLATFORM_LABELS[account.platform] ?? account.platform;
-      const followers =
-        typeof account.follower_count === "number"
-          ? ` ${account.follower_count.toLocaleString()}`
-          : "";
-      return `${label}${followers}`;
-    })
-    .join(" · ");
-
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-12">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -152,9 +140,15 @@ export default async function ListingDetailPage({
                 </span>
               )}
             </p>
-            <p className="mt-0.5 text-xs text-zinc-500">
-              {socialSummary || "No social accounts yet"}
-            </p>
+            {accounts.length > 0 ? (
+              <div className="mt-1.5 flex flex-wrap items-center justify-end gap-3">
+                {accounts.slice(0, 3).map((account) => (
+                  <SocialStatChip key={account.id} account={account} />
+                ))}
+              </div>
+            ) : (
+              <p className="mt-0.5 text-xs text-zinc-500">No social accounts yet</p>
+            )}
           </div>
         </Link>
       </div>
