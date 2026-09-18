@@ -139,8 +139,8 @@ export default async function ListingDetailPage({
               {(seller?.display_name ?? "S")[0]}
             </div>
           )}
-          <div className="text-right">
-            <p className="flex items-center justify-end gap-1.5 font-medium text-zinc-900 hover:underline">
+          <div>
+            <p className="flex items-center gap-1.5 font-medium text-zinc-900 hover:underline">
               {seller?.display_name ?? "Anonymous seller"}
               {sellerExtra?.is_verified && (
                 <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
@@ -149,11 +149,11 @@ export default async function ListingDetailPage({
               )}
             </p>
             {listing.is_website_placement ? (
-              <div className="mt-1.5 flex items-center justify-end">
+              <div className="mt-1.5 flex items-center">
                 <WebsiteStatChip />
               </div>
             ) : placementAccount ? (
-              <div className="mt-1.5 flex items-center justify-end">
+              <div className="mt-1.5 flex items-center">
                 <SocialStatChip account={placementAccount} />
               </div>
             ) : (

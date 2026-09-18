@@ -17,13 +17,13 @@ export function SocialStatCard({ account }: { account: SocialAccount }) {
   const content = (
     <div className="flex items-center gap-3 rounded-xl border border-zinc-200 px-4 py-3 transition-colors group-hover:border-zinc-300">
       <SocialPlatformIcon platform={account.platform} className="h-6 w-6" />
-      <span className="min-w-0 flex-1 truncate font-medium text-zinc-900">
+      <span className="font-medium text-zinc-900">
         {account.handle
           ? formatHandle(account.handle)
           : SOCIAL_PLATFORM_LABELS[account.platform] ?? account.platform}
       </span>
       {followers && (
-        <span className="shrink-0 text-sm font-semibold text-zinc-900">
+        <span className="text-sm font-semibold text-zinc-900">
           {followers} followers
         </span>
       )}
