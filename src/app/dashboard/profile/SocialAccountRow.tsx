@@ -98,13 +98,13 @@ export function SocialAccountRow({ account }: { account: SocialAccount }) {
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor={`follower_count-${account.id}`} className={labelClass}>
-            Follower count (optional)
+            Follower count (optional — e.g. 25000 or 25k)
           </label>
           <input
             id={`follower_count-${account.id}`}
             name="follower_count"
-            type="number"
-            min="0"
+            type="text"
+            placeholder="e.g. 25000 or 25k"
             defaultValue={account.follower_count ?? ""}
             className={inputClass}
           />

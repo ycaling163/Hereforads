@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { parseFollowerCount } from "@/lib/format";
 import {
   LISTING_CATEGORIES,
   SOCIAL_PLATFORMS,
@@ -122,9 +123,11 @@ export async function addSocialAccountAction(
 
   let followerCount: number | null = null;
   if (followerCountRaw) {
-    followerCount = Number(followerCountRaw);
-    if (Number.isNaN(followerCount) || followerCount < 0) {
-      return { error: "Please enter a valid follower count" };
+    followerCount = parseFollowerCount(followerCountRaw);
+    if (followerCount === null) {
+      return {
+        error: "Please enter a valid follower count, e.g. 25000 or 25k",
+      };
     }
   }
 
@@ -171,9 +174,11 @@ export async function updateSocialAccountAction(
 
   let followerCount: number | null = null;
   if (followerCountRaw) {
-    followerCount = Number(followerCountRaw);
-    if (Number.isNaN(followerCount) || followerCount < 0) {
-      return { error: "Please enter a valid follower count" };
+    followerCount = parseFollowerCount(followerCountRaw);
+    if (followerCount === null) {
+      return {
+        error: "Please enter a valid follower count, e.g. 25000 or 25k",
+      };
     }
   }
 

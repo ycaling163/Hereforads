@@ -5,12 +5,9 @@ import type {
   SellerProfile,
   SocialAccount,
 } from "@/lib/supabase/types";
-import {
-  LISTING_CATEGORY_LABELS,
-  PRICING_UNIT_LABELS,
-  SOCIAL_PLATFORM_LABELS,
-} from "@/lib/supabase/enums";
+import { LISTING_CATEGORY_LABELS, PRICING_UNIT_LABELS } from "@/lib/supabase/enums";
 import { formatFollowerCount } from "@/lib/format";
+import { SocialPlatformIcon } from "@/components/SocialPlatformIcon";
 
 export function ListingCard({
   listing,
@@ -26,19 +23,9 @@ export function ListingCard({
   const cover = listing.media_urls?.[0];
   const contentCategories = (sellerExtra?.content_categories ?? []).slice(0, 2);
 
-  const accounts = socialAccounts.slice(0, 2);
-  const platformNames = accounts
-    .map((account) => SOCIAL_PLATFORM_LABELS[account.platform] ?? account.platform)
-    .join(" · ");
-  const followerSummary = accounts
+  const socialStats = socialAccounts
     .filter((account) => typeof account.follower_count === "number")
-    .map(
-      (account) =>
-        `${formatFollowerCount(account.follower_count as number)} ${
-          SOCIAL_PLATFORM_LABELS[account.platform] ?? account.platform
-        }`
-    )
-    .join(" · ");
+    .slice(0, 3);
 
   return (
     <Link
@@ -116,12 +103,17 @@ export function ListingCard({
           </div>
         )}
 
-        {(platformNames || followerSummary) && (
-          <div className="text-xs leading-5 text-zinc-500">
-            {platformNames && <p>{platformNames}</p>}
-            {followerSummary && (
-              <p className="font-medium text-zinc-700">{followerSummary}</p>
-            )}
+        {socialStats.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3">
+            {socialStats.map((account) => (
+              <span
+                key={account.id}
+                className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700"
+              >
+                <SocialPlatformIcon platform={account.platform} />
+                {formatFollowerCount(account.follower_count as number)}
+              </span>
+            ))}
           </div>
         )}
 

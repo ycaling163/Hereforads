@@ -1,12 +1,14 @@
 import { SOCIAL_PLATFORM_LABELS } from "@/lib/supabase/enums";
 import type { SocialAccount } from "@/lib/supabase/types";
+import { SocialPlatformIcon } from "@/components/SocialPlatformIcon";
 
 // 有链接的平台(YouTube/Instagram/X 等)直接给一个跳转按钮,不把长链接铺满整行;
 // 没有链接的平台(比如小红书,分享链接不常用)就还是显示账号名文字。
 export function SocialAccountBadge({ account }: { account: SocialAccount }) {
   return (
     <>
-      <span className="font-medium text-zinc-900">
+      <span className="flex items-center gap-1.5 font-medium text-zinc-900">
+        <SocialPlatformIcon platform={account.platform} />
         {SOCIAL_PLATFORM_LABELS[account.platform] ?? account.platform}
       </span>
       {account.handle && (
