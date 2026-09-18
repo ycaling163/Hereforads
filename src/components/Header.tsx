@@ -50,11 +50,11 @@ export async function Header() {
           />
         </Link>
         <nav className="flex items-center gap-4 text-sm text-zinc-600 sm:gap-6">
-          <Link href="/creators" className="hover:text-zinc-900">
-            Creators
-          </Link>
           <Link href="/listings" className="hover:text-zinc-900">
             Ad spaces
+          </Link>
+          <Link href="/creators" className="hover:text-zinc-900">
+            Creators
           </Link>
           {user ? (
             <UserMenu
