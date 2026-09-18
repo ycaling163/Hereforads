@@ -14,7 +14,7 @@ export async function approveListingAction(listingId: string): Promise<void> {
     .update({ status: "active" })
     .eq("id", listingId)
     .eq("status", "pending_review");
-  redirect("/dashboard/admin/listings");
+  redirect("/admin/listings");
 }
 
 export async function rejectListingAction(listingId: string): Promise<void> {
@@ -24,7 +24,7 @@ export async function rejectListingAction(listingId: string): Promise<void> {
     .update({ status: "rejected" })
     .eq("id", listingId)
     .eq("status", "pending_review");
-  redirect("/dashboard/admin/listings");
+  redirect("/admin/listings");
 }
 
 export async function removeListingAction(listingId: string): Promise<void> {
@@ -35,7 +35,7 @@ export async function removeListingAction(listingId: string): Promise<void> {
     .from("listings")
     .update({ status: "removed" })
     .eq("id", listingId);
-  redirect("/dashboard/admin/listings");
+  redirect("/admin/listings");
 }
 
 export async function setFeaturedAction(
@@ -47,5 +47,5 @@ export async function setFeaturedAction(
     .from("listings")
     .update({ is_featured: featured })
     .eq("id", listingId);
-  redirect("/dashboard/admin/listings");
+  redirect("/admin/listings");
 }

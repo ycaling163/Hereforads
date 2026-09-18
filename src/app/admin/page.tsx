@@ -31,17 +31,17 @@ export default async function AdminOverviewPage() {
         <StatCard
           label="Listings pending review"
           value={String(pendingCount ?? 0)}
-          href="/dashboard/admin/listings?status=pending_review"
+          href="/admin/listings?status=pending_review"
         />
         <StatCard
           label="Total users"
           value={String(userCount ?? 0)}
-          href="/dashboard/admin/users"
+          href="/admin/users"
         />
         <StatCard
           label="Banned users"
           value={String(bannedCount ?? 0)}
-          href="/dashboard/admin/users"
+          href="/admin/users"
         />
       </div>
     </div>

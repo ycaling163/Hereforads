@@ -8,10 +8,12 @@ export function UserMenu({
   displayName,
   avatarUrl,
   badgeCount = 0,
+  isAdmin = false,
 }: {
   displayName: string | null;
   avatarUrl: string | null;
   badgeCount?: number;
+  isAdmin?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -66,6 +68,15 @@ export function UserMenu({
           >
             My account
           </Link>
+          {isAdmin && (
+            <Link
+              href="/admin"
+              onClick={() => setOpen(false)}
+              className="block px-4 py-2 text-amber-700 hover:bg-amber-50"
+            >
+              🛡 Admin
+            </Link>
+          )}
           <form action={logoutAction}>
             <button
               type="submit"

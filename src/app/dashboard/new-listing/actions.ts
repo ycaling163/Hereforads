@@ -97,7 +97,7 @@ export async function createListingAction(
   // 没开通 Stripe 的卖家也能填表,但落库状态强制是 draft —— 买家看不到、也下不了单,
   // 光靠前端隐藏发布入口挡不住有人直接提交表单绕过去,所以这里再校验一次。
   // 2026-09-18 起,连好 Stripe 也不会直接 active 了,先进 pending_review 等管理员审核,
-  // 管理员在 /dashboard/admin/listings 通过后才会变成 active、买家才能看到。
+  // 管理员在 /admin/listings 通过后才会变成 active、买家才能看到。
   const status = profile?.stripe_onboarded ? "pending_review" : "draft";
 
   const { data, error } = await supabase

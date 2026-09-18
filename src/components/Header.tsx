@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getActionCounts } from "@/lib/supabase/notification-counts";
+import { isAdmin } from "@/lib/supabase/admin";
 import { UserMenu } from "./UserMenu";
 
 export async function Header() {
@@ -13,8 +14,9 @@ export async function Header() {
   let displayName: string | null = null;
   let avatarUrl: string | null = null;
   let badgeCount = 0;
+  let admin = false;
   if (user) {
-    const [{ data: profile }, { data: sellerProfile }, counts] = await Promise.all([
+    const [{ data: profile }, { data: sellerProfile }, counts, adminFlag] = await Promise.all([
       supabase
         .from("profiles")
         .select("display_name")
@@ -26,10 +28,12 @@ export async function Header() {
         .eq("user_id", user.id)
         .maybeSingle(),
       getActionCounts(supabase, user.id),
+      isAdmin(supabase, user.id),
     ]);
     displayName = profile?.display_name ?? null;
     avatarUrl = sellerProfile?.avatar_url ?? null;
     badgeCount = counts.unreadMessages + counts.newOrders;
+    admin = adminFlag;
   }
 
   return (
@@ -54,6 +58,7 @@ export async function Header() {
               displayName={displayName}
               avatarUrl={avatarUrl}
               badgeCount={badgeCount}
+              isAdmin={admin}
             />
           ) : (
             <Link href="/login" className="hover:text-zinc-900">

@@ -14,7 +14,7 @@ const BAN_DURATION = "876000h"; // ~100 年,相当于永久,直到 unban
 export async function banUserAction(userId: string): Promise<void> {
   const admin = await requireAdmin();
   if (userId === admin.id) {
-    redirect("/dashboard/admin/users?error=cannot_ban_self");
+    redirect("/admin/users?error=cannot_ban_self");
   }
 
   const service = createServiceClient();
@@ -27,7 +27,7 @@ export async function banUserAction(userId: string): Promise<void> {
     console.error("Failed to ban user at auth level:", error.message);
   }
 
-  redirect("/dashboard/admin/users");
+  redirect("/admin/users");
 }
 
 export async function unbanUserAction(userId: string): Promise<void> {
@@ -43,5 +43,5 @@ export async function unbanUserAction(userId: string): Promise<void> {
     console.error("Failed to unban user at auth level:", error.message);
   }
 
-  redirect("/dashboard/admin/users");
+  redirect("/admin/users");
 }

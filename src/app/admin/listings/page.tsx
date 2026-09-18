@@ -69,7 +69,7 @@ export default async function AdminListingsPage({
         {TABS.map((tab) => (
           <Link
             key={tab.status}
-            href={`/dashboard/admin/listings?status=${tab.status}`}
+            href={`/admin/listings?status=${tab.status}`}
             className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
               activeTab === tab.status
                 ? "bg-zinc-900 text-white"

@@ -67,7 +67,7 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 | `/dashboard/messages`、`/dashboard/messages/[listingId]/[otherUserId]` | 绑在某个 listing 下的一对一消息,不是群聊;打开某个会话会把对方发来的未读消息标记已读;可以只发图片不写字(比如甩效果图/参考图),没有邮件通知,得自己点进来看 |
 | `/api/stripe/webhook` | Stripe webhook:`account.updated` 刷新 `stripe_onboarded`,`checkout.session.completed` 把订单推进到 `paid_in_escrow` |
 | `/api/cron/auto-confirm` | 需要外部定时器(Vercel Cron / Supabase pg_cron)调用,处理买家超时未确认的自动放款,见下面"收付款设计要点" |
-| `/dashboard/admin`、`/dashboard/admin/listings`、`/dashboard/admin/users`、`/dashboard/admin/orders` | 管理员后台(2026-09-18 加),只有 `admins` 表里有记录的账号能进,见下面"管理员系统"一节 |
+| `/admin`、`/admin/listings`、`/admin/users`、`/admin/orders` | 管理员后台(2026-09-18 加,同日下午从 `/dashboard/admin/*` 挪到跟 `/dashboard` 平级的独立路由),只有 `admins` 表里有记录的账号能进,见下面"管理员系统"一节 |
 | `/banned` | 账号被封禁后跳转到的静态说明页,不需要登录 |
 
 ## 支付流程(Stripe Connect · Charges & Transfers)
@@ -491,6 +491,10 @@ Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。
 
 用户反馈"广告位现在直接公开,需要有管理员后台"。拍板的方案:**新 listing 需要管理员事前审核才能公开**(不是先上线、管理员事后抽查下架),管理员这一版能做:审核/拒绝/下架/推荐 listing,封禁/解封用户账号,只读查看全站订单。
 
+### 页面结构:`/admin/*` 是跟 `/dashboard/*` 平级的独立路由,不是嵌套子页面
+
+第一版把管理员页面放在 `/dashboard/admin/*` 下面,复用个人 dashboard 的 `DashboardSidebar`,只是给 Admin 那组导航项加了个琥珀色边框做视觉区分。反馈是"个人和 admin 的内容一起了"——同一个侧栏、同一个 `dashboard/layout.tsx` 外壳,靠颜色区分不够,管理员和个人视角必须**不在同一个页面**。Next.js 的嵌套 layout 机制决定了只要 URL 还挂在 `/dashboard/` 前缀下,就一定会经过 `dashboard/layout.tsx` 这层壳(子 layout 没法"跳过"父 layout 的外框),所以唯一的解法是把整棵 admin 路由树挪到跟 `/dashboard` 平级的顶层路径:`src/app/dashboard/admin` → `src/app/admin`(`git mv` 保留文件历史),`admin/layout.tsx` 换成自己独立的深色导航条(Overview/Listings/Users/Orders + "← Back to my dashboard"),不再引用 `DashboardSidebar`。`DashboardSidebar`/`dashboard/layout.tsx` 也都回退成不知道 admin 状态的纯个人导航版本。入口从侧栏挪到了账号头像下拉菜单(`UserMenu.tsx`)里一条单独的"🛡 Admin"链接,只有 `isAdmin` 为真时才渲染,点进去就是完全独立的 `/admin` 页面,跟个人 dashboard 视觉和路由上都彻底分开。
+
 ### 权限模型:谁是管理员、为什么这么设计
 
 **管理员身份存在一张独立的 `admins` 表里,不是 `profiles` 上的一个 `is_admin` 字段。** 原因:如果做成 `profiles.is_admin` 列,哪怕给它配了"只有 service_role 能改"的列权限,这张表本身的复杂度和其他业务字段混在一起,审计"到底谁是管理员"要在一堆别的列里翻;单独一张表,`select * from public.admins` 就是完整名单,而且这张表**除了"能查自己那一行"的 select 策略,没有给 `authenticated` 开任何 insert/update/delete 策略**——代码里不存在任何一条路径能让用户自己把自己加进这张表,加管理员只能人工去 Supabase 后台执行 SQL insert。第一个管理员必须这样手动加:
@@ -531,7 +535,7 @@ revoke update (status, is_featured)
   on public.listings from authenticated;
 ```
 
-**这条 REVOKE 上线前必须确认代码里所有对应字段的写入都已经切到 service_role client**,不然那几个功能会开始报权限错误。已经切好的:`src/app/dashboard/stripe-connect/page.tsx`(`stripe_onboarded` 兜底刷新)、`src/app/dashboard/stripe-connect/actions.ts`(`stripe_connect_account_id`)、`src/app/api/stripe/webhook/route.ts`(webhook 本来就是 service_role,没受影响)、`src/app/dashboard/admin/**/actions.ts`(新加的管理员 action)。`listings.status` 的初始值(`draft`/`pending_review`)是走 INSERT 设置的,REVOKE 只挡 UPDATE,INSERT 不受影响,发布表单不用改。
+**这条 REVOKE 上线前必须确认代码里所有对应字段的写入都已经切到 service_role client**,不然那几个功能会开始报权限错误。已经切好的:`src/app/dashboard/stripe-connect/page.tsx`(`stripe_onboarded` 兜底刷新)、`src/app/dashboard/stripe-connect/actions.ts`(`stripe_connect_account_id`)、`src/app/api/stripe/webhook/route.ts`(webhook 本来就是 service_role,没受影响)、`src/app/admin/**/actions.ts`(新加的管理员 action,原本在 `src/app/dashboard/admin/**/actions.ts`,后来挪到了跟 `/dashboard` 平级的 `/admin`,见上面"页面结构"一节)。`listings.status` 的初始值(`draft`/`pending_review`)是走 INSERT 设置的,REVOKE 只挡 UPDATE,INSERT 不受影响,发布表单不用改。
 
 ### 完整 SQL(管理员系统这部分)
 
@@ -574,7 +578,7 @@ revoke update (status, is_featured)
 
 ### 封禁怎么生效的
 
-封禁一个用户,`banUserAction`(`src/app/dashboard/admin/users/actions.ts`)做了两件事:①把 `profiles.is_banned` 设成 `true`;②调 Supabase Auth 的管理员 API `supabase.auth.admin.updateUserById(userId, { ban_duration: "876000h" })` 真正在 GoTrue 层面封掉这个账号的登录能力(约 100 年,相当于永久,直到管理员解封)。只改数据库字段不够——用户手上现有的 access token 在过期刷新之前(通常一小时内)本来就还有效,`src/proxy.ts` 里加了一道每次请求都查 `is_banned` 的检查,发现被封立刻 `signOut()` 并跳到 `/banned` 页,不用等 token 自然过期。**这部分(尤其是 `auth.admin.updateUserById` 这个调用)没有在真实 Supabase 项目上跑通过**,这个开发环境连不上 `myadsspace` 项目,只做到了本地 `next build` 类型检查通过、API 签名跟官方文档核对一致,上线后第一次封禁需要人工验证一下效果。
+封禁一个用户,`banUserAction`(`src/app/admin/users/actions.ts`)做了两件事:①把 `profiles.is_banned` 设成 `true`;②调 Supabase Auth 的管理员 API `supabase.auth.admin.updateUserById(userId, { ban_duration: "876000h" })` 真正在 GoTrue 层面封掉这个账号的登录能力(约 100 年,相当于永久,直到管理员解封)。只改数据库字段不够——用户手上现有的 access token 在过期刷新之前(通常一小时内)本来就还有效,`src/proxy.ts` 里加了一道每次请求都查 `is_banned` 的检查,发现被封立刻 `signOut()` 并跳到 `/banned` 页,不用等 token 自然过期。**这部分(尤其是 `auth.admin.updateUserById` 这个调用)没有在真实 Supabase 项目上跑通过**,这个开发环境连不上 `myadsspace` 项目,只做到了本地 `next build` 类型检查通过、API 签名跟官方文档核对一致,上线后第一次封禁需要人工验证一下效果。
 
 ### 已知欠缺(这版管理员系统的)
 
@@ -582,7 +586,7 @@ revoke update (status, is_featured)
 - 管理员看不到 listing 被拒绝/下架的历史原因(没有存 reason 字段,只有状态本身)
 - 用户提到"管理员能定期发邮件或消息给用户"——这版没做,邮件通知本来就等 Resend 接入之后再说(见"已知欠缺"里的邮件通知那条);站内消息(`listing_messages`)是绑在某个 listing 下的一对一会话,不支持管理员群发/单独给某个用户发一条不挂靠 listing 的消息,这个需要额外设计(比如 `listing_id` 允许为 null),这版先没做
 - 用户提到"审核先人工、后期机器人审核"——这版只做了人工审核界面,自动化审核(比如接一个内容审核 API 自动初筛)完全没做,是未来的事
-- `/dashboard/admin/orders` 只显示最近 200 条,没做分页/搜索/按状态筛选
+- `/admin/orders` 只显示最近 200 条,没做分页/搜索/按状态筛选
 
 ## 部署(Vercel)
 
