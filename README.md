@@ -62,11 +62,11 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 | `/dashboard/new-listing` | 发布表单:英文标题/描述、类目多选、价格(最低 $0.99)、计价单位、媒体上传。卖家没开通 Stripe 也能提交,但落库状态强制是 `draft`;开通 Stripe 之后提交进 `pending_review`(2026-09-18 起,见下面"管理员系统"),不是直接 `active`,买家在管理员审核通过之前都看不到 |
 | `/dashboard/my-listings` | 卖家自己发布的全部 listing(`draft`/`pending_review`/`active`/`paused`/`rejected`/`removed` 都看得到),之前这里是空白(见旧版 WORKLOG"已知欠缺"),现在补上了 |
 | `/dashboard/stripe-connect`("Payment Management") | 没连 Stripe 时是 Express 开户入口(发布的 listing 要 `stripe_onboarded=true` 才会变成 `active`);连好之后改显示"Total sales"(`listing_orders` 里排除 `pending_payment` 的金额之和)、"Available to withdraw"/"Pending"(直接调 Stripe Balance API,`stripe.balance.retrieve({}, {stripeAccount})`,不是从自己数据库估算的)、一个跳到 Stripe Express 自带 Dashboard 的按钮(`stripe.accounts.createLoginLink`,真正管理提现/打款节奏在 Stripe 那边,这个项目不自建提现流程) |
-| `/dashboard/sales` | 卖家看到自己 listing 收到的订单,按状态分成 Awaiting payment(`pending_payment`)/In escrow(`paid_in_escrow`,可以选填一个买家能核对的链接,纯提示性质、不影响放款)/Completed(`confirmed`/`released`/`expired_auto_confirmed`)三组(2026-09-18 起简化,见下面"平台责任边界"一节);每张订单卡片显示买家昵称(点击跳买家的 `/sellers/[id]` 主页)、一个跳到跟买家私信页的链接、以及打款明细(总价 / 平台佣金 / Stripe 手续费 / 实际到手,后两项要等订单 `released` 才有值) |
-| `/dashboard/purchases` | 买家看到自己下的单,`paid_in_escrow` 状态下可以随时点"Release payment now"提前放款,不用等交付确认(冻结期到了也会自动放款,见 `/api/cron/auto-confirm`) |
+| `/dashboard/sales` | 卖家看到自己 listing 收到的订单,按状态分组:Awaiting payment(`pending_payment`)/New orders(`paid_in_escrow`,提交一个买家能核对的交付链接,推进到 `delivered`)/Delivered(`delivered`,等买家确认)/Completed(`confirmed`/`released`/`expired_auto_confirmed`);每张订单卡片显示买家昵称(点击跳买家的 `/sellers/[id]` 主页)、一个跳到跟买家私信页的链接、以及打款明细(总价 / 平台佣金 / Stripe 手续费 / 实际到手,后两项要等订单 `released` 才有值) |
+| `/dashboard/purchases` | 买家看到自己下的单,`delivered` 状态下可以"确认收到"触发放款(或卖家标记交付后 `ESCROW_HOLD_DAYS` 天没反应就自动放款,见 `/api/cron/auto-confirm`) |
 | `/dashboard/messages`、`/dashboard/messages/[listingId]/[otherUserId]` | 绑在某个 listing 下的一对一消息,不是群聊;打开某个会话会把对方发来的未读消息标记已读;可以只发图片不写字(比如甩效果图/参考图),没有邮件通知,得自己点进来看 |
 | `/api/stripe/webhook` | Stripe webhook:`account.updated` 刷新 `stripe_onboarded`,`checkout.session.completed` 把订单推进到 `paid_in_escrow` |
-| `/api/cron/auto-confirm` | 需要外部定时器(Vercel Cron / Supabase pg_cron)调用,处理资金冻结期(`ESCROW_HOLD_DAYS`)到期后的自动放款,见下面"平台责任边界"一节 |
+| `/api/cron/auto-confirm` | 需要外部定时器(Vercel Cron / Supabase pg_cron)调用,处理卖家标记交付(`delivered`)后 `ESCROW_HOLD_DAYS` 天买家没反应的自动放款,见下面"平台责任边界"一节 |
 | `/admin`、`/admin/listings`、`/admin/users`、`/admin/orders` | 管理员后台(2026-09-18 加,同日下午从 `/dashboard/admin/*` 挪到跟 `/dashboard` 平级的独立路由),只有 `admins` 表里有记录的账号能进,见下面"管理员系统"一节 |
 | `/banned` | 账号被封禁后跳转到的静态说明页,不需要登录 |
 
@@ -271,7 +271,7 @@ with check (
 
 **已确认的关键决策**(不是待定,不要再当成开放问题问一遍):
 
-- **资金冻结期 3 天**(2026-09-18 起调整,原先是"对齐 Fiverr、卖家交付后买家 3 天不确认就自动放款",见下面"平台责任边界"一节改成了从付款时间起算,不再等交付确认)
+- **托管放款确认窗口 3 天**:对齐 Fiverr——卖家标记交付后买家 3 天内不确认/不申诉就自动完成放款(2026-09-18 一度改成"从付款时间起算、不用等交付",发现这样卖家什么都不做也能靠超时拿钱,当天又改了回来,见下面"平台责任边界"一节的完整记录)
 - **需要私信/咨询功能**:MVP 就做,绑在 listing 下的一对一消息串
 - **卖家必须先 Stripe onboarded 才能发布**:Stripe Connect 账户没完成 KYC 前,listing 状态停留在 `draft`,买家看不到也下不了单
 - **最低发布价 $0.99**:纯技术防呆(留一点余量在 Stripe 自己的最低收款额 $0.50 之上),不是商业门槛
@@ -303,9 +303,6 @@ create type public.listing_status as enum ('draft','active','paused');
 create type public.listing_order_status as enum (
   'pending_payment','paid_in_escrow','delivered','confirmed','released','expired_auto_confirmed'
 );
--- `delivered`/`expired_auto_confirmed` 从 2026-09-18 起是历史遗留值,新的托管放款
--- 模型不会再往这两个状态迁移(见下面"平台责任边界"一节),留着只是兼容可能已存在的
--- 历史行,不需要现在从枚举里删掉。
 
 -- ===== profiles 扩展:卖家 Stripe Connect 状态 =====
 alter table public.profiles add column if not exists country text;
@@ -485,12 +482,12 @@ Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。
 ### 收付款设计要点(实现前必读)
 
 - **卖家必须 `stripe_onboarded = true` 才能把 listing 从 `draft` 推进到 `pending_review`**(2026-09-18 起,`pending_review` 之后还要管理员审核通过才是 `active`,见下面"管理员系统"),发布表单/action 里两头都要校验(RLS 只挡"是不是自己的 listing",挡不住状态值本身)
-- **Charges & Transfers 模式**:买家在 Stripe Checkout 付款,钱先进平台自己的 Stripe 账户(不是 destination charge、不直接进卖家账户);买家主动提前放款,或资金冻结期(`ESCROW_HOLD_DAYS`,从付款时间起算,不是从"交付"起算)到期后,服务端才对卖家的 Connect 账户发起一笔 Transfer(2026-09-18 起调整,详见下面"平台责任边界"一节)
+- **Charges & Transfers 模式**:买家在 Stripe Checkout 付款,钱先进平台自己的 Stripe 账户(不是 destination charge、不直接进卖家账户);卖家标记交付、买家确认收货,或标记交付后 `ESCROW_HOLD_DAYS` 天买家没反应自动确认,服务端才对卖家的 Connect 账户发起一笔 Transfer(详见下面"平台责任边界"一节)
 - **佣金 12%**,参考 Etsy(6.5% 交易费 + 3%+$0.25 支付处理费,总负担约 10-12%,取上限)。扣费顺序:卖家到手金额 = `amount − 实际 Stripe 手续费 − 12% 平台佣金`,两项都从卖家应得里扣,平台的 12% 收入不受 Stripe 手续费波动影响
 - **最低发布价 $0.99**,纯技术防呆(留一点余量在 Stripe 自己的最低收款额 $0.50 之上),不是商业门槛——具体到手净额薄不薄,是卖家自己的选择
 - webhook 需要 `SUPABASE_SERVICE_ROLE_KEY`(在 Supabase 后台 Settings → API 里拿),**千万不能**带 `NEXT_PUBLIC_` 前缀、不能出现在任何浏览器端代码里,只在 `src/app/api/stripe/webhook/route.ts` 这种服务端专用文件里用
 
-## 平台责任边界:为什么托管从"等交付确认"改成"资金冻结期"(2026-09-18 决策记录)
+## 平台责任边界与托管放款模型(2026-09-18 决策记录)
 
 这是一次产品定位讨论的结论,不是随手改的实现细节,记下来防止以后又被当成"待定问题"重新问一遍。
 
@@ -503,15 +500,16 @@ Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。
 - **可以免责的**:广告位实际效果好不好、卖家有没有按时上线广告——这些是履约内容问题,平台不做交付/纠纷的裁定
 - **免不掉的**:钱本身有没有安全到账、Stripe 层面的拒付/欺诈风险——这部分从接入 Stripe Connect 那天起就是平台的,只能想办法把概率和敞口压小,不能假装不存在
 
-**落地到产品/代码上的调整**(这次改动实际做的事):
+**落地到产品/代码上的调整**(这次讨论最终定下来的做法):
 
-1. **托管放款的触发条件从"买家确认收货"改成"付款后的一个短暂资金冻结期"**——`ESCROW_HOLD_DAYS`(`src/lib/supabase/enums.ts`,目前 3 天)从 `paid_at` 起算,不再要求卖家先"标记交付"、买家再"确认收货"才能推进。到期后 `/api/cron/auto-confirm` 自动放款;买家也可以随时在 `/dashboard/purchases` 点"Release payment now"提前放款。保留这个冻结期是为了给拒付/欺诈留一个操作窗口,不是变相恢复"等交付确认"。
-2. **卖家仍然可以留一个交付链接给买家核对**(`/dashboard/sales` 的 `DeliveryLinkForm`,写 `listing_orders.proof_url`),但这纯粹是信息展示,**不再是放款的前提条件**——填不填、买家看没看,都不影响钱什么时候到账。
+1. **托管放款仍然要求卖家先标记交付,不是纯粹的付款后计时器**——这是当天讨论中间走过一段弯路又改回来的地方:一度试过"资金冻结期直接从付款时间起算,不管卖家有没有交付都自动放款",理由是"平台不裁定履约结果"。但反馈很直接:**没有交付信号,买家不会愿意提前确认放款;如果卖家收了钱什么都不做,躺过冻结期照样能自动拿到钱,这比原来的模型对买家更不利,不是更轻量**。修正后的设计:卖家必须先在 `/dashboard/sales` 提交一个交付链接、把订单标记成 `delivered`(`markDeliveredAction`,写 `listing_orders.proof_url`/`delivered_at`),订单才会进入买家确认窗口;`ESCROW_HOLD_DAYS`(`src/lib/supabase/enums.ts`,目前 3 天)从卖家标记交付的时间(`delivered_at`)起算,不是从付款时间起算。买家可以随时在 `/dashboard/purchases` 点"Confirm receipt"提前确认放款,也可以什么都不做等窗口到期后 `/api/cron/auto-confirm` 自动放款。**卖家不标记交付,订单会一直停在 `paid_in_escrow`,永远不会被这个定时任务碰到**——不存在"零操作靠超时拿钱"的路径。
+2. **这不等于平台在裁定履约质量**——平台不验证卖家提交的交付链接是否属实、广告内容好不好,只是要求卖家做一次自证式的操作再开始计时,这个区别很重要:平台仍然不介入"广告效果好不好"这类主观判断,只是不允许卖家绕过任何交付信号就拿到钱。
 3. **卖家侧的 Stripe Connect 开户(KYC)仍然是发布前置条件,保留不变**——这是防欺诈的主要防线,一个愿意做完整身份验证、绑定真实银行账户的卖家,跑路/诈骗的概率远低于随便填资料就能发帖的人,比逐条审核内容更有效、成本也更低。
 4. **管理员的举报/封禁机制(见下面"管理员系统"一节)定位保持不变**——是控制"同一个账号反复作案拉高平台 dispute rate"的风险,不是对每笔交易纠纷做裁定,两者不冲突。
-5. **收入模式的进一步调整(挂牌费/排名费/联盟营销,取代或补充交易抽成)在这轮只做了讨论,没有落地成代码**——这是明确的未来事项,不要误以为已经实现。
+5. **只要走 Stripe Connect,平台对 chargeback/dispute 的财务敞口就甩不掉**——这部分风险不会因为"卖家标记交付"这道流程而消失,只是通过要求交付信号 + 卖家 KYC 门槛,把"完全零成本诈骗"的路径堵掉,敞口本身仍然存在,需要持续关注 Stripe 的 dispute rate。
+6. **收入模式的进一步调整(挂牌费/排名费/联盟营销,取代或补充交易抽成)在这轮只做了讨论,没有落地成代码**——这是明确的未来事项,不要误以为已经实现。
 
-**这次代码改动的范围**:`src/lib/supabase/enums.ts`(`AUTO_CONFIRM_DAYS` 改名 `ESCROW_HOLD_DAYS`,语义从"交付后"改成"付款后")、`src/app/api/cron/auto-confirm/route.ts`(触发条件从 `delivered`/`delivered_at` 改成 `paid_in_escrow`/`paid_at`)、`src/app/dashboard/purchases/actions.ts`(`confirmReceiptAction` 改名 `releaseNowAction`,不再要求订单先到 `delivered` 状态)、`src/app/dashboard/sales/actions.ts`(`markDeliveredAction` 改名 `addDeliveryLinkAction`,只更新 `proof_url`,不再推进订单状态)、`src/components/DeliverOrderForm.tsx` 改名 `DeliveryLinkForm.tsx`,以及 `/dashboard/sales`、`/dashboard/purchases`、`/dashboard`(总览统计)、`/dashboard/stripe-connect` 几个页面的文案和分组同步更新。`listing_orders.status` 用的 Postgres 枚举类型没有改(`delivered`/`expired_auto_confirmed` 这两个值留着兼容历史行,新流程不会再产生),没有需要执行的新 SQL。
+**这次代码改动的范围**:`src/lib/supabase/enums.ts` 里 `AUTO_CONFIRM_DAYS` 改名成了 `ESCROW_HOLD_DAYS`(名字更通用,但语义还是"卖家标记交付后的确认窗口天数",不是"付款后");`src/app/dashboard/purchases/actions.ts` 里 `confirmReceiptAction` 改名 `releaseNowAction`(逻辑不变,仍然要求订单先到 `delivered` 状态才能提前放款)。其余文件(`/api/cron/auto-confirm`、`/dashboard/sales`、`/dashboard/sales/actions.ts` 的 `markDeliveredAction`、`/dashboard/purchases`、`/dashboard` 总览统计、`/dashboard/stripe-connect`、`src/components/DeliverOrderForm.tsx`)最终跟改动前的逻辑一致——当天讨论中间有一版把这些都改成了"付款后计时、不要求交付"的模型,发现有前面第 1 条说的漏洞后又改了回来,这里的说明就是改回来之后的最终状态。`listing_orders.status` 用的 Postgres 枚举类型全程没有改动,没有需要执行的新 SQL。
 
 ## 管理员系统(2026-09-18 加)
 

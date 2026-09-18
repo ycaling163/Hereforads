@@ -7,9 +7,10 @@ export interface DeliverOrderState {
   error?: string;
 }
 
-// 只是给买家留一个能核实的链接(比如广告实际上线的页面),纯信息性质,不影响放款——
-// 平台不裁定"是否已交付",托管期到了或买家主动确认,都会照常放款,跟这个链接填没填无关。
-export async function addDeliveryLinkAction(
+// 平台不裁定"交付质量",也不验证这个链接是否属实 —— 但要求卖家先做这个自证式的
+// "我已交付"动作,才能开始买家确认窗口的计时,避免卖家什么都不做、光靠超时就能拿到钱
+// (见 README"平台责任边界"一节)。
+export async function markDeliveredAction(
   _prevState: DeliverOrderState,
   formData: FormData
 ): Promise<DeliverOrderState> {
@@ -26,7 +27,7 @@ export async function addDeliveryLinkAction(
   const proofUrl = String(formData.get("proof_url") ?? "").trim();
 
   if (!proofUrl) {
-    return { error: "Please provide a link the buyer can use to check" };
+    return { error: "Please provide a link the buyer can use to verify delivery" };
   }
 
   const { data: order } = await supabase
@@ -36,12 +37,16 @@ export async function addDeliveryLinkAction(
     .single();
 
   if (!order || order.seller_id !== user.id || order.status !== "paid_in_escrow") {
-    return { error: "This order can't be updated right now" };
+    return { error: "This order can't be marked as delivered right now" };
   }
 
   const { data: updatedRows, error } = await supabase
     .from("listing_orders")
-    .update({ proof_url: proofUrl, delivered_at: new Date().toISOString() })
+    .update({
+      status: "delivered",
+      proof_url: proofUrl,
+      delivered_at: new Date().toISOString(),
+    })
     .eq("id", orderId)
     .eq("status", "paid_in_escrow")
     .select("id");

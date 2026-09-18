@@ -119,12 +119,15 @@ export const LISTING_STATUS_LABELS: Record<ListingStatus, string> = {
   removed: "Removed by moderation",
 };
 
-// 托管式交易状态机(2026-09-18 起简化,见 README"平台责任边界"一节的决策记录):
-// 平台不再对"卖家是否已交付"做裁定,`delivered`/`expired_auto_confirmed` 这两个值
-// 保留在数据库枚举里只是为了兼容可能已存在的历史行,新流程不会再往这两个状态迁移。
-// 新流程只有 pending_payment -> paid_in_escrow -> confirmed(内部锁定态,发起 Stripe
-// transfer 前的一个原子性保护,不代表买家真的做了什么确认动作)-> released 这条线,
-// 触发 confirmed 的可以是买家主动提前放款,也可以是定时任务在短暂冻结期后自动放款。
+// 托管式交易状态机(2026-09-18 二次调整,见 README"平台责任边界"一节的决策记录):
+// 一度试过"付款后固定冻结期,不管卖家有没有交付都自动放款",但这样等于卖家什么都不做、
+// 光收钱躺 N 天也能拿到钱,买家完全没有信号可以判断要不要提前放款——退回来了。现在的
+// 设计:平台仍然不裁定"交付内容好不好"(不验证卖家提交的链接是否属实),但要求卖家先
+// 做一次自证式的"我已交付"操作(`delivered`,带一个买家能核对的链接)才能开始计时,
+// 免得卖家零操作就能通过超时自动拿到钱。流程:pending_payment -> paid_in_escrow
+// (卖家标记交付)-> delivered -> confirmed(内部锁定态,发起 Stripe transfer 前的原子
+// 性保护,不代表买家做了什么额外确认)-> released,触发 confirmed 的可以是买家主动
+// 提前放款,也可以是定时任务在交付后的确认窗口到期后自动放款。
 export const LISTING_ORDER_STATUSES = [
   "pending_payment",
   "paid_in_escrow",
@@ -137,11 +140,11 @@ export type ListingOrderStatus = (typeof LISTING_ORDER_STATUSES)[number];
 
 export const LISTING_ORDER_STATUS_LABELS: Record<ListingOrderStatus, string> = {
   pending_payment: "Awaiting payment",
-  paid_in_escrow: "In escrow",
-  delivered: "In escrow", // 历史遗留状态,新流程不再产生,展示上并入"In escrow"
+  paid_in_escrow: "In escrow — awaiting delivery",
+  delivered: "Delivered — awaiting buyer confirmation",
   confirmed: "Releasing…",
   released: "Paid out",
-  expired_auto_confirmed: "Paid out", // 历史遗留状态,新流程不再产生,展示上并入"Paid out"
+  expired_auto_confirmed: "Paid out", // 历史遗留标签,当前流程放款一律落在 released
 };
 
 // 最低发布价 —— 纯技术防呆(留一点余量在 Stripe 自己的最低收款额 $0.50 之上),
@@ -152,7 +155,9 @@ export const MIN_LISTING_PRICE = 0.99;
 // 平台佣金比例,参考 Etsy(6.5% 交易费+3%+$0.25 支付处理费,总负担约 10-12%)取上限。
 export const PLATFORM_COMMISSION_RATE = 0.12;
 
-// 资金进平台账户后,冻结几天再自动放款给卖家 —— 不是等"交付确认"(平台不裁定履约
-// 结果),纯粹是留一个应对盗卡/拒付的操作窗口(见 README"平台责任边界"一节)。
-// 买家随时可以提前主动放款,不用等这个天数。
+// 卖家标记交付后,给买家留几天确认窗口,窗口内没有异议(或买家主动提前确认)就自动
+// 放款 —— 平台不验证卖家提交的交付链接是否属实、也不裁定履约质量,这几天纯粹是给
+// 买家一个"看一眼、有问题赶紧联系卖家"的机会,同时也给拒付/欺诈留操作窗口(见 README
+// "平台责任边界"一节)。这个窗口从卖家标记 `delivered` 开始算,不是从付款时间算——
+// 卖家不标记交付,订单就一直停在 `paid_in_escrow`,不会超时自动放款。
 export const ESCROW_HOLD_DAYS = 3;

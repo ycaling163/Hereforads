@@ -113,9 +113,9 @@ export default async function StripeConnectPage() {
       </h1>
       {onboarded ? (
         <p className="mt-2 text-zinc-600">
-          Your Stripe account is connected. Funds move here once an order
-          clears its escrow hold (or the buyer releases it early), and Stripe
-          pays them out to your bank on its own schedule.
+          Your Stripe account is connected. Funds move here once a buyer
+          confirms delivery, and Stripe pays them out to your bank on its own
+          schedule.
         </p>
       ) : (
         <p className="mt-2 text-zinc-600">

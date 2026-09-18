@@ -4,8 +4,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { releaseOrderPayout } from "@/lib/stripe/release";
 
-// 买家不用等"卖家标记交付"——钱在托管期内随时可以主动放款给卖家,平台不裁定
-// 履约结果(见 README"平台责任边界"一节),这个动作纯粹是买家自愿提前结束冻结期。
+// 只有卖家已经标记交付(`delivered`)之后,买家才有东西可以核对,才允许提前放款 ——
+// 不用等确认窗口自动到期,但也不能在卖家什么都没做的情况下就把钱放出去
+// (见 README"平台责任边界"一节)。
 export async function releaseNowAction(orderId: string): Promise<void> {
   const supabase = await createClient();
   const {
@@ -22,7 +23,7 @@ export async function releaseNowAction(orderId: string): Promise<void> {
     .eq("id", orderId)
     .single();
 
-  if (!order || order.buyer_id !== user.id || order.status !== "paid_in_escrow") {
+  if (!order || order.buyer_id !== user.id || order.status !== "delivered") {
     redirect("/dashboard/purchases?error=invalid_state");
   }
 
@@ -31,7 +32,7 @@ export async function releaseNowAction(orderId: string): Promise<void> {
     .from("listing_orders")
     .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
     .eq("id", orderId)
-    .eq("status", "paid_in_escrow")
+    .eq("status", "delivered")
     .select("id");
 
   if (error || !updatedRows || updatedRows.length === 0) {

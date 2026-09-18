@@ -84,3 +84,10 @@
   - **没变的**:卖家发布前仍然要求 Stripe Connect 完成 KYC(这是防欺诈的主要防线,比逐条审核内容更有效);管理员的举报/封禁机制定位不变(控制"同一账号反复作案拉高平台 dispute rate"的风险,不是裁定每笔交易纠纷);`listing_orders.status` 用的 Postgres 枚举类型没有改动,`delivered`/`expired_auto_confirmed` 这两个值留着兼容历史行,没有新 SQL 需要执行。
   - **明确没做的**:挂牌费/排名费/联盟营销这类替代或补充交易抽成的收入模式,这轮只讨论没落地,不要误以为已经实现。
   - 验证方式:`npm run build` + `npx eslint src` 全绿。
+
+- **紧接着又被纠正了一次**:上面那版"付款后固定冻结期,不管交付直接自动放款"上线后,用户马上指出一个实际漏洞——"没有交付,买家不会愿意确认付款,收到了款,并没有拍视频[交付凭证],那就会出现问题,还是需要点了交付,才能买家确认"。这是对的:没有任何交付信号的话,①买家没有依据判断要不要提前放款,②更严重的是,卖家可以完全不作为、纯靠超时自动放款拿到钱,这比原来的模型对买家更不利,不是更轻量,是退步。
+  - **修正**:恢复"卖家先标记交付(`markDeliveredAction`,提交一个买家能核对的链接,订单从 `paid_in_escrow` 推进到 `delivered`)"这道前置动作,`ESCROW_HOLD_DAYS` 重新从 `delivered_at` 起算,不是从 `paid_at` 起算;买家在 `delivered` 状态下可以随时"Confirm receipt"提前放款,也可以等窗口到期后 `/api/cron/auto-confirm` 自动放款。卖家不标记交付,订单永远停在 `paid_in_escrow`,不会被定时任务碰到——堵死了"零操作靠超时拿钱"的路径。
+  - **说清楚这跟"平台不裁定履约"不矛盾**:平台仍然不验证这个交付链接是否属实、不判断广告内容好不好,只是要求卖家做一次自证式操作再开始计时——这是"要求一个信号"和"验证信号真实性/评判信号质量"的区别,前者不违反"平台不做交付裁定"的原则,后者才违反。
+  - 代码基本是把上一条记录里改过的几个文件改回原样:`/api/cron/auto-confirm` 触发条件改回 `delivered`/`delivered_at`,`markDeliveredAction`/`DeliverOrderForm.tsx` 恢复原名和原逻辑(状态推进,不只是写 `proof_url`),`releaseNowAction`(原 `confirmReceiptAction`)的守卫条件改回 `status === "delivered"`,`/dashboard/sales`/`/dashboard/purchases`/`/dashboard`/`/dashboard/stripe-connect` 的文案和分组也改了回去。`ESCROW_HOLD_DAYS` 这个改名保留下来了(名字本身没问题,只是语义注释改回"交付后"),`releaseNowAction` 这个改名也保留了(单纯改名,逻辑跟原来的 `confirmReceiptAction` 一致)。README"平台责任边界"一节已经更新成反映这个最终状态,不是两次改动叠加的中间状态。
+  - **教训**:这次说明"平台不对交易结果负责"不能简单等同于"不需要任何交付层面的信号"——即使不裁定质量,至少需要一个能证明"卖家做了动作"的最低限度信号来做超时放款的前提,不然自动化机制本身会变成新的欺诈路径。
+  - 验证方式:`npm run build` + `npx eslint src` 全绿。

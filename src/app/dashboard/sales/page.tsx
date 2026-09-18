@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { DeliveryLinkForm } from "@/components/DeliveryLinkForm";
-import { ESCROW_HOLD_DAYS, LISTING_ORDER_STATUS_LABELS } from "@/lib/supabase/enums";
+import { DeliverOrderForm } from "@/components/DeliverOrderForm";
+import { LISTING_ORDER_STATUS_LABELS } from "@/lib/supabase/enums";
 import type { Listing, ListingOrder, Payment, Profile } from "@/lib/supabase/types";
 
-// `confirmed` 只是放款前的一瞬间锁定态,`delivered`/`expired_auto_confirmed` 是旧流程
-// 留下的历史状态(见 README"平台责任边界"一节),这三个都并到下面对应的展示分组里。
+// `confirmed` 只是放款前的一瞬间锁定态,`expired_auto_confirmed` 是旧标签(见 README
+// "平台责任边界"一节),这两个都并到"Completed"这一组展示。
 const SECTIONS: { title: string; statuses: ListingOrder["status"][] }[] = [
   { title: "Awaiting payment", statuses: ["pending_payment"] },
-  { title: "In escrow", statuses: ["paid_in_escrow", "delivered"] },
+  { title: "New orders — mark as delivered", statuses: ["paid_in_escrow"] },
+  { title: "Delivered — awaiting buyer confirmation", statuses: ["delivered"] },
   { title: "Completed", statuses: ["confirmed", "released", "expired_auto_confirmed"] },
 ];
 
@@ -157,20 +158,12 @@ export default async function SalesPage() {
                     )}
 
                     {order.status === "paid_in_escrow" && (
-                      <>
-                        <p className="mt-3 text-xs text-zinc-400">
-                          Payment releases automatically in {ESCROW_HOLD_DAYS} days,
-                          or sooner if the buyer confirms early. We don&apos;t
-                          mediate delivery — this link is just a courtesy so the
-                          buyer can check your ad went live.
-                        </p>
-                        <DeliveryLinkForm orderId={order.id} />
-                      </>
+                      <DeliverOrderForm orderId={order.id} />
                     )}
 
                     {order.proof_url && (
                       <p className="mt-3 text-sm text-zinc-500">
-                        Link shared with buyer:{" "}
+                        Proof:{" "}
                         <a
                           href={order.proof_url}
                           className="underline"

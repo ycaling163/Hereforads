@@ -4,8 +4,9 @@ import { releaseOrderPayout } from "@/lib/stripe/release";
 import { ESCROW_HOLD_DAYS } from "@/lib/supabase/enums";
 
 /**
- * 资金冻结期(ESCROW_HOLD_DAYS 天,从付款时间算)过后自动放款给卖家 —— 平台不裁定
- * 履约结果,这个等待纯粹是给拒付/欺诈留一个操作窗口,不是等"买家确认收货"。
+ * 卖家标记交付(ESCROW_HOLD_DAYS 天前)后买家一直没反应,就自动放款,对齐 Fiverr。
+ * 只处理已经进入 `delivered` 的订单 —— 卖家没标记交付的订单永远不会被这个任务碰到,
+ * 不存在"什么都不做、光收钱躺着也能自动拿到钱"的路径(见 README"平台责任边界"一节)。
  * 这版没有配实际的定时触发器 —— 需要外部按小时/按天调用这个端点(Vercel Cron 或
  * Supabase pg_cron 都行),带上 Authorization: Bearer $CRON_SECRET。
  */
@@ -23,8 +24,8 @@ export async function POST(request: Request) {
   const { data: orders, error } = await supabase
     .from("listing_orders")
     .select("id,seller_id,amount,currency")
-    .eq("status", "paid_in_escrow")
-    .lte("paid_at", cutoff);
+    .eq("status", "delivered")
+    .lte("delivered_at", cutoff);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -34,12 +35,12 @@ export async function POST(request: Request) {
 
   for (const order of orders ?? []) {
     // 用一次条件更新当"锁",防止买家这边同时点了"提前放款"导致同一笔订单被转两次账
-    // (谁先把状态从 paid_in_escrow 抢成 confirmed,谁才有资格继续发起 Stripe transfer)。
+    // (谁先把状态从 delivered 抢成 confirmed,谁才有资格继续发起 Stripe transfer)。
     const { data: updatedRows, error: updateError } = await supabase
       .from("listing_orders")
       .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
       .eq("id", order.id)
-      .eq("status", "paid_in_escrow")
+      .eq("status", "delivered")
       .select("id");
 
     if (updateError || !updatedRows || updatedRows.length === 0) {
