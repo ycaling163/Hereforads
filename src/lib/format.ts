@@ -1,3 +1,10 @@
+// Prefixes a social handle with "@" for display, e.g. "7smilelinda" ->
+// "@7smilelinda". Leaves it alone if the seller already typed the "@"
+// themselves, so we never end up with "@@handle".
+export function formatHandle(handle: string): string {
+  return handle.startsWith("@") ? handle : `@${handle}`;
+}
+
 // Abbreviates follower counts, e.g. 1234 -> "1.2K", 1250000 -> "1.3M".
 export function formatFollowerCount(count: number): string {
   if (count >= 1_000_000) {

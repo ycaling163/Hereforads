@@ -124,7 +124,7 @@ export default async function SellerProfilePage({
             <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
               Social reach
             </h2>
-            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+            <div className="mt-3 flex flex-col gap-2 sm:max-w-md">
               {accounts.map((account) => (
                 <SocialStatCard key={account.id} account={account} />
               ))}
