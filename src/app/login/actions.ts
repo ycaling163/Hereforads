@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ensureProfile } from "@/lib/supabase/ensure-profile";
+import { safeRedirectPath } from "@/lib/safeRedirect";
 
 export interface LoginState {
   error?: string;
@@ -14,6 +15,7 @@ export async function loginAction(
 ): Promise<LoginState> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  const next = safeRedirectPath(formData.get("next") as string | null, "/listings");
 
   if (!email || !password) {
     return { error: "Please enter your email and password" };
@@ -34,5 +36,5 @@ export async function loginAction(
     await ensureProfile(supabase, data.user);
   }
 
-  redirect("/listings");
+  redirect(next);
 }

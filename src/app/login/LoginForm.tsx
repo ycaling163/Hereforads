@@ -7,7 +7,7 @@ import { loginAction, type LoginState } from "./actions";
 
 const initialState: LoginState = {};
 
-export function LoginForm() {
+export function LoginForm({ next }: { next?: string }) {
   const [state, formAction, pending] = useActionState(
     loginAction,
     initialState
@@ -15,6 +15,7 @@ export function LoginForm() {
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
+      {next && <input type="hidden" name="next" value={next} />}
       <div className="flex flex-col gap-1.5">
         <label htmlFor="email" className="text-sm font-medium text-zinc-700">
           Email
@@ -49,7 +50,10 @@ export function LoginForm() {
 
       <p className="text-center text-sm text-zinc-600">
         Don&apos;t have an account?{" "}
-        <Link href="/register" className="font-medium text-zinc-900 underline">
+        <Link
+          href={next ? `/register?next=${encodeURIComponent(next)}` : "/register"}
+          className="font-medium text-zinc-900 underline"
+        >
           Sign up
         </Link>
       </p>

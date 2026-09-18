@@ -54,9 +54,10 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 | 路径 | 说明 |
 | --- | --- |
 | `/` | 首页,推荐 `listings` 里 `status='active'` 的前几个 |
-| `/login`、`/register` | 邮箱密码登录/注册,密码框带显示/隐藏切换。注册成功后自动在 `profiles` 建一条记录(`role='both'`);如果 Supabase 开了邮箱验证、注册时还没有 session,会在验证后**首次登录**时补建 |
+| `/login`、`/register` | 邮箱密码登录/注册,密码框带显示/隐藏切换。注册成功后自动在 `profiles` 建一条记录(`role='both'`);如果 Supabase 开了邮箱验证、注册时还没有 session,会在验证后**首次登录**时补建。都支持 `?next=` 查询参数(2026-09-18 加,给 `/publishers/join` 用):登录/注册成功后跳去 `next` 指定的路径,不传就还是原来的 `/listings`;`next` 会在 register/login 两个表单互相跳转的链接之间保留,校验逻辑在 `src/lib/safeRedirect.ts`(只认站内相对路径,防止被拼成跳到外部域名的开放重定向) |
 | `/sellers/[id]` | 公开主页:头像/简介/认证标记/内容领域、全部社交账号、该用户发布的全部 `listings`(卡片列表,只显示 `active`)。路由名叫 `sellers` 但代码里没有按 `role` 做区分,任何 `profiles.id`(包括纯买家)都能查看,Sales 页拿这个路由给买家做个人主页链接 |
-| `/publishers` | 发布者网格(2026-09-18 加,原叫 "Creators"/`/creators`,同日改名成 "Publishers",理由见 WORKLOG 同日期条目):只展示至少有一条 `active` listing 的卖家,卡片显示头像/名字/认证标记/内容领域标签/各社交平台粉丝数(最多 4 个,超出显示 "+N more")/广告数/价格(单条 listing 显示单价,多条显示该卖家最便宜那个币种内的 min–max 区间),点击跳到 `/sellers/[id]`。聚合逻辑在 `src/lib/publisherCards.ts` |
+| `/publishers` | 发布者网格(2026-09-18 加,原叫 "Creators"/`/creators`,同日改名成 "Publishers",理由见 WORKLOG 同日期条目):只展示至少有一条 `active` listing 的卖家,卡片显示头像/名字/认证标记/内容领域标签/各社交平台粉丝数(最多 4 个,超出显示 "+N more")/广告数/价格(单条 listing 显示单价,多条显示该卖家最便宜那个币种内的 min–max 区间),点击跳到 `/sellers/[id]`。聚合逻辑在 `src/lib/publisherCards.ts`。页面右上角 + 空状态都有一个跳到 `/publishers/join` 的按钮 |
+| `/publishers/join` | 招募落地页(2026-09-18 加):冷启动期这个平台上还没有真实卖家,用户明确说了不做"空卡片放着等人 claim"(风险见 WORKLOG 同日期条目),改成一个可以直接发给潜在创作者(私信/外联用)的落地页——大白话讲清楚"免费加入、免费发布、托管放款安全、自己定价",CTA 直接跳注册(带 `next` 参数,注册/登录成功后直接落到 `/dashboard/new-listing` 而不是默认的 `/listings`,减少"注册完不知道去哪发布"这一步流失),已登录用户点 CTA 直接跳发布页。纯静态内容,没有另建"预注册/等待名单"这类需要人工再联系一遍的中间表——注册本身已经免费、不需要先接 Stripe 才能建 `draft` listing,加一层预注册反而多一道转化损耗 |
 | `/listings` | "Ad spaces" 广告位/服务列表,读 `listings` 表(只显示 `status='active'` 的) |
 | `/listings/[id]` | 详情页:分类标签、价格、`pricing_unit='daily'` 时额外显示 `DailyCountdown`(每日档期刷新倒计时)、卖家信息、购买按钮(Stripe Checkout)、联系卖家 |
 | `/dashboard` | 仪表盘总览:待处理订单数(需要交付/待确认收货)、近 30 天成交额、广告位状态分布 |
