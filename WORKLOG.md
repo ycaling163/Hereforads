@@ -133,3 +133,5 @@
   - **删除**(`/dashboard/my-listings` 新增 "Delete" 按钮,复用 `ConfirmSubmitForm`):`listing_orders.listing_id` 引用 `listings` 时没设 `on delete cascade`,所以有订单历史(哪怕很久以前已完成)的 listing 删不掉,Postgres 会报外键约束错误——这是故意保留的行为(防止买家历史订单突然指向不存在的 listing),代码识别这种情况转成友好提示,不是把原始报错甩给用户。删除成功后顺手清掉这条 listing 在 storage 里的图片文件,不留垃圾。
   - **顺手做的小重构**:把 `dashboard/profile/actions.ts` 里原来私有的 `storagePathFromPublicUrl()` 挪到了新建的 `src/lib/storage.ts`,这次删 listing 图片时复用,不用再写一遍一样的 URL 解析逻辑。
   - 验证方式:`npm run build` + `npx eslint src` 全绿。这个开发环境连不上真实 Supabase 项目,"编辑 active listing 后状态真的退回 pending_review"、"删有订单的 listing 真的会被拒绝而不是误删"这两条关键路径没有用真实数据跑过,上线后建议人工各测一次。
+
+- **用户测试新加的编辑功能,编辑一条已经 active 的 listing 保存时报错**:跟之前 `social_accounts`/`seller_profiles` 那两次一模一样的套路——没有具体 Postgres 错误,只是 0 行受影响,RLS 静默拒绝的信号。检查了一遍 `updateListingAction`(`src/app/dashboard/my-listings/[id]/edit/actions.ts`)代码本身没有问题(权限校验、字段更新、service-role 状态回退那段逻辑都没有 bug),结论跟前两次一致:线上库里 `listings` 表实际配置的 RLS 策略,大概率跟这份 README 记录的对不上。补了一段幂等的 `drop policy if exists` + `create policy`,把 `listings` 表全部四条策略(select/insert/update/delete)重建一遍,SQL 见"MVP v2 数据库变更"一节。**这不是代码改动,纯粹是 SQL,需要用户自己去 Supabase 后台跑。**

@@ -548,6 +548,38 @@ alter table public.listings
   add column if not exists social_account_id uuid references public.social_accounts(id) on delete set null;
 alter table public.listings
   add column if not exists is_website_placement boolean not null default false;
+
+-- ===== listings:重建全部四条策略(2026-09-18 加,修复编辑 active listing 时的 "Save failed")=====
+-- 用户测试新加的 /dashboard/my-listings/[id]/edit 编辑功能,编辑一条已经 active
+-- 的 listing、保存时报错——服务端没收到具体的 Postgres 报错,只是 UPDATE 影响了
+-- 0 行,这是 RLS 静默拒绝的典型信号,跟 social_accounts/seller_profiles 之前那
+-- 两次是同一类问题:这份文档里记录的策略,不代表线上库实际配的就是这个。这四条
+-- drop+create 都是幂等的,可以放心重复执行,执行后能确保 listings 表的权限确实
+-- 跟本节顶部 create table 之后那四条策略的定义一致。
+drop policy if exists "anyone can view active listings, sellers can view their own" on public.listings;
+create policy "anyone can view active listings, sellers can view their own"
+on public.listings for select
+to anon, authenticated
+using (status = 'active' or seller_id = auth.uid());
+
+drop policy if exists "sellers can insert own listings" on public.listings;
+create policy "sellers can insert own listings"
+on public.listings for insert
+to authenticated
+with check (auth.uid() = seller_id);
+
+drop policy if exists "sellers can update own listings" on public.listings;
+create policy "sellers can update own listings"
+on public.listings for update
+to authenticated
+using (auth.uid() = seller_id)
+with check (auth.uid() = seller_id);
+
+drop policy if exists "sellers can delete own listings" on public.listings;
+create policy "sellers can delete own listings"
+on public.listings for delete
+to authenticated
+using (auth.uid() = seller_id);
 ```
 
 Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。
