@@ -56,7 +56,7 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 | `/` | 首页,推荐 `listings` 里 `status='active'` 的前几个 |
 | `/login`、`/register` | 邮箱密码登录/注册,密码框带显示/隐藏切换。注册成功后自动在 `profiles` 建一条记录(`role='both'`);如果 Supabase 开了邮箱验证、注册时还没有 session,会在验证后**首次登录**时补建 |
 | `/sellers/[id]` | 公开主页:头像/简介/认证标记/内容领域、全部社交账号、该用户发布的全部 `listings`(卡片列表,只显示 `active`)。路由名叫 `sellers` 但代码里没有按 `role` 做区分,任何 `profiles.id`(包括纯买家)都能查看,Sales 页拿这个路由给买家做个人主页链接 |
-| `/creators` | 创作者网格(2026-09-18 加):只展示至少有一条 `active` listing 的卖家,卡片显示头像/名字/认证标记/内容领域标签/各社交平台粉丝数(最多 4 个,超出显示 "+N more")/广告数/价格(单条 listing 显示单价,多条显示该卖家最便宜那个币种内的 min–max 区间),点击跳到 `/sellers/[id]`。聚合逻辑在 `src/lib/creatorCards.ts` |
+| `/publishers` | 发布者网格(2026-09-18 加,原叫 "Creators"/`/creators`,同日改名成 "Publishers",理由见 WORKLOG 同日期条目):只展示至少有一条 `active` listing 的卖家,卡片显示头像/名字/认证标记/内容领域标签/各社交平台粉丝数(最多 4 个,超出显示 "+N more")/广告数/价格(单条 listing 显示单价,多条显示该卖家最便宜那个币种内的 min–max 区间),点击跳到 `/sellers/[id]`。聚合逻辑在 `src/lib/publisherCards.ts` |
 | `/listings` | "Ad spaces" 广告位/服务列表,读 `listings` 表(只显示 `status='active'` 的) |
 | `/listings/[id]` | 详情页:分类标签、价格、`pricing_unit='daily'` 时额外显示 `DailyCountdown`(每日档期刷新倒计时)、卖家信息、购买按钮(Stripe Checkout)、联系卖家 |
 | `/dashboard` | 仪表盘总览:待处理订单数(需要交付/待确认收货)、近 30 天成交额、广告位状态分布 |
@@ -68,8 +68,9 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 | `/dashboard/messages`、`/dashboard/messages/[listingId]/[otherUserId]` | 绑在某个 listing 下的一对一消息,不是群聊;打开某个会话会把对方发来的未读消息标记已读;可以只发图片不写字(比如甩效果图/参考图),没有邮件通知,得自己点进来看 |
 | `/api/stripe/webhook` | Stripe webhook:`account.updated` 刷新 `stripe_onboarded`,`checkout.session.completed` 把订单推进到 `paid_in_escrow` |
 | `/api/cron/auto-confirm` | 需要外部定时器(Vercel Cron / Supabase pg_cron)调用,处理卖家标记交付(`delivered`)后 `ESCROW_HOLD_DAYS` 天买家没反应的自动放款,见下面"平台责任边界"一节 |
-| `/admin`、`/admin/listings`、`/admin/users`、`/admin/orders` | 管理员后台(2026-09-18 加,同日下午从 `/dashboard/admin/*` 挪到跟 `/dashboard` 平级的独立路由),只有 `admins` 表里有记录的账号能进,见下面"管理员系统"一节 |
+| `/admin`、`/admin/listings`、`/admin/users`、`/admin/orders`、`/admin/contact` | 管理员后台(2026-09-18 加,同日下午从 `/dashboard/admin/*` 挪到跟 `/dashboard` 平级的独立路由),只有 `admins` 表里有记录的账号能进,见下面"管理员系统"一节。`/admin/contact` 是 2026-09-18 晚些时候加的,只读列出 `contact_messages` 表(footer 联系表单的提交记录),没有站内回复功能,回复要管理员自己点邮箱地址发邮件 |
 | `/banned` | 账号被封禁后跳转到的静态说明页,不需要登录 |
+| `/terms`、`/privacy` | 服务条款/隐私政策(2026-09-18 加),footer 里链接。内容是把已经拍板的产品规则(托管放款、佣金、线下交易不受保护等,见上面"MVP v2 产品方案"和"平台责任边界"两节)转成大白话条款,页面顶部有一条黄色提示条说明**还没有律师审过,不是最终法律文本**——先把已知信息展示出来,不是假装这是一份正式生效的法律文件 |
 
 ## 支付流程(Stripe Connect · Charges & Transfers)
 
@@ -581,6 +582,27 @@ create policy "sellers can delete own listings"
 on public.listings for delete
 to authenticated
 using (auth.uid() = seller_id);
+
+-- ===== contact_messages(footer"联系我们"表单,2026-09-18 加)=====
+-- 跟 listing_messages(绑在某条 listing 下的买卖双方私信)是两个独立概念:
+-- 这张表是全站通用的"联系我们",不登录也能提交,不挂靠任何 listing/user_id,
+-- 提交人是谁完全靠他自己填的 name/email(不校验真实性)。故意只开 insert 策略,
+-- 不开 select——提交的人自己也读不回来,只有 /admin/contact(service_role,
+-- 绕过 RLS)能看,避免任何登录用户能拿别人的联系表单内容。
+create table public.contact_messages (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  email text not null,
+  message text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.contact_messages enable row level security;
+
+create policy "anyone can submit a contact message"
+on public.contact_messages for insert
+to anon, authenticated
+with check (true);
 ```
 
 Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。

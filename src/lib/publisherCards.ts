@@ -1,13 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Listing, Profile, SellerProfile, SocialAccount } from "@/lib/supabase/types";
 
-export interface CreatorPriceRange {
+export interface PublisherPriceRange {
   currency: string;
   min: number;
   max: number;
 }
 
-export interface CreatorCardData {
+export interface PublisherCardData {
   profile: Profile;
   sellerExtra: SellerProfile | null;
   socialAccounts: SocialAccount[];
@@ -16,16 +16,16 @@ export interface CreatorCardData {
   // mixing currencies into one min/max would be misleading, so a seller
   // selling in both USD and GBP shows the range for whichever currency their
   // lowest-priced listing is in, not a range spanning both.
-  priceRange: CreatorPriceRange | null;
+  priceRange: PublisherPriceRange | null;
 }
 
-// The creators grid only features sellers with at least one live listing —
+// The publishers grid only features sellers with at least one live listing —
 // same visibility rule as the homepage/listings page (draft/pending_review/
 // rejected/removed stay hidden), and it keeps "ad count"/"price from" on the
 // card meaningful instead of showing a seller with nothing to sell yet.
-export async function getActiveCreators(
+export async function getActivePublishers(
   supabase: SupabaseClient
-): Promise<CreatorCardData[]> {
+): Promise<PublisherCardData[]> {
   const { data: listingRows } = await supabase
     .from("listings")
     .select("seller_id, price_amount, price_currency")
@@ -75,7 +75,7 @@ export async function getActiveCreators(
     }
   }
 
-  const creators: CreatorCardData[] = [];
+  const publishers: PublisherCardData[] = [];
 
   for (const [sellerId, sellerListings] of bySeller) {
     const profile = profileById.get(sellerId);
@@ -89,13 +89,13 @@ export async function getActiveCreators(
     const sameCurrencyListings = sellerListings.filter(
       (listing) => listing.price_currency === cheapest.price_currency
     );
-    const priceRange: CreatorPriceRange = {
+    const priceRange: PublisherPriceRange = {
       currency: cheapest.price_currency,
       min: Math.min(...sameCurrencyListings.map((listing) => listing.price_amount)),
       max: Math.max(...sameCurrencyListings.map((listing) => listing.price_amount)),
     };
 
-    creators.push({
+    publishers.push({
       profile,
       sellerExtra: sellerExtraById.get(sellerId) ?? null,
       socialAccounts: socialAccountsBySeller.get(sellerId) ?? [],
@@ -104,7 +104,7 @@ export async function getActiveCreators(
     });
   }
 
-  creators.sort((a, b) => {
+  publishers.sort((a, b) => {
     if (a.sellerExtra?.is_verified !== b.sellerExtra?.is_verified) {
       return a.sellerExtra?.is_verified ? -1 : 1;
     }
@@ -114,5 +114,5 @@ export async function getActiveCreators(
     return (a.profile.display_name ?? "").localeCompare(b.profile.display_name ?? "");
   });
 
-  return creators;
+  return publishers;
 }
