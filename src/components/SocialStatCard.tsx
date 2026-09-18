@@ -1,5 +1,5 @@
 import type { SocialAccount } from "@/lib/supabase/types";
-import { formatFollowerCount, formatHandle } from "@/lib/format";
+import { formatFollowerCount, formatHandle, toFollowerCount } from "@/lib/format";
 import { SocialPlatformIcon } from "@/components/SocialPlatformIcon";
 import { SOCIAL_PLATFORM_LABELS } from "@/lib/supabase/enums";
 
@@ -11,10 +11,8 @@ import { SOCIAL_PLATFORM_LABELS } from "@/lib/supabase/enums";
 // not a dead "—" placeholder. The whole row links out to the account when a
 // profile URL is on file.
 export function SocialStatCard({ account }: { account: SocialAccount }) {
-  const followers =
-    typeof account.follower_count === "number"
-      ? formatFollowerCount(account.follower_count)
-      : null;
+  const followerCount = toFollowerCount(account.follower_count);
+  const followers = followerCount !== null ? formatFollowerCount(followerCount) : null;
 
   const content = (
     <div className="flex items-center gap-3 rounded-xl border border-zinc-200 px-4 py-3 transition-colors group-hover:border-zinc-300">

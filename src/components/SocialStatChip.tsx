@@ -1,6 +1,6 @@
 import { HiOutlineGlobeAlt } from "react-icons/hi2";
 import type { SocialAccount } from "@/lib/supabase/types";
-import { formatFollowerCount } from "@/lib/format";
+import { formatFollowerCount, toFollowerCount } from "@/lib/format";
 import { SocialPlatformIcon } from "@/components/SocialPlatformIcon";
 
 // Compact icon + follower-count pairing for tight spaces (listing cards, the
@@ -8,11 +8,11 @@ import { SocialPlatformIcon } from "@/components/SocialPlatformIcon";
 // the platform, so no follower count just means a bare icon — not a
 // redundant "Instagram"/"YouTube" label next to it.
 export function SocialStatChip({ account }: { account: SocialAccount }) {
+  const followers = toFollowerCount(account.follower_count);
   return (
     <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
       <SocialPlatformIcon platform={account.platform} />
-      {typeof account.follower_count === "number" &&
-        formatFollowerCount(account.follower_count)}
+      {followers !== null && formatFollowerCount(followers)}
     </span>
   );
 }

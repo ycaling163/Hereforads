@@ -5,6 +5,21 @@ export function formatHandle(handle: string): string {
   return handle.startsWith("@") ? handle : `@${handle}`;
 }
 
+// Coerces whatever comes back from the database into a follower count we can
+// render. Supabase returns a numeric column as a JS number, but this project
+// has a documented history of the live `social_accounts.follower_count`
+// column drifting from its intended `integer` type to `text` (see README) —
+// when that happens the value arrives as the *string* "22000", and a strict
+// `typeof x === "number"` check would silently treat a real count as
+// missing. Accepting both keeps the display correct either way.
+export function toFollowerCount(
+  value: number | string | null | undefined
+): number | null {
+  if (value === null || value === undefined) return null;
+  const num = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
 // Abbreviates follower counts, e.g. 1234 -> "1.2K", 1250000 -> "1.3M".
 export function formatFollowerCount(count: number): string {
   if (count >= 1_000_000) {

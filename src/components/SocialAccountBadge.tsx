@@ -1,11 +1,12 @@
 import { SOCIAL_PLATFORM_LABELS } from "@/lib/supabase/enums";
 import type { SocialAccount } from "@/lib/supabase/types";
 import { SocialPlatformIcon } from "@/components/SocialPlatformIcon";
-import { formatHandle } from "@/lib/format";
+import { formatHandle, toFollowerCount } from "@/lib/format";
 
 // 有链接的平台(YouTube/Instagram/X 等)直接给一个跳转按钮,不把长链接铺满整行;
 // 没有链接的平台(比如小红书,分享链接不常用)就还是显示账号名文字。
 export function SocialAccountBadge({ account }: { account: SocialAccount }) {
+  const followers = toFollowerCount(account.follower_count);
   return (
     <>
       <span className="flex items-center gap-1.5 font-medium text-zinc-900">
@@ -39,9 +40,9 @@ export function SocialAccountBadge({ account }: { account: SocialAccount }) {
           </svg>
         </a>
       )}
-      {typeof account.follower_count === "number" && (
+      {followers !== null && (
         <span className="text-zinc-400">
-          {account.follower_count.toLocaleString()} followers
+          {followers.toLocaleString()} followers
         </span>
       )}
     </>
