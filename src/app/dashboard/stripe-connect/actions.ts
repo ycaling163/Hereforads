@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { stripe } from "@/lib/stripe/server";
 import { isStripeSupportedCountry } from "@/lib/stripe/countries";
 
@@ -49,7 +50,11 @@ export async function startStripeOnboardingAction(
     });
     accountId = account.id;
 
-    const { error: saveError } = await supabase
+    // stripe_connect_account_id 决定放款转给谁,2026-09-18 起 UPDATE 权限收回给
+    // authenticated 了(见 README"管理员系统"一节),不能再用普通 session client 写——
+    // 这里的值是刚从 Stripe API 建号拿到的,不是用户能直接摆布的输入,用 service_role
+    // client 写是安全的。
+    const { error: saveError } = await createServiceClient()
       .from("profiles")
       .update({ country, stripe_connect_account_id: accountId })
       .eq("id", user.id);

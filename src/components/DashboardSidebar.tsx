@@ -30,8 +30,12 @@ const NAV: NavEntry[] = [
   { type: "link", href: "/dashboard/profile", label: "Profile" },
 ];
 
+// "/dashboard" 和 "/dashboard/admin" 各自底下都挂了别的 nav 项(是彼此的前缀),
+// 这两个用精确匹配,不然进 /dashboard/admin/listings 时 "Overview" 也会一起高亮。
+const EXACT_MATCH_HREFS = new Set(["/dashboard", "/dashboard/admin"]);
+
 function isActive(pathname: string, href: string) {
-  return href === "/dashboard" ? pathname === href : pathname.startsWith(href);
+  return EXACT_MATCH_HREFS.has(href) ? pathname === href : pathname.startsWith(href);
 }
 
 function NavBadge({ count }: { count: number }) {
@@ -72,19 +76,39 @@ function NavLink({
 export function DashboardSidebar({
   unreadMessages = 0,
   newOrders = 0,
+  isAdmin = false,
+  pendingReview = 0,
 }: {
   unreadMessages?: number;
   newOrders?: number;
+  isAdmin?: boolean;
+  pendingReview?: number;
 }) {
   const pathname = usePathname();
   const badgeByHref: Record<string, number> = {
     "/dashboard/messages": unreadMessages,
     "/dashboard/sales": newOrders,
+    "/dashboard/admin/listings": pendingReview,
   };
+  const nav = isAdmin
+    ? [
+        ...NAV,
+        {
+          type: "group" as const,
+          label: "Admin",
+          items: [
+            { href: "/dashboard/admin", label: "Overview" },
+            { href: "/dashboard/admin/listings", label: "Listings" },
+            { href: "/dashboard/admin/users", label: "Users" },
+            { href: "/dashboard/admin/orders", label: "Orders" },
+          ],
+        },
+      ]
+    : NAV;
 
   return (
     <nav className="flex w-48 shrink-0 flex-col gap-4">
-      {NAV.map((entry) =>
+      {nav.map((entry) =>
         entry.type === "link" ? (
           <NavLink
             key={entry.href}

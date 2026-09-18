@@ -15,6 +15,7 @@ export default async function ListingsPage() {
     .from("listings")
     .select("*")
     .eq("status", "active")
+    .order("is_featured", { ascending: false })
     .order("created_at", { ascending: false });
 
   const listings = (data ?? []) as Listing[];

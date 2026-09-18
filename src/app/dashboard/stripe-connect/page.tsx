@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { stripe } from "@/lib/stripe/server";
 import { StatCard } from "@/components/StatCard";
 import { StripeConnectForm } from "./StripeConnectForm";
@@ -46,7 +47,11 @@ export default async function StripeConnectPage() {
       if (!onboarded) {
         onboarded = Boolean(account.charges_enabled && account.details_submitted);
         if (onboarded) {
-          await supabase
+          // profiles.stripe_onboarded 的 UPDATE 权限 2026-09-18 起收回给 authenticated
+          // 了(见 README"管理员系统"一节)——这里的判断依据是刚从 Stripe API 实时查到的
+          // 结果,不是用户自己填的,值得信任,所以用 service_role client 写,不能再用
+          // 上面这个跟着登录 session 走的 `supabase`。
+          await createServiceClient()
             .from("profiles")
             .update({ stripe_onboarded: true })
             .eq("id", user.id);

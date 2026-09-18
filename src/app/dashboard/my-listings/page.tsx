@@ -6,8 +6,11 @@ import type { Listing } from "@/lib/supabase/types";
 
 const STATUS_BADGE_CLASS: Record<Listing["status"], string> = {
   draft: "bg-amber-100 text-amber-800",
+  pending_review: "bg-sky-100 text-sky-800",
   active: "bg-emerald-100 text-emerald-800",
   paused: "bg-zinc-100 text-zinc-600",
+  rejected: "bg-red-100 text-red-700",
+  removed: "bg-red-100 text-red-700",
 };
 
 export default async function MyListingsPage() {
@@ -60,6 +63,7 @@ export default async function MyListingsPage() {
                 href={`/listings/${listing.id}`}
                 className="font-medium text-zinc-900 hover:underline"
               >
+                {listing.is_featured ? "⭐ " : ""}
                 {listing.title}
               </Link>
               <p className="mt-1 text-sm text-zinc-500">

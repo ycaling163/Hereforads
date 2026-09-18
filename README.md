@@ -59,14 +59,16 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 | `/listings` | "Ad spaces" 广告位/服务列表,读 `listings` 表(只显示 `status='active'` 的) |
 | `/listings/[id]` | 详情页:分类标签、价格、`pricing_unit='daily'` 时额外显示 `DailyCountdown`(每日档期刷新倒计时)、卖家信息、购买按钮(Stripe Checkout)、联系卖家 |
 | `/dashboard` | 仪表盘总览:待处理订单数(需要交付/待确认收货)、近 30 天成交额、广告位状态分布 |
-| `/dashboard/new-listing` | 发布表单:英文标题/描述、类目多选、价格(最低 $0.99)、计价单位、媒体上传。卖家没开通 Stripe 也能提交,但落库状态强制是 `draft`,买家看不到 |
-| `/dashboard/my-listings` | 卖家自己发布的全部 listing(含 `draft`/`active`/`paused`),之前这里是空白(见旧版 WORKLOG"已知欠缺"),现在补上了 |
+| `/dashboard/new-listing` | 发布表单:英文标题/描述、类目多选、价格(最低 $0.99)、计价单位、媒体上传。卖家没开通 Stripe 也能提交,但落库状态强制是 `draft`;开通 Stripe 之后提交进 `pending_review`(2026-09-18 起,见下面"管理员系统"),不是直接 `active`,买家在管理员审核通过之前都看不到 |
+| `/dashboard/my-listings` | 卖家自己发布的全部 listing(`draft`/`pending_review`/`active`/`paused`/`rejected`/`removed` 都看得到),之前这里是空白(见旧版 WORKLOG"已知欠缺"),现在补上了 |
 | `/dashboard/stripe-connect`("Payment Management") | 没连 Stripe 时是 Express 开户入口(发布的 listing 要 `stripe_onboarded=true` 才会变成 `active`);连好之后改显示"Total sales"(`listing_orders` 里排除 `pending_payment` 的金额之和)、"Available to withdraw"/"Pending"(直接调 Stripe Balance API,`stripe.balance.retrieve({}, {stripeAccount})`,不是从自己数据库估算的)、一个跳到 Stripe Express 自带 Dashboard 的按钮(`stripe.accounts.createLoginLink`,真正管理提现/打款节奏在 Stripe 那边,这个项目不自建提现流程) |
 | `/dashboard/sales` | 卖家看到自己 listing 收到的订单,按状态分成 New orders(`paid_in_escrow`,可以提交交付凭证链接把订单推进到 `delivered`)/In progress(`delivered`)/Awaiting payout(`confirmed`)/Completed(`released`/`expired_auto_confirmed`)/Awaiting payment(`pending_payment`)五组;每张订单卡片显示买家昵称(点击跳买家的 `/sellers/[id]` 主页)、一个跳到跟买家私信页的链接、以及打款明细(总价 / 平台佣金 / Stripe 手续费 / 实际到手,后两项要等订单 `released` 才有值) |
 | `/dashboard/purchases` | 买家看到自己下的单,`delivered` 状态下可以"确认收到"触发放款(或 3 天后自动放款,见 `/api/cron/auto-confirm`) |
 | `/dashboard/messages`、`/dashboard/messages/[listingId]/[otherUserId]` | 绑在某个 listing 下的一对一消息,不是群聊;打开某个会话会把对方发来的未读消息标记已读;可以只发图片不写字(比如甩效果图/参考图),没有邮件通知,得自己点进来看 |
 | `/api/stripe/webhook` | Stripe webhook:`account.updated` 刷新 `stripe_onboarded`,`checkout.session.completed` 把订单推进到 `paid_in_escrow` |
 | `/api/cron/auto-confirm` | 需要外部定时器(Vercel Cron / Supabase pg_cron)调用,处理买家超时未确认的自动放款,见下面"收付款设计要点" |
+| `/dashboard/admin`、`/dashboard/admin/listings`、`/dashboard/admin/users`、`/dashboard/admin/orders` | 管理员后台(2026-09-18 加),只有 `admins` 表里有记录的账号能进,见下面"管理员系统"一节 |
+| `/banned` | 账号被封禁后跳转到的静态说明页,不需要登录 |
 
 ## 支付流程(Stripe Connect · Charges & Transfers)
 
@@ -479,11 +481,108 @@ Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。
 
 ### 收付款设计要点(实现前必读)
 
-- **卖家必须 `stripe_onboarded = true` 才能把 listing 状态从 `draft` 改成 `active`**,发布表单/action 里两头都要校验(RLS 只挡"是不是自己的 listing",挡不住状态值本身)
+- **卖家必须 `stripe_onboarded = true` 才能把 listing 从 `draft` 推进到 `pending_review`**(2026-09-18 起,`pending_review` 之后还要管理员审核通过才是 `active`,见下面"管理员系统"),发布表单/action 里两头都要校验(RLS 只挡"是不是自己的 listing",挡不住状态值本身)
 - **Charges & Transfers 模式**:买家在 Stripe Checkout 付款,钱先进平台自己的 Stripe 账户(不是 destination charge、不直接进卖家账户);卖家点"确认收到"或超时 3 天自动确认后,服务端才对卖家的 Connect 账户发起一笔 Transfer
 - **佣金 12%**,参考 Etsy(6.5% 交易费 + 3%+$0.25 支付处理费,总负担约 10-12%,取上限)。扣费顺序:卖家到手金额 = `amount − 实际 Stripe 手续费 − 12% 平台佣金`,两项都从卖家应得里扣,平台的 12% 收入不受 Stripe 手续费波动影响
 - **最低发布价 $0.99**,纯技术防呆(留一点余量在 Stripe 自己的最低收款额 $0.50 之上),不是商业门槛——具体到手净额薄不薄,是卖家自己的选择
 - webhook 需要 `SUPABASE_SERVICE_ROLE_KEY`(在 Supabase 后台 Settings → API 里拿),**千万不能**带 `NEXT_PUBLIC_` 前缀、不能出现在任何浏览器端代码里,只在 `src/app/api/stripe/webhook/route.ts` 这种服务端专用文件里用
+
+## 管理员系统(2026-09-18 加)
+
+用户反馈"广告位现在直接公开,需要有管理员后台"。拍板的方案:**新 listing 需要管理员事前审核才能公开**(不是先上线、管理员事后抽查下架),管理员这一版能做:审核/拒绝/下架/推荐 listing,封禁/解封用户账号,只读查看全站订单。
+
+### 权限模型:谁是管理员、为什么这么设计
+
+**管理员身份存在一张独立的 `admins` 表里,不是 `profiles` 上的一个 `is_admin` 字段。** 原因:如果做成 `profiles.is_admin` 列,哪怕给它配了"只有 service_role 能改"的列权限,这张表本身的复杂度和其他业务字段混在一起,审计"到底谁是管理员"要在一堆别的列里翻;单独一张表,`select * from public.admins` 就是完整名单,而且这张表**除了"能查自己那一行"的 select 策略,没有给 `authenticated` 开任何 insert/update/delete 策略**——代码里不存在任何一条路径能让用户自己把自己加进这张表,加管理员只能人工去 Supabase 后台执行 SQL insert。第一个管理员必须这样手动加:
+
+```sql
+insert into public.admins (user_id) values ('<你自己账号的 uuid,去 profiles 表里查>');
+```
+
+### `listings.status` 状态机(更新)
+
+```
+draft --(卖家连好 Stripe 提交)--> pending_review --(管理员 approve)--> active --(管理员 remove)--> removed
+                                       |
+                                       +--(管理员 reject)--> rejected
+active --(管理员 remove)--> removed
+```
+
+`draft`/`pending_review`/`rejected`/`removed` 这几个状态买家和首页都看不到(`isVisible = status==='active' || isOwnListing` 这条判断没变,新状态自然被挡住),卖家自己在 `/dashboard/my-listings` 能看到全部状态、包括是被拒绝还是被下架。**这版没有做"卖家收到拒绝理由后可以修改重新提交"的界面**——`rejected` 之后卖家没有编辑入口(`/dashboard/my-listings` 本来就还没做编辑功能,是已知欠缺),需要联系人工重新发布。
+
+`is_featured`(管理员推荐/置顶)跟 `status` 是两个独立的布尔量,只在 `status='active'` 时才有意义,首页"Featured listings"和 `/listings` 列表都是 `order(is_featured desc, created_at desc)`,标了 `is_featured` 的排在最前面,卡片和列表页角标一个 "⭐ Featured"。
+
+### 顺手补的一个安全洞:`listings.status`/`profiles.stripe_onboarded` 之前谁都能自己改
+
+做审核流程时发现:`listings` 表"卖家能改自己的 listing"这条 RLS 策略(`sellers can update own listings`)**没有限制列**,只挡"是不是自己的 listing",没挡"能不能直接把 status 改成 active"——也就是说在这次改之前,**任何登录用户理论上都可以绕过前端,直接拿自己的 session 调 Supabase REST API 把自己的 listing 从 draft 改成 active,完全跳过审核**(甚至不需要真的连 Stripe)。同理 `profiles.stripe_onboarded`/`stripe_connect_account_id` 也是能被登录用户自己直接 PATCH 的(这两个字段决定"能不能发布"和"打款转给谁",伪造后果分别是绕过审核、把打款转到自己控制的另一个 Stripe 账户)。
+
+这几个字段本来就应该只由服务端在验证过真实条件后写(Stripe webhook / 这次新加的管理员 action),不该开给 `authenticated` 角色。这次统一收回:
+
+```sql
+-- ===== 收回几个只应该由服务端写的敏感列的 UPDATE 权限 =====
+-- RLS 的 using/with check 只挡"哪些行能碰",挡不住"这一行的哪些列能改"——
+-- 下面这几列一旦被 RLS 允许更新自己那一行的策略覆盖到,登录用户就能直接拿自己的
+-- session 调 REST API 改,不用经过任何服务端校验。REVOKE 是列级权限,跟 RLS 是
+-- 两道独立的关卡,两道都要过才能真正写进去。
+revoke update (is_banned, stripe_onboarded, stripe_connect_account_id)
+  on public.profiles from authenticated;
+
+revoke update (status, is_featured)
+  on public.listings from authenticated;
+```
+
+**这条 REVOKE 上线前必须确认代码里所有对应字段的写入都已经切到 service_role client**,不然那几个功能会开始报权限错误。已经切好的:`src/app/dashboard/stripe-connect/page.tsx`(`stripe_onboarded` 兜底刷新)、`src/app/dashboard/stripe-connect/actions.ts`(`stripe_connect_account_id`)、`src/app/api/stripe/webhook/route.ts`(webhook 本来就是 service_role,没受影响)、`src/app/dashboard/admin/**/actions.ts`(新加的管理员 action)。`listings.status` 的初始值(`draft`/`pending_review`)是走 INSERT 设置的,REVOKE 只挡 UPDATE,INSERT 不受影响,发布表单不用改。
+
+### 完整 SQL(管理员系统这部分)
+
+```sql
+-- ===== admins(管理员名单,没有给 authenticated 开任何写权限)=====
+create table public.admins (
+  user_id uuid primary key references public.profiles(id),
+  created_at timestamptz not null default now()
+);
+
+alter table public.admins enable row level security;
+
+create policy "users can check their own admin status"
+on public.admins for select
+to authenticated
+using (auth.uid() = user_id);
+
+-- 故意不建 insert/update/delete 策略。加管理员只能人工执行:
+-- insert into public.admins (user_id) values ('<uuid>');
+
+-- ===== listings 状态机扩展 + 管理员推荐 =====
+alter type public.listing_status add value if not exists 'pending_review';
+alter type public.listing_status add value if not exists 'rejected';
+alter type public.listing_status add value if not exists 'removed';
+
+alter table public.listings add column if not exists is_featured boolean not null default false;
+
+-- ===== profiles 封禁标记 =====
+alter table public.profiles add column if not exists is_banned boolean not null default false;
+
+-- ===== 收回敏感列的 UPDATE 权限(见上面"顺手补的一个安全洞"一节的说明)=====
+revoke update (is_banned, stripe_onboarded, stripe_connect_account_id)
+  on public.profiles from authenticated;
+
+revoke update (status, is_featured)
+  on public.listings from authenticated;
+```
+
+**`alter type ... add value` 这几条不能跟其他用到新枚举值的语句放在同一个事务/同一次执行里**(Postgres 的限制,新加的枚举值要等当前事务提交后才能用)——在 Supabase SQL Editor 里正常按顺序一条条执行没问题,只是如果以后要写自动化迁移脚本,这几条 `alter type` 得单独一批先跑、确认提交后再跑用到新值的部分。
+
+### 封禁怎么生效的
+
+封禁一个用户,`banUserAction`(`src/app/dashboard/admin/users/actions.ts`)做了两件事:①把 `profiles.is_banned` 设成 `true`;②调 Supabase Auth 的管理员 API `supabase.auth.admin.updateUserById(userId, { ban_duration: "876000h" })` 真正在 GoTrue 层面封掉这个账号的登录能力(约 100 年,相当于永久,直到管理员解封)。只改数据库字段不够——用户手上现有的 access token 在过期刷新之前(通常一小时内)本来就还有效,`src/proxy.ts` 里加了一道每次请求都查 `is_banned` 的检查,发现被封立刻 `signOut()` 并跳到 `/banned` 页,不用等 token 自然过期。**这部分(尤其是 `auth.admin.updateUserById` 这个调用)没有在真实 Supabase 项目上跑通过**,这个开发环境连不上 `myadsspace` 项目,只做到了本地 `next build` 类型检查通过、API 签名跟官方文档核对一致,上线后第一次封禁需要人工验证一下效果。
+
+### 已知欠缺(这版管理员系统的)
+
+- 没有"卖家收到拒绝理由、修改后重新提交"的界面,`rejected` 是终态,只能联系人工
+- 管理员看不到 listing 被拒绝/下架的历史原因(没有存 reason 字段,只有状态本身)
+- 用户提到"管理员能定期发邮件或消息给用户"——这版没做,邮件通知本来就等 Resend 接入之后再说(见"已知欠缺"里的邮件通知那条);站内消息(`listing_messages`)是绑在某个 listing 下的一对一会话,不支持管理员群发/单独给某个用户发一条不挂靠 listing 的消息,这个需要额外设计(比如 `listing_id` 允许为 null),这版先没做
+- 用户提到"审核先人工、后期机器人审核"——这版只做了人工审核界面,自动化审核(比如接一个内容审核 API 自动初筛)完全没做,是未来的事
+- `/dashboard/admin/orders` 只显示最近 200 条,没做分页/搜索/按状态筛选
 
 ## 部署(Vercel)
 

@@ -16,6 +16,9 @@ export interface Profile {
   country: string | null;
   stripe_connect_account_id: string | null;
   stripe_onboarded: boolean;
+  // 管理员封禁,只有 service_role(管理员操作的 server action)能改,普通用户改不了
+  // 自己这一列(数据库层面 revoke 掉了 authenticated 的 UPDATE 权限,不是只靠前端隐藏)。
+  is_banned: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -62,6 +65,8 @@ export interface Listing {
   pricing_unit: PricingUnit;
   media_urls: string[];
   status: ListingStatus;
+  // 管理员"推荐/置顶",跟 status 一样只有 service_role(管理员操作)能改。
+  is_featured: boolean;
   created_at: string;
   updated_at: string;
 }

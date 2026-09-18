@@ -11,7 +11,12 @@ export function ListingCard({ listing }: { listing: Listing }) {
       href={`/listings/${listing.id}`}
       className="group flex flex-col overflow-hidden rounded-2xl border border-zinc-200 transition-shadow hover:shadow-lg"
     >
-      <div className="aspect-[4/3] w-full overflow-hidden bg-zinc-100">
+      <div className="relative aspect-[4/3] w-full overflow-hidden bg-zinc-100">
+        {listing.is_featured && (
+          <span className="absolute left-2 top-2 z-10 rounded-full bg-zinc-900/80 px-2 py-0.5 text-xs font-medium text-white">
+            ⭐ Featured
+          </span>
+        )}
         {cover ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img

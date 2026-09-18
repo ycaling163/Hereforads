@@ -96,13 +96,27 @@ export const PRICING_UNIT_LABELS: Record<PricingUnit, string> = {
   monthly: "Per month",
 };
 
-export const LISTING_STATUSES = ["draft", "active", "paused"] as const;
+// pending_review/rejected/removed 是 2026-09-18 加的管理员审核流程用的状态,
+// 见 README"管理员系统"一节。draft -> (卖家连好 Stripe 提交) -> pending_review
+// -> 管理员 approve -> active,或 reject -> rejected;active 之后管理员随时可以
+// remove -> removed(下架违规内容,买家/首页都看不到,但卖家自己在 My listings 还能看到)。
+export const LISTING_STATUSES = [
+  "draft",
+  "pending_review",
+  "active",
+  "paused",
+  "rejected",
+  "removed",
+] as const;
 export type ListingStatus = (typeof LISTING_STATUSES)[number];
 
 export const LISTING_STATUS_LABELS: Record<ListingStatus, string> = {
   draft: "Draft (hidden until Stripe is connected)",
+  pending_review: "Pending review",
   active: "Live",
   paused: "Paused",
+  rejected: "Rejected by moderation",
+  removed: "Removed by moderation",
 };
 
 // 托管式交易状态机,见产品方案文档"交易状态机"一节。

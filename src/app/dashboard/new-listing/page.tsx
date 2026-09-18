@@ -30,7 +30,7 @@ export default async function NewListingPage() {
         English — this marketplace doesn&apos;t auto-translate listings yet.
       </p>
 
-      {!profile?.stripe_onboarded && (
+      {!profile?.stripe_onboarded ? (
         <p className="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
           You haven&apos;t finished Stripe onboarding yet. You can still draft
           a listing below, but it stays hidden from buyers until you{" "}
@@ -38,6 +38,11 @@ export default async function NewListingPage() {
             finish Stripe setup
           </Link>
           .
+        </p>
+      ) : (
+        <p className="mt-4 rounded-lg bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+          New listings are reviewed by our team before they go live —
+          buyers won&apos;t see it until it&apos;s approved.
         </p>
       )}
 
