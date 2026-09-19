@@ -3,9 +3,9 @@ import { LoginForm } from "./LoginForm";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
 }) {
-  const { next } = await searchParams;
+  const { next, error } = await searchParams;
 
   return (
     <div className="flex flex-1 items-center justify-center px-6 py-16">
@@ -13,6 +13,11 @@ export default async function LoginPage({
         <h1 className="mb-8 text-2xl font-semibold tracking-tight text-zinc-900">
           Log in to HereForAds
         </h1>
+        {error === "invalid_link" && (
+          <p className="mb-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">
+            That link is invalid or has expired — please log in below.
+          </p>
+        )}
         <LoginForm next={next} />
       </div>
     </div>

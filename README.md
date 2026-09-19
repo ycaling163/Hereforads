@@ -627,6 +627,72 @@ alter table public.profiles add constraint profiles_username_format check (
 
 Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。
 
+## Guest 结账(买家不强制先注册,2026-09-19 加)
+
+**产品决策**:买家点"Buy now"不再被强制跳去 `/login`/`/register`——没登录的访客只需要在按钮上方填一个邮箱就能直接走 Stripe Checkout 付款。付款/托管放款流程本身完全不变(还是 `pending_payment` → `paid_in_escrow` → `delivered` → 买家确认/超时自动确认 → `released`),因为这套流程需要买家事后能回来"确认收货",纯匿名、完全不落任何账号是做不到这一步的。
+
+**实现方式**:选的是"静默建号 + 邮件魔法链接",不是完全匿名订单(那种做法需要新建一套脱离账号体系的 token 订单页,买家没法用站内私信联系卖家,改动量大很多,这次没有做)。具体流程:
+
+1. `src/app/listings/[id]/actions.ts` 的 `buyListingAction` 发现没有登录用户时,读表单里的 `guest_email`;
+2. `src/lib/supabase/guest-checkout.ts` 的 `resolveGuestBuyerId()` 用匿名 key 的 client 调 `supabase.auth.signInWithOtp({ email })`——这个邮箱之前没注册过就静默建一个新账号(不设密码),已经注册过就直接给现有账号发一封登录邮件;
+3. `signInWithOtp` 本身不会把新建用户的 `id` 返回给调用方,所以紧接着用 `service_role` client 调下面新加的 `get_user_id_by_email()` 函数把邮箱查回 `id`,再 upsert 一条 `profiles` 记录(跟 `ensureProfile()` 一样用 `ignoreDuplicates`,不会覆盖已有账号);
+4. 后续插入 `listing_orders`/发起 Stripe Checkout 复用这个 `id` 当 `buyer_id`,跟登录买家走的是同一张表、同一套状态机;
+5. 付款成功的 `success_url` 对 guest 单独指向一个不需要登录的 `/checkout/guest-success` 页面(登录买家的 `success_url` 不变,还是 `/dashboard/purchases`)——guest 这个浏览器里没有 session,直接跳 `/dashboard/purchases` 只会被弹回 `/login`；
+6. guest 收到的邮件里点登录链接,落地到新加的 `src/app/auth/confirm/route.ts`,用 `token_hash` 换一个真正的 session(写 cookie),之后就能像普通登录买家一样在 `/dashboard/purchases` 看订单、确认收货,也能用站内私信联系卖家。
+
+**邮件链接怎么换出登录态**:走的是 Supabase 官方 Next.js SSR 教程推荐的 `token_hash` 方案——Magic Link 邮件模板里的链接直接带 `token_hash` + `type` 两个参数指向 `/auth/confirm`,这个 Route Handler 在服务端用 `supabase.auth.verifyOtp({ type, token_hash })` 换 session、写 cookie,再重定向到 `next`。**这个方案要求 Magic Link 邮件模板是可编辑的,而 Supabase 自带的邮件服务不让编辑模板(后台模板编辑页会提示"Set up custom SMTP to edit templates")**——2026-09-19 接入 Resend 当 custom SMTP(域名 `hereforads.com` 已在 Resend 验证、Supabase 后台的 SMTP 设置已指向 Resend)之后才具备这个前提,同时也顺带解决了 Supabase 自带邮件服务发信限额很低(只给开发测试用)的问题。(中间短暂试过一版不需要改邮件模板的客户端方案——用浏览器端 client 解析 GoTrue 默认链接落地页 URL fragment 里的 token——SMTP 配好之后已经换回这个更标准的版本,不需要再维护两套。)
+
+**这次没有改的地方**(明确排除在这次改动范围外,免得以后被误以为也支持了):"Ask the seller" 私信联系卖家仍然要求先登录/走完 guest 的邮件登录环节——没有做匿名留言这块。
+
+**数据库变更**——只加了一个函数,没改任何表结构(`listing_orders.buyer_id`/`profiles.id` 还是引用真实账号,guest 也是一个真实账号,只是建号过程对买家不可见):
+
+```sql
+-- get_user_id_by_email(): service_role 专用,按邮箱查回 auth.users.id。
+-- security definer + 只 grant 给 service_role,不给 anon/authenticated 执行
+-- 权限——不然会变成一个能被任何人拿去探测"这个邮箱是否已注册"的接口。
+create or replace function public.get_user_id_by_email(p_email text)
+returns uuid
+language sql
+security definer
+set search_path = auth, pg_temp
+as $$
+  select id from auth.users where lower(email) = lower(p_email) limit 1;
+$$;
+
+revoke all on function public.get_user_id_by_email(text) from public;
+grant execute on function public.get_user_id_by_email(text) to service_role;
+```
+
+**必须手动做的 Supabase 后台配置(代码/SQL 之外,漏掉任何一步 guest 都收不到能用的登录链接)**:
+
+1. **Authentication → Emails → SMTP Settings(即 custom SMTP)**:接 Resend——Sender email address 填已验证域名下的地址(比如 `hello@hereforads.com`),Host 填 `smtp.resend.com`,Port `465`,Username 固定是 `resend`,Password 是 Resend 后台生成的 API Key。前提是这个域名已经在 Resend 加过、DNS 记录(SPF/DKIM)也在 Cloudflare 加好并验证通过。
+2. **Authentication → Emails → Magic link or OTP**(custom SMTP 开了之后这个模板才能编辑):把默认的 `{{ .ConfirmationURL }}` 链接换成:
+   ```html
+   <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/dashboard/purchases">Log in</a>
+   ```
+   `type=email` 是故意的——新版 GoTrue 把 magic link/邮箱确认统一成 `email` 这个 OTP 类型,不是历史上的 `magiclink`,`src/app/auth/confirm/route.ts` 按这个约定去 `verifyOtp`。
+3. **Authentication → URL Configuration → Redirect URLs**:加一条 `{站点域名}/auth/confirm`(本地开发再加一条 `http://localhost:3000/auth/confirm`)。不在白名单里 `signInWithOtp` 会报 redirect 不合法。
+4. **确认 `NEXT_PUBLIC_SITE_URL` 在生产环境配的是真实域名**(部署环境变量,不是 `localhost`)——`resolveGuestBuyerId()` 拼 `emailRedirectTo` 用的就是这个值,同时也是模板里 `{{ .SiteURL }}` 的来源。
+
+### Guest 联系方式留底(姓名/地址/电话,2026-09-19 加)
+
+**产品要求**:guest 不走注册表单,除了邮箱不会再留下别的联系方式——万一后续有纠纷/退款需要联系,平台这边应该有个记录。没有新增我们自己的表单字段(不想在结账按钮上方再堆更多输入框),借的是买家反正要填卡号的 Stripe Checkout 页面本身:
+
+- `buyListingAction` 对 guest 单独在 Stripe Checkout session 上开了 `billing_address_collection: "required"` 和 `phone_number_collection: { enabled: true }`(登录买家不开,不给已有用户的一键购买加步骤);
+- `/api/stripe/webhook` 收到 `checkout.session.completed` 时,从 `session.customer_details` 里把 `name`/`phone`/`address` 抄一份写进 `listing_orders`(新增的三列,见下面 SQL)——存在订单本身而不是只存 `profiles`,因为同一个账号以后可能换地址/换电话下单,按订单留底更准确;
+- 同时如果这个买家 `profiles.display_name` 还是空的(guest 静默建号时没填过,见上面 `resolveGuestBuyerId()`),顺手拿 Checkout 收集到的姓名回填一下,这样卖家在 `/dashboard/sales`/`/dashboard/messages` 看到的就不再是"Anonymous buyer"——只在原本是空的时候才回填,不会覆盖用户自己在 `/dashboard/profile` 设置过的名字;
+- 这几列现在**没有**展示给卖家看(只存库,不上 `/dashboard/sales` 的卡片)——是不是要给卖家看到买家电话/地址是另一个隐私层面的产品决策,这次没做,只是先把数据留底。
+
+**这行以前建过的 `listing_orders` 要补三列**(nullable,登录买家走的老流程不填这三列,读出来是 null):
+
+```sql
+alter table public.listing_orders add column if not exists buyer_name text;
+alter table public.listing_orders add column if not exists buyer_phone text;
+alter table public.listing_orders add column if not exists buyer_address text;
+```
+
+不需要新的 RLS 策略——这三列只由 `/api/stripe/webhook` 用 `service_role` 写,普通登录用户的 `listing_orders` UPDATE 策略管的是别的字段,不受影响。
+
 ### 收付款设计要点(实现前必读)
 
 - **卖家必须 `stripe_onboarded = true` 才能把 listing 从 `draft` 推进到 `pending_review`**(2026-09-18 起,`pending_review` 之后还要管理员审核通过才是 `active`,见下面"管理员系统"),发布表单/action 里两头都要校验(RLS 只挡"是不是自己的 listing",挡不住状态值本身)

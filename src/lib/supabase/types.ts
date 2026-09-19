@@ -106,6 +106,13 @@ export interface ListingOrder {
   // 仅 pricing_unit 非 one_time 的 listing 才会填,用于判断档期冲突。
   start_date: string | null;
   end_date: string | null;
+  // Guest 结账(不注册)时,买家没有走过任何表单留下联系方式——这三列是
+  // webhook 从 Stripe Checkout 的 customer_details 里顺手抄一份存底(2026-09-19
+  // 加,见 README"Guest 结账"一节)。登录买家走的是老流程,没开
+  // billing_address_collection/phone_number_collection,这三列读出来是 null。
+  buyer_name: string | null;
+  buyer_phone: string | null;
+  buyer_address: string | null;
   paid_at: string | null;
   delivered_at: string | null;
   confirmed_at: string | null;
