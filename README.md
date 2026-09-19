@@ -930,6 +930,58 @@ alter table public.listings add column if not exists terms_accepted_at timestamp
 
 不需要新的 RLS 策略(走 listings 表原有的 insert 策略),也不需要改 `listing_status` 枚举类型(`draft`/`pending_review`/`rejected` 这几个值继续留着,只是新流程不会再产生)。
 
+## Price Card(个人主页价目表,2026-09-19 加)
+
+**产品需求**:买家点进卖家的个人主页(`/sellers/[id]`/`/[username]`)想快速知道大概价位,不想一条一条点开 listing 才能看到价格。加一个"价目表"卡片,展示在个人主页 "Social reach" 旁边(桌面宽度下两栏并排,复制截图里红框的位置)。
+
+**做成了结构化列表,不是一张图**:卖家在 `/dashboard/profile` 新的 "Price card" 板块里,一行一行填"标题 + 价格"(自由文本,比如标题填 `Static Image Ad (TikTok)`,价格填 `£20`),可以选配一张背景图。这些行**不绑定** `ad_type`/`social_platform` 这些固定枚举,也**不是真的可下单的 listing**——纯展示、给买家一个大致预期,真正下单还是要点进具体的 listing 走 Buy now(卖家管理页和公开页都有文案说明这一点,避免被误认为是能直接结算的报价)。
+
+**代码结构**(照抄 `social_accounts` 那一套"列表 + 加一行表单 + 逐行编辑/删除"的既有模式,没有发明新的交互范式):
+
+- 新表 `seller_price_card_items`(id/seller_id/title/price/sort_order),RLS 跟 `social_accounts` 一样(公开可读,只有本人能增删改)
+- `seller_profiles.price_card_image_url`(背景图,可选),上传/替换/删除复用 `updateProfileAction` 那一套 avatar/banner 的存储桶逻辑(先确认新 URL 存库成功,再删旧文件)
+- 管理界面:`src/app/dashboard/profile/PriceCardManager.tsx` + `PriceCardItemRow.tsx`,server actions 加在现有的 `src/app/dashboard/profile/actions.ts` 里(`updatePriceCardImageAction`/`removePriceCardImageAction`/`addPriceCardItemAction`/`updatePriceCardItemAction`/`deletePriceCardItemAction`)
+- 展示组件:`src/components/PriceCard.tsx`,挂在 `SellerProfileView.tsx` 里,跟 "Social reach" 那块一起包进一个 `sm:grid-cols-2` 的两栏布局(桌面宽度下并排,手机上各自占一整行堆叠)——`/sellers/[id]` 和 `/[username]` 两条路由共用这一个 view 组件,两边都要传 `priceCardItems` 这个新 prop
+- 没有做拖拽排序——`sort_order` 就是加入的顺序(insert 时取当前最大值 + 1),想调整顺序目前得删了重加,这是刻意的范围控制,不是漏做
+
+**数据库变更**:
+
+```sql
+alter table public.seller_profiles add column if not exists price_card_image_url text;
+
+create table public.seller_price_card_items (
+  id uuid primary key default gen_random_uuid(),
+  seller_id uuid not null references public.profiles(id),
+  title text not null,
+  price text not null,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+alter table public.seller_price_card_items enable row level security;
+
+create policy "anyone can view price card items"
+on public.seller_price_card_items for select
+to anon, authenticated
+using (true);
+
+create policy "sellers can insert own price card items"
+on public.seller_price_card_items for insert
+to authenticated
+with check (auth.uid() = seller_id);
+
+create policy "sellers can update own price card items"
+on public.seller_price_card_items for update
+to authenticated
+using (auth.uid() = seller_id)
+with check (auth.uid() = seller_id);
+
+create policy "sellers can delete own price card items"
+on public.seller_price_card_items for delete
+to authenticated
+using (auth.uid() = seller_id);
+```
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀

@@ -2,7 +2,13 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileForm } from "./ProfileForm";
 import { SocialAccountsManager } from "./SocialAccountsManager";
-import type { Profile, SellerProfile, SocialAccount } from "@/lib/supabase/types";
+import { PriceCardManager } from "./PriceCardManager";
+import type {
+  PriceCardItem,
+  Profile,
+  SellerProfile,
+  SocialAccount,
+} from "@/lib/supabase/types";
 
 export default async function ProfilePage({
   searchParams,
@@ -19,20 +25,29 @@ export default async function ProfilePage({
     redirect("/login");
   }
 
-  const [{ data: profile }, { data: sellerProfile }, { data: socialAccounts }] =
-    await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
-      supabase
-        .from("seller_profiles")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle(),
-      supabase
-        .from("social_accounts")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false }),
-    ]);
+  const [
+    { data: profile },
+    { data: sellerProfile },
+    { data: socialAccounts },
+    { data: priceCardItems },
+  ] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+    supabase
+      .from("seller_profiles")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("social_accounts")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("seller_price_card_items")
+      .select("*")
+      .eq("seller_id", user.id)
+      .order("sort_order", { ascending: true }),
+  ]);
 
   return (
     <div className="flex flex-col gap-10">
@@ -81,6 +96,25 @@ export default async function ProfilePage({
         <div className="mt-6 max-w-xl">
           <SocialAccountsManager
             accounts={(socialAccounts ?? []) as SocialAccount[]}
+          />
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight text-zinc-900">
+          Price card
+        </h2>
+        <p className="mt-2 text-sm text-zinc-500">
+          Shows on your public profile page (next to Social reach) as a quick
+          rate card, so buyers get a sense of your pricing before browsing
+          your listings one by one. It&apos;s just for reference — buyers
+          still book and pay through an actual listing, so make sure prices
+          here roughly match what you publish.
+        </p>
+        <div className="mt-6 max-w-xl">
+          <PriceCardManager
+            items={(priceCardItems ?? []) as PriceCardItem[]}
+            imageUrl={(sellerProfile as SellerProfile | null)?.price_card_image_url ?? null}
           />
         </div>
       </div>
