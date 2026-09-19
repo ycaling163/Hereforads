@@ -1,4 +1,5 @@
 import type {
+  AdType,
   ListingCategory,
   ListingOrderStatus,
   ListingStatus,
@@ -90,6 +91,10 @@ export interface Listing {
   // 这个状态)。加之前读出来是 undefined。
   social_account_id: string | null;
   is_website_placement: boolean;
+  // 固定的广告类型模板(2026-09-19 加,见 README"广告类型"一节),跟 categories
+  // (接哪些品牌类目)是两个独立维度。这个字段上线前发布的老 listing 是 null,
+  // 前端按"Other/未指定"处理,不强制补录。
+  ad_type: AdType | null;
   created_at: string;
   updated_at: string;
 }

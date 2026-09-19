@@ -4,6 +4,8 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import type { Listing, SocialAccount } from "@/lib/supabase/types";
 import {
+  AD_TYPES,
+  AD_TYPE_LABELS,
   LISTING_CATEGORIES,
   LISTING_CATEGORY_LABELS,
   MIN_LISTING_PRICE,
@@ -88,6 +90,34 @@ export function ListingForm({
           placeholder="e.g. Bio-link placement on my Instagram (50k followers)"
           className={inputClass}
         />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="ad_type" className={labelClass}>
+          Ad type
+        </label>
+        <p className="text-xs text-zinc-500">
+          What kind of ad is this? Buyers can compare this across listings.
+          Pick <strong>Custom</strong> if this placement doesn&apos;t fit the
+          standard types — buyers will be nudged to message you before
+          buying so you can agree on scope first.
+        </p>
+        <select
+          id="ad_type"
+          name="ad_type"
+          required
+          defaultValue={initialListing?.ad_type ?? ""}
+          className={inputClass}
+        >
+          <option value="" disabled>
+            Choose an ad type
+          </option>
+          {AD_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {AD_TYPE_LABELS[type]}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="flex flex-col gap-1.5">

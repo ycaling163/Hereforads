@@ -7,6 +7,7 @@ import { ContactSellerForm } from "@/components/ContactSellerForm";
 import { DailyCountdown } from "@/components/DailyCountdown";
 import { SocialStatChip, WebsiteStatChip } from "@/components/SocialStatChip";
 import {
+  AD_TYPE_LABELS,
   LISTING_CATEGORY_LABELS,
   LISTING_STATUS_LABELS,
   PRICING_UNIT_LABELS,
@@ -117,6 +118,11 @@ export default async function ListingDetailPage({
               </span>
             )}
           </div>
+          {listing.ad_type && (
+            <p className="mt-2 inline-block rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+              {AD_TYPE_LABELS[listing.ad_type]}
+            </p>
+          )}
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900">
             {listing.title}
           </h1>
@@ -223,7 +229,15 @@ export default async function ListingDetailPage({
               {isOwnListing ? (
                 <p className="text-sm text-zinc-500">This is your own listing.</p>
               ) : (
-                <BuyListingButton listingId={listing.id} isLoggedIn={!!user} />
+                <>
+                  {listing.ad_type === "custom" && (
+                    <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      This is a custom ad type — message the seller below to
+                      agree on scope before buying.
+                    </p>
+                  )}
+                  <BuyListingButton listingId={listing.id} isLoggedIn={!!user} />
+                </>
               )}
             </div>
           </div>

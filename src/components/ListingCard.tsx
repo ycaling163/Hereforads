@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Listing, Profile, SellerProfile, SocialAccount } from "@/lib/supabase/types";
-import { LISTING_CATEGORY_LABELS, PRICING_UNIT_LABELS } from "@/lib/supabase/enums";
+import { AD_TYPE_LABELS, LISTING_CATEGORY_LABELS, PRICING_UNIT_LABELS } from "@/lib/supabase/enums";
 import { SocialStatChip, WebsiteStatChip } from "@/components/SocialStatChip";
 
 export function ListingCard({
@@ -107,6 +107,11 @@ export function ListingCard({
         )}
 
         <div>
+          {listing.ad_type && (
+            <span className="mb-1 inline-block rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+              {AD_TYPE_LABELS[listing.ad_type]}
+            </span>
+          )}
           <h3 className="line-clamp-1 text-base font-semibold text-zinc-900">
             {listing.title}
           </h3>

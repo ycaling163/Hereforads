@@ -95,6 +95,7 @@ export async function createListingAction(
       title: fields.title,
       description: fields.description,
       categories: fields.categories,
+      ad_type: fields.adType,
       price_amount: fields.priceAmount,
       price_currency: fields.priceCurrency,
       pricing_unit: fields.pricingUnit,

@@ -854,6 +854,37 @@ revoke update (status, is_featured)
 - **已知限制**:管理员的下架(`removed`)/推荐(`is_featured`)那两列还是只有 `/admin/listings` 能碰,这次没有给卖家开放"暂停/paused"这个自助操作(`listings.status` 整列都被 REVOKE 了,卖家自助暂停需要另外一个专门的 service_role action,这次没做,只做了用户明确要的"编辑"和"删除")。
 - 验证方式:`npm run build` + `npx eslint src` 全绿。这个开发环境连不上真实 Supabase 项目,没有用真实账号跑过"编辑一条 active listing → 确认状态真的退回 pending_review"、"删除一条有订单的 listing → 确认真的报错而不是误删"这两条关键路径,上线后建议人工各测一次。
 
+## 广告类型 ad_type(2026-09-19 加)
+
+**产品背景**:之前发布 listing 只有自由文本的 title/description,买家没法跨卖家比较"这到底是哪种广告"。加了一个固定模板的 `ad_type` 单选,跟 `categories`(接哪些品牌类目)是两个独立维度——一条 listing 一个 `ad_type` + 一组 `categories`。
+
+**这次讨论过、但没做的**(明确排在这次范围外,免得以后被误以为已经支持):
+
+- **Platform 没有改回多选**——9 月 18 号才把 listing 从"展示卖家所有社交账号"改成"一个 listing 绑定一个具体投放位",这次讨论确认继续保持这个决定不变(卖家想在多个平台卖,继续用现成的 Duplicate 功能各发一条)。多平台打包价("套餐价")是明确的未来事项,等验证过单平台这版之后再看要不要做。
+- **没有做 Ad Type × Platform 的价格矩阵**——`ad_type` 是这条 listing 唯一的一个值,不是"这条 listing 支持哪几种类型、各自多少钱"的列表;卖家想卖多种 Ad Type,一样是多发几条 listing,而不是一条 listing 里挑类型。
+- **投放时长(Duration)、版权归属(Usage rights)这两个属性没有落地**——只在 `AD_TYPES`/`ListingForm` 里加了 Ad Type 这一项,时长和版权是明确的后续事项。
+
+**`custom` 是干什么的**:不是"没选/留空"这个语义,是卖家主动声明"这个投放位不是标准套餐"——listing 详情页会在 Buy now 按钮上方提示买家"先私信卖家谈清楚范围/价格",但不会拦掉购买按钮本身(卖家标了 custom 也可能已经想好了固定价,不强制走私信这一步)。
+
+**代码改动**:`src/lib/supabase/enums.ts` 新增 `AD_TYPES`/`AD_TYPE_LABELS`;`ListingForm.tsx` 加了必填的 Ad type 下拉(`src/lib/listingFormValidation.ts` 的 `parseListingFormFields` 校验、创建和编辑共用);`ListingCard.tsx`/listing 详情页展示成一个小标签。**这个字段上线前发布的老 listing 是 `null`**(没有强制回填的入口),前端不特殊处理只是不显示这个标签,不算"未指定/Other"的强提示(跟 `social_account_id`/`is_website_placement` 那次不一样,这次没有专门的"Other"文案)。
+
+**数据库变更**:
+
+```sql
+create type public.ad_type as enum (
+  'static_image_ad',
+  'video_product_placement',
+  'product_intro_video',
+  'sponsored_feature',
+  'product_test_video',
+  'custom'
+);
+
+alter table public.listings add column if not exists ad_type public.ad_type;
+```
+
+不需要新的 RLS 策略——这一列走的是 `listings` 表原有的 insert/update 策略(`auth.uid() = seller_id`),没有单独授权的必要。
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀
