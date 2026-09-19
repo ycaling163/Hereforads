@@ -47,11 +47,7 @@ export async function buyListingAction(
       return { error: "Please enter a valid email address" };
     }
 
-    const resolved = await resolveGuestBuyerId(
-      supabase,
-      guestEmail,
-      "/dashboard/purchases"
-    );
+    const resolved = await resolveGuestBuyerId(supabase, guestEmail);
     if (!resolved.buyerId) {
       return { error: resolved.error };
     }

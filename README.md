@@ -638,7 +638,13 @@ Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。
 3. `signInWithOtp` 本身不会把新建用户的 `id` 返回给调用方,所以紧接着用 `service_role` client 调下面新加的 `get_user_id_by_email()` 函数把邮箱查回 `id`,再 upsert 一条 `profiles` 记录(跟 `ensureProfile()` 一样用 `ignoreDuplicates`,不会覆盖已有账号);
 4. 后续插入 `listing_orders`/发起 Stripe Checkout 复用这个 `id` 当 `buyer_id`,跟登录买家走的是同一张表、同一套状态机;
 5. 付款成功的 `success_url` 对 guest 单独指向一个不需要登录的 `/checkout/guest-success` 页面(登录买家的 `success_url` 不变,还是 `/dashboard/purchases`)——guest 这个浏览器里没有 session,直接跳 `/dashboard/purchases` 只会被弹回 `/login`；
-6. guest 收到的邮件里点登录链接,落地到新加的 `src/app/auth/confirm/route.ts`,用 `token_hash` 换一个真正的 session(写 cookie),之后就能像普通登录买家一样在 `/dashboard/purchases` 看订单、确认收货,也能用站内私信联系卖家。
+6. guest 收到的邮件里点登录链接,落地到新加的 `src/app/auth/confirm/page.tsx`,之后就能像普通登录买家一样在 `/dashboard/purchases` 看订单、确认收货,也能用站内私信联系卖家。
+
+**邮件链接怎么换出登录态,这版没有走 Supabase 官方教程推荐的 token_hash 方案**——那个方案要求先去 Supabase 后台把 Magic Link 邮件模板换成 `{{ .TokenHash }}` 格式,而后台不装 custom SMTP 是**编辑不了**默认邮件模板的(2026-09-19 实测确认,后台模板编辑页直接提示"Set up custom SMTP to edit templates"),装 SMTP 又是另一件要单独申请第三方服务的事,这次不想引入这个依赖。改用的是不需要碰邮件模板的做法:
+
+- 用的还是 Supabase 完全默认的 Magic Link 邮件/默认的 `{{ .ConfirmationURL }}` 链接——这个链接点开会先落在 GoTrue 自己托管的 `/verify` 上做校验,校验完把 `access_token`/`refresh_token` 塞进跳转回来的 URL **fragment**(`https://.../auth/confirm#access_token=...`),fragment 是纯客户端的东西,浏览器不会把它发给服务器;
+- `src/app/auth/confirm/page.tsx` 是个客户端组件页面(不是 Route Handler,fragment 到不了服务端,只能靠浏览器端 JS 读):用 `src/lib/supabase/client.ts` 的浏览器端 client 调 `getSession()`,`@supabase/ssr` 的浏览器 client 默认会自动解析 URL fragment 里的 token 并且写成服务端也能读的 cookie(这正是 `@supabase/ssr` 这个包存在的意义——跟老版 `@supabase/supabase-js` 直接把 session 存 localStorage 不一样);解析完拿到 session 之后,再客户端跳转到 `/dashboard/purchases`,这时候访问该页面才是真的带着登录态的新请求;
+- 代价:比官方推荐的 token_hash 方案略绕一点(多一次客户端 hop,`/auth/confirm` 会短暂闪一下"Logging you in…"),换来的是**不需要装 custom SMTP、不需要改任何 Supabase 后台的邮件模板**——只要下面那一条 Redirect URL 白名单配置就行。
 
 **这次没有改的地方**(明确排除在这次改动范围外,免得以后被误以为也支持了):"Ask the seller" 私信联系卖家仍然要求先登录/走完 guest 的邮件登录环节——没有做匿名留言这块。
 
@@ -663,13 +669,10 @@ grant execute on function public.get_user_id_by_email(text) to service_role;
 
 **必须手动做的 Supabase 后台配置(代码/SQL 之外,漏掉任何一步 guest 都收不到能用的登录链接)**:
 
-1. **Authentication → URL Configuration → Redirect URLs**:加一条 `{站点域名}/auth/confirm`(本地开发是 `http://localhost:3000/auth/confirm`),不在白名单里 `signInWithOtp` 会报 redirect 不合法。
-2. **Authentication → Email Templates → Magic Link**:默认模板的链接是 `{{ .ConfirmationURL }}`,点开会直接落在 GoTrue 自己托管的 `/verify` 上做 token 交换,根本不会经过这个项目的 `/auth/confirm` 路由(这个项目至今没有任何页面在处理 URL fragment 里的 `access_token`,所以默认模板在这个项目里其实换不出登录态)。要把模板里的链接换成:
-   ```html
-   <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/dashboard/purchases">Log in</a>
-   ```
-   这是 Supabase 官方 Next.js SSR 教程推荐的做法,`type=email` 是故意的(新版 GoTrue 把 magic link/邮箱确认统一成 `email` 这个 OTP 类型,不是历史上的 `magiclink`)。
-3. **确认 `NEXT_PUBLIC_SITE_URL` 在生产环境配的是真实域名**(部署环境变量,不是 `localhost`)——`resolveGuestBuyerId()` 拼 `emailRedirectTo` 用的就是这个值。
+1. **Authentication → URL Configuration → Redirect URLs**:加一条 `{站点域名}/auth/confirm`(本地开发再加一条 `http://localhost:3000/auth/confirm`),照抄这个字面量、不用带任何 query string 或通配符——`resolveGuestBuyerId()` 拼 `emailRedirectTo` 时就没带 query string,就是为了让这里的配置是个能直接复制粘贴的固定值。不在白名单里 `signInWithOtp` 会报 redirect 不合法。
+2. **确认 `NEXT_PUBLIC_SITE_URL` 在生产环境配的是真实域名**(部署环境变量,不是 `localhost`)——`resolveGuestBuyerId()` 拼 `emailRedirectTo` 用的就是这个值。
+
+不需要装 custom SMTP,也不需要碰 Email Templates——原因见上面"邮件链接怎么换出登录态"那段。
 
 ### 收付款设计要点(实现前必读)
 

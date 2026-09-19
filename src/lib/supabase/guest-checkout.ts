@@ -17,22 +17,23 @@ export type ResolveGuestBuyerResult =
  * ignoreDuplicates,已存在的账号不会被这次调用覆盖)。
  *
  * 依赖两处手动配置,见 README"Guest 结账"一节:1) 数据库里的
- * get_user_id_by_email() 函数;2) Supabase 后台把 Magic Link 邮件模板换成
- * token_hash 链接、指向 /auth/confirm。这两步没做完,买家会收不到邮件/
- * 邮件里的链接打不开对应的登录态,但下单本身(建 profiles/listing_orders、
- * 走 Stripe Checkout)不受影响。
+ * get_user_id_by_email() 函数;2) Supabase 后台 Authentication → URL
+ * Configuration 把 `{站点域名}/auth/confirm` 加进 Redirect URLs 白名单。
+ * 故意不带 query string(比如 `?next=...`)——保持这个跳转地址是个固定字面量,
+ * 白名单那边照抄就行,不用猜 Supabase 的通配符匹配规则。这两步没做完,买家
+ * 会收不到邮件/邮件里的链接打不开对应的登录态,但下单本身(建
+ * profiles/listing_orders、走 Stripe Checkout)不受影响。
  */
 export async function resolveGuestBuyerId(
   anonClient: SupabaseClient,
-  email: string,
-  redirectNext: string
+  email: string
 ): Promise<ResolveGuestBuyerResult> {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
   const { error: otpError } = await anonClient.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: `${siteUrl}/auth/confirm?next=${encodeURIComponent(redirectNext)}`,
+      emailRedirectTo: `${siteUrl}/auth/confirm`,
     },
   });
 
