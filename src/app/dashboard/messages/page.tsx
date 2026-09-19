@@ -22,16 +22,28 @@ export default async function MessagesPage() {
   const messages = (messageRows ?? []) as ListingMessage[];
 
   // 按 (listing_id, 对方 id) 分组,已经按时间倒序,第一条命中的就是每个会话最新的一条。
+  // hasUnread 要扫这个会话里的每一条(不只是最新一条)——卖家可能在买家发完新消息
+  // 后自己又回了一句,这样"最新一条"是自己发的、read_at 天然是 null,但会话本身
+  // 还有更早一条对方发的未读消息,不能因为看最新一条就漏掉。
   const threads = new Map<
     string,
-    { listingId: string; otherUserId: string; lastMessage: ListingMessage }
+    { listingId: string; otherUserId: string; lastMessage: ListingMessage; hasUnread: boolean }
   >();
   for (const message of messages) {
     const otherUserId =
       message.sender_id === user.id ? message.receiver_id : message.sender_id;
     const key = `${message.listing_id}:${otherUserId}`;
-    if (!threads.has(key)) {
-      threads.set(key, { listingId: message.listing_id, otherUserId, lastMessage: message });
+    const isUnreadForMe = message.receiver_id === user.id && !message.read_at;
+    const existing = threads.get(key);
+    if (!existing) {
+      threads.set(key, {
+        listingId: message.listing_id,
+        otherUserId,
+        lastMessage: message,
+        hasUnread: isUnreadForMe,
+      });
+    } else if (isUnreadForMe) {
+      existing.hasUnread = true;
     }
   }
   const threadList = [...threads.values()];
@@ -70,17 +82,28 @@ export default async function MessagesPage() {
           <Link
             key={`${thread.listingId}:${thread.otherUserId}`}
             href={`/dashboard/messages/${thread.listingId}/${thread.otherUserId}`}
-            className="rounded-xl border border-zinc-200 p-4 transition-colors hover:bg-zinc-50"
+            className={`rounded-xl border p-4 transition-colors hover:bg-zinc-50 ${
+              thread.hasUnread ? "border-zinc-300 bg-zinc-50" : "border-zinc-200"
+            }`}
           >
             <div className="flex items-center justify-between gap-2">
-              <p className="font-medium text-zinc-900">
+              <p className="flex items-center gap-2 font-medium text-zinc-900">
                 {namesById.get(thread.otherUserId) ?? "Anonymous"}
+                {thread.hasUnread && (
+                  <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                    New
+                  </span>
+                )}
               </p>
               <span className="text-xs text-zinc-400">
                 {listingsById.get(thread.listingId) ?? "Listing"}
               </span>
             </div>
-            <p className="mt-1 line-clamp-1 text-sm text-zinc-500">
+            <p
+              className={`mt-1 line-clamp-1 text-sm ${
+                thread.hasUnread ? "font-semibold text-zinc-800" : "text-zinc-500"
+              }`}
+            >
               {thread.lastMessage.body || (thread.lastMessage.image_url ? "📷 Photo" : "")}
             </p>
           </Link>
