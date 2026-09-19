@@ -48,7 +48,9 @@ export function PriceCardManager({
         <p className={labelClass}>Background image (optional)</p>
         <p className="text-xs text-zinc-500">
           Shown behind your price list on your public profile — e.g. a
-          branded rate-card graphic you&apos;ve already designed.
+          branded rate-card graphic you&apos;ve already designed. The text on
+          top is dark, so a light-colored or light-toned image works best —
+          a busy or dark photo can make the prices hard to read.
         </p>
         {imageUrl && (
           <div className="h-28 w-full max-w-sm overflow-hidden rounded-xl bg-zinc-100">
