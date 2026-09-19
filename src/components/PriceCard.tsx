@@ -20,7 +20,7 @@ export function PriceCard({
         className="mt-3 overflow-hidden rounded-2xl border border-zinc-200 bg-cover bg-center"
         style={imageUrl ? { backgroundImage: `url(${imageUrl})` } : undefined}
       >
-        <div className={imageUrl ? "bg-white/90 p-4 backdrop-blur-sm" : "bg-zinc-50 p-4"}>
+        <div className={imageUrl ? "bg-white/70 p-4 backdrop-blur-[2px]" : "bg-zinc-50 p-4"}>
           <ul className="flex flex-col divide-y divide-zinc-200">
             {items.map((item) => (
               <li key={item.id} className="py-2 text-sm">
