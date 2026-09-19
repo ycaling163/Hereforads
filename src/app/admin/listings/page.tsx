@@ -31,7 +31,7 @@ export default async function AdminListingsPage({
   const { status: statusParam } = await searchParams;
   const activeTab = TABS.some((t) => t.status === statusParam)
     ? (statusParam as ListingStatus | "all")
-    : "pending_review";
+    : "active";
 
   // 管理员这几个页面用 service_role client 查全站数据,绕过 RLS(RLS 本来就只让
   // 卖家看自己的 listing),访问权限完全靠上面 AdminLayout 的 requireAdmin() 把关,
@@ -61,8 +61,11 @@ export default async function AdminListingsPage({
         Moderate listings
       </h1>
       <p className="mt-2 text-zinc-600">
-        New listings wait here until approved — buyers can&apos;t see them
-        before that.
+        Listings go live the moment a seller publishes them — no pre-publish
+        review anymore (2026-09-19). Use this page to spot-check or act on
+        reports: Remove takes any listing down immediately, in any status.
+        &ldquo;Pending review&rdquo;/&ldquo;Rejected&rdquo; only show older
+        listings from before this change.
       </p>
 
       <div className="mt-6 flex flex-wrap gap-2 border-b border-zinc-200 pb-4">

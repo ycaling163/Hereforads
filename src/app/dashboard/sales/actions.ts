@@ -30,14 +30,26 @@ export async function markDeliveredAction(
     return { error: "Please provide a link the buyer can use to verify delivery" };
   }
 
-  const { data: order } = await supabase
-    .from("listing_orders")
-    .select("seller_id,status")
-    .eq("id", orderId)
-    .single();
+  const [{ data: order }, { data: profile }] = await Promise.all([
+    supabase.from("listing_orders").select("seller_id,status").eq("id", orderId).single(),
+    supabase.from("profiles").select("stripe_onboarded").eq("id", user.id).single(),
+  ]);
 
   if (!order || order.seller_id !== user.id || order.status !== "paid_in_escrow") {
     return { error: "This order can't be marked as delivered right now" };
+  }
+
+  // 发布免审核 + KYC 后置(2026-09-19 加,见 README 同名一节):卖家发布/接单
+  // 都不要求先做 Stripe KYC,但标记交付会开始买家确认窗口的倒计时,窗口一到
+  // 就要真的发起 Stripe Transfer 给卖家——这时候卖家必须已经连好 Stripe,不然
+  // 到时候 releaseOrderPayout 会失败(见 dashboard/purchases 的
+  // payout_failed 错误提示)。在这里拦一道,逼卖家在真正有买家付了钱等交付
+  // 的这一刻去完成 KYC,而不是等放款失败了才发现。
+  if (!profile?.stripe_onboarded) {
+    return {
+      error:
+        "Connect Stripe before marking this delivered — you need it set up to get paid when this order releases.",
+    };
   }
 
   const { data: updatedRows, error } = await supabase

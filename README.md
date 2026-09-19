@@ -758,16 +758,15 @@ alter table public.listing_orders add column if not exists buyer_address text;
 insert into public.admins (user_id) values ('<你自己账号的 uuid,去 profiles 表里查>');
 ```
 
-### `listings.status` 状态机(更新)
+### `listings.status` 状态机(2026-09-19 起已改,见下面"发布免审核 + KYC 后置"一节)
 
 ```
-draft --(卖家连好 Stripe 提交)--> pending_review --(管理员 approve)--> active --(管理员 remove)--> removed
-                                       |
-                                       +--(管理员 reject)--> rejected
-active --(管理员 remove)--> removed
+(发布)--> active --(管理员 remove)--> removed
 ```
 
-`draft`/`pending_review`/`rejected`/`removed` 这几个状态买家和首页都看不到(`isVisible = status==='active' || isOwnListing` 这条判断没变,新状态自然被挡住),卖家自己在 `/dashboard/my-listings` 能看到全部状态、包括是被拒绝还是被下架。**2026-09-18 后期加了编辑入口**(`/dashboard/my-listings/[id]/edit`,见下面"卖家编辑/删除 listing"一节),但**`rejected` 状态编辑后不会自动改回 `pending_review` 重新排队**——只有 `active` 编辑后会(内容审核通过后又改了,需要重新审核,理由跟这条安全洞一样),`rejected`/`draft` 编辑后状态原样不变,卖家要重新提交审核目前还是得联系人工,这条没有一并做。
+这是 2026-09-19 之后的状态机,新发布的 listing 直接落在 `active`,不再经过 `pending_review`/`draft`/`rejected`——这几个值还留在 `listing_status` 这个 Postgres 枚举里(没有删类型定义,是为了不影响改动之前发布的老数据),`draft`/`pending_review`/`rejected` 只会出现在 2026-09-19 之前发布的老 listing 上,新的发布/编辑流程都不会再产生这三个值。老状态机(`draft --(卖家连好 Stripe 提交)--> pending_review --(管理员 approve)--> active`,`pending_review --(管理员 reject)--> rejected`)的历史记录见 git blame,这里不重复贴一遍。
+
+`removed` 这个状态买家和首页都看不到(`isVisible = status==='active' || isOwnListing` 这条判断没变),卖家自己在 `/dashboard/my-listings` 能看到全部状态。编辑 listing(`/dashboard/my-listings/[id]/edit`)**不会**改变 `status`——2026-09-18 那版"编辑 active listing 会退回 pending_review 重新审核"的规则在 2026-09-19 随着"发布免审核"一起去掉了,理由很直接:发布本身都不需要人工批准,编辑也没道理需要卡审核。
 
 `is_featured`(管理员推荐/置顶)跟 `status` 是两个独立的布尔量,只在 `status='active'` 时才有意义,首页"Featured listings"和 `/listings` 列表都是 `order(is_featured desc, created_at desc)`,标了 `is_featured` 的排在最前面,卡片和列表页角标一个 "⭐ Featured"。
 
@@ -849,7 +848,7 @@ revoke update (status, is_featured)
 
 - **`/dashboard/my-listings/[id]/edit`**(`page.tsx` + `actions.ts` 的 `updateListingAction`):复用 `ListingForm.tsx`(跟发布新 listing 是同一个表单组件,`initialListing` 预填,不传 `duplicatedFromTitle` 所以不会出现复制那条的提示条),校验逻辑也复用了同一份(`src/lib/listingFormValidation.ts` 的 `parseListingFormFields`,从 `new-listing/actions.ts` 里抽出来的,创建和编辑共用,避免同一套校验写两遍)。进页面时会先查一次这条 listing 的 `seller_id` 是不是当前登录用户自己的,不是的话 `notFound()`,不依赖前端隐藏链接。
 - **图片能单张删除/追加**:`ListingForm.tsx` 里"已上传的媒体"从纯预览改成每张图右上角有个悬浮 ✕ 删除按钮(`useState` 管理,删了就不提交对应的隐藏 `existing_media` input),配合原有的"追加新文件"上传框,能做到"删掉旧封面、传一张新的"这种操作,不用做拖拽排序。保存时,提交上来的 `existing_media` 只认真的是这个用户自己在 `ad-space-photos` bucket 下的文件路径(校验路径里包含 `/object/public/ad-space-photos/{user_id}/`),没有无条件相信前端传来的 URL 字符串;新 `media_urls` 落库成功之后,才把这次被删掉的旧图从 storage 里真的删掉(先存库后删文件,顺序跟头像/banner 那次修复一样,避免存库失败但文件已经没了的情况)。
-- **编辑已经 `active` 的 listing 会自动退回 `pending_review`**:内容审核通过之后又被改了,如果不重新审核就等于审核形同虚设(跟上面"顺手补的一个安全洞"防的是同一类问题,只是这次是从"编辑"这个新入口冒出来的,得一起堵上)。`listings.status` 这一列已经被 `revoke update ... from authenticated` 收回了(见上面那条),所以这个状态回退用的是 `createServiceClient()`(服务端 service_role key),不是走普通登录态 client;即便用了绕过 RLS 的 service_role,查询上还是老老实实带了 `.eq("seller_id", user.id).eq("status", "active")` 这两个条件,不依赖 RLS 也不会变成一个可以被滥用的"通用改状态"入口。**`draft`/`rejected`/`pending_review`/`paused`/`removed` 编辑后状态不变**,只处理了 `active` 这一种情况,`rejected` 编辑后不会自动重新排队进审核(见上面"已知欠缺"里那条),这是刻意的范围控制,不是漏做。**2026-09-19 加了一个例外:只改 `price_amount`/`price_currency`/`pricing_unit`(标题/描述/类目/`ad_type`/投放位/媒体图一项都没变)不会退回 `pending_review`**——这三列不是内容审核的对象,加这条主要是配合"广告类型"一节里 `custom` 类型的场景:买卖双方私信谈好价格后,卖家改价能立刻生效、买家马上能按新价下单,不用等管理员重新批准这条本来内容就没变过的 listing。判断逻辑在 `updateListingAction` 里(`isPriceOnlyChange`),逐字段跟改之前的原始行比对,只要三列价格字段之外任何一项变了就还是老规矩退回审核。
+- ~~编辑已经 `active` 的 listing 会自动退回 `pending_review`~~——**这条规则 2026-09-19 已经随"发布免审核 + KYC 后置"一起去掉了**(见下面同名一节),`updateListingAction` 现在不会改动 `status`。保留这条历史记录是因为下面这段解释了当初为什么要用 `createServiceClient()` 而不是普通 client 去改 `status`——这个技术背景(`listings.status` 被 `revoke update ... from authenticated` 收回,只能靠 service_role 写)对以后任何需要碰 `status` 列的新功能仍然成立,不是过时信息:`listings.status` 这一列已经被 `revoke update ... from authenticated` 收回了(见上面"顺手补的一个安全洞"一节),不管是审核回退还是别的什么改 `status` 的需求,都得走 `createServiceClient()`(服务端 service_role key),不能走普通登录态 client。
 - **删除**:`/dashboard/my-listings` 每条 listing 旁边加了 "Delete"(复用现成的 `ConfirmSubmitForm` 弹确认框组件,列表页/社交账号删除按钮当年就是这个组件),`deleteListingAction` 先校验 `seller_id` 是自己的,删除数据库行走的是普通登录态 client(RLS 里 `sellers can delete own listings` 这条策略本来就有,不需要 service_role)。**`listing_orders.listing_id` 引用 `listings(id)` 时没有声明 `on delete cascade`**(默认是 `no action`/外键约束),所以一条有过任何订单(哪怕是很久以前已经完成的)的 listing 删不掉,Postgres 会直接拒绝、报外键约束错误——这是故意保留的行为,不是 bug:不然删掉 listing 会让买家的历史订单突然指向一条不存在的记录。代码里把这种情况识别出来(`error.message` 里包含 "foreign key"),转成友好提示"有订单历史,删不掉,需要联系管理员",而不是把 Postgres 原始报错糊到用户脸上。删除成功后,这条 listing 的 `media_urls` 也会跟着从 storage 里清掉(同样是"先确认数据库那边真的删了,再删文件"的顺序)。
 - **已知限制**:管理员的下架(`removed`)/推荐(`is_featured`)那两列还是只有 `/admin/listings` 能碰,这次没有给卖家开放"暂停/paused"这个自助操作(`listings.status` 整列都被 REVOKE 了,卖家自助暂停需要另外一个专门的 service_role action,这次没做,只做了用户明确要的"编辑"和"删除")。
 - 验证方式:`npm run build` + `npx eslint src` 全绿。这个开发环境连不上真实 Supabase 项目,没有用真实账号跑过"编辑一条 active listing → 确认状态真的退回 pending_review"、"删除一条有订单的 listing → 确认真的报错而不是误删"这两条关键路径,上线后建议人工各测一次。
@@ -884,6 +883,36 @@ alter table public.listings add column if not exists ad_type public.ad_type;
 ```
 
 不需要新的 RLS 策略——这一列走的是 `listings` 表原有的 insert/update 策略(`auth.uid() = seller_id`),没有单独授权的必要。
+
+## 发布免审核 + KYC 后置(2026-09-19 决策记录)
+
+**这次讨论的产品定位**:团队想把 HereForAds 定位成一个轻量工具型平台,不是每一条 listing 都要人工把关的重内容平台。2026-09-18 才加上的"必须先做 Stripe KYC + 管理员批准才能上线"这套流程,被认为对新用户太重——刚注册的卖家发一条广告要等审核通过才能被买家看到,容易在这个等待期就流失掉。这次改成"发布即上线,问题事后处理"。
+
+**改了什么**:
+
+1. **发布不再要求 `stripe_onboarded`**——`createListingAction` 不再检查这个字段,新 listing 一律直接 `status: "active"`,买家立刻能看到、能下单。之前"没连 Stripe 就只能停在 draft"的逻辑整个删掉了。
+2. **发布不再进管理员审核队列**——不再有 `pending_review` 这一步,`/admin/listings` 从"发布前必经的审核关卡"变成"事后监督工具":管理员可以在任意状态下用 `removeListingAction` 把一条 listing 立刻下架(这个 action 本来就支持任意状态,一直没变过),配合 `/admin/users` 的封号、footer 联系表单收到的举报,构成"先上线、有问题再处理"的事后机制。默认 tab 从"Pending review"改成了"Active"(反正以后基本不会再有新的 pending_review 了)。
+3. **编辑 listing 不再退回审核**——见上面"`listings.status` 状态机"一节,`updateListingAction` 不再改 `status`。
+4. **KYC 往后挪,挪到真正需要它的那一刻**——技术上站得住脚:这个平台用的是 Charges & Transfers 模式,买家付款时钱先进平台自己的 Stripe 账户(`src/app/listings/[id]/actions.ts` 创建 Checkout session 时没有 `transfer_data`/`application_fee_amount`),真正需要卖家的 Stripe Connect 账户存在,是订单走到"确认收货→放款"那一步(`src/lib/stripe/release.ts` 的 `releaseOrderPayout`)才发起 Transfer。中间隔着"买家付款→卖家标记交付→买家确认/超时"这几步,少说也有几天缓冲。所以卖家理论上可以先发布、等真的有人要买了再去连 Stripe,不用一上来就走 KYC 吓退还在观望的新用户。
+   - **发布时**(`/dashboard/new-listing`):没连 Stripe 会看到一条提示,告诉他们能正常发布/被买到,只是收不到钱要先连 Stripe——不阻塞发布。
+   - **`/dashboard/my-listings`**:如果有 `active` 的 listing 但还没连 Stripe,顶部会有一条提醒("你的广告已经在线,买家随时可能下单,记得去连 Stripe")。
+   - **标记交付时**(`/dashboard/sales` 的 `markDeliveredAction`):**这一步硬性要求 `stripe_onboarded`**,没连 Stripe 直接拒绝、报错提示去连——这是真正的把关点,卡在"钱马上要动"之前,而不是等 `releaseOrderPayout` 真的因为没有 Connect 账户而失败(那样订单会卡在一个需要人工介入的 `payout_failed` 状态,比在标记交付这一步就拦下来更麻烦)。
+5. **发布时新增两个必勾选框**(`ListingForm.tsx`,只在创建新 listing 时出现,编辑不会重新问):
+   - "我拥有这个账号(或有明确授权在上面接广告),内容是原创的、不涉及版权纠纷,虚假或侵权内容导致的法律责任由我自己承担"
+   - "我同意平台的 Terms of Service"
+   两个都是 `required`,`createListingAction` 服务端也会再校验一遍(防止绕过表单直接提交)。勾选时间戳存进 `listings.rights_attested_at`/`terms_accepted_at` 这两个新列,作为"卖家当时确认过"的留痕。
+6. **Terms 页更新**——`src/app/terms/page.tsx` 第 3 条去掉了"我们审核后才上线"的措辞,改成"发布即上线,不代表我们核实过卖家的任何声明",并加了一段对应上面第一个勾选框的内容,明确写"虚假/未授权/侵权内容导致的法律责任由发布者自己承担"。**这仍然是草稿页面,没有律师审过**,上线前建议找律师过一遍这段免责措辞是否真的站得住(尤其是"平台责任边界"一节已经讨论过的:Stripe 层面的拒付/欺诈风险没法通过 ToS 完全甩给发布者,这条免责主要覆盖的是第三方版权/欺诈这类法律责任,不是 Stripe dispute rate 那部分风险)。
+
+**这次没有做的**(明确排除在范围外):没有做任何自动化内容检测(关键词过滤、图片识别之类),事后监督完全靠人工举报 + 管理员手动 Remove/Ban,这是刻意的范围控制——先看实际滥用情况有多严重,再决定要不要投入自动化审核。
+
+**数据库变更**:
+
+```sql
+alter table public.listings add column if not exists rights_attested_at timestamptz;
+alter table public.listings add column if not exists terms_accepted_at timestamptz;
+```
+
+不需要新的 RLS 策略(走 listings 表原有的 insert 策略),也不需要改 `listing_status` 枚举类型(`draft`/`pending_review`/`rejected` 这几个值继续留着,只是新流程不会再产生)。
 
 ## 部署(Vercel)
 

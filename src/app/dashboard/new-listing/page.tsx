@@ -60,19 +60,15 @@ export default async function NewListingPage({
           : "Describe the ad space or service you're offering. Please write in English — this marketplace doesn't auto-translate listings yet."}
       </p>
 
-      {!profile?.stripe_onboarded ? (
+      {!profile?.stripe_onboarded && (
         <p className="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          You haven&apos;t finished Stripe onboarding yet. You can still draft
-          a listing below, but it stays hidden from buyers until you{" "}
+          You haven&apos;t connected Stripe yet — you can still publish and
+          buyers can find and buy this listing right away, but you&apos;ll
+          need to{" "}
           <Link href="/dashboard/stripe-connect" className="underline">
             finish Stripe setup
-          </Link>
-          .
-        </p>
-      ) : (
-        <p className="mt-4 rounded-lg bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
-          New listings are reviewed by our team before they go live —
-          buyers won&apos;t see it until it&apos;s approved.
+          </Link>{" "}
+          before you can get paid out on a sale.
         </p>
       )}
 
