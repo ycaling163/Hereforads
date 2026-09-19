@@ -1,3 +1,4 @@
+import { AD_TYPE_LABELS } from "@/lib/supabase/enums";
 import type { PriceCardItem } from "@/lib/supabase/types";
 
 // Public-facing rate card on a seller's profile (see README"Price Card"一节)
@@ -26,7 +27,9 @@ export function PriceCard({
                 key={item.id}
                 className="flex items-center justify-between gap-3 py-2 text-sm"
               >
-                <span className="text-zinc-700">{item.title}</span>
+                <span className="text-zinc-700">
+                  {AD_TYPE_LABELS[item.ad_type]} — {item.platform}
+                </span>
                 <span className="shrink-0 font-medium text-zinc-900">{item.price}</span>
               </li>
             ))}

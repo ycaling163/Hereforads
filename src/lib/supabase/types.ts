@@ -68,14 +68,16 @@ export interface SocialAccount {
   created_at: string;
 }
 
-// 个人主页的价目表(2026-09-19 加,见 README"Price Card"一节)——一行一个
-// "标题 + 价格",都是自由文本(比如 "Static Image Ad (TikTok)" / "£20"),不
-// 绑定 ad_type/social_platform 这些固定枚举,卖家想怎么写都行。纯展示用,
-// 跟买家实际下单的 listing 完全独立,不代表真的有这么一条 listing 在卖。
+// 个人主页的价目表(2026-09-19 加,见 README"Price Card"一节)——一行是
+// "广告类型(复用 listings 那个固定的 ad_type 枚举)+ 平台(自由文本,前端给一份
+// 常见平台下拉,选 Other 才需要自己打字,见 PRICE_CARD_PLATFORM_OPTIONS)+ 起价"。
+// 卖家不用自己想怎么写文案。纯展示用,跟买家实际下单的 listing 完全独立,不
+// 代表真的有这么一条 listing 在卖。
 export interface PriceCardItem {
   id: string;
   seller_id: string;
-  title: string;
+  ad_type: AdType;
+  platform: string;
   price: string;
   sort_order: number;
   created_at: string;

@@ -7,8 +7,10 @@ import { parseFollowerCount } from "@/lib/format";
 import { storagePathFromPublicUrl } from "@/lib/storage";
 import { normalizeUsername } from "@/lib/username";
 import {
+  AD_TYPES,
   LISTING_CATEGORIES,
   SOCIAL_PLATFORMS,
+  type AdType,
   type ListingCategory,
   type SocialPlatform,
 } from "@/lib/supabase/enums";
@@ -415,11 +417,18 @@ export async function addPriceCardItemAction(
     redirect("/login");
   }
 
-  const title = String(formData.get("title") ?? "").trim();
+  const adType = String(formData.get("ad_type") ?? "");
+  const platform = String(formData.get("platform") ?? "").trim();
   const price = String(formData.get("price") ?? "").trim();
 
-  if (!title || !price) {
-    return { error: "Please fill in both a title and a price" };
+  if (!(AD_TYPES as readonly string[]).includes(adType)) {
+    return { error: "Please choose an ad type" };
+  }
+  if (!platform) {
+    return { error: "Please choose or enter a platform" };
+  }
+  if (!price) {
+    return { error: "Please enter a starting price" };
   }
 
   const { data: lastItem } = await supabase
@@ -432,7 +441,8 @@ export async function addPriceCardItemAction(
 
   const { error } = await supabase.from("seller_price_card_items").insert({
     seller_id: user.id,
-    title,
+    ad_type: adType as AdType,
+    platform,
     price,
     sort_order: (lastItem?.sort_order ?? -1) + 1,
   });
@@ -458,16 +468,23 @@ export async function updatePriceCardItemAction(
     redirect("/login");
   }
 
-  const title = String(formData.get("title") ?? "").trim();
+  const adType = String(formData.get("ad_type") ?? "");
+  const platform = String(formData.get("platform") ?? "").trim();
   const price = String(formData.get("price") ?? "").trim();
 
-  if (!title || !price) {
-    return { error: "Please fill in both a title and a price" };
+  if (!(AD_TYPES as readonly string[]).includes(adType)) {
+    return { error: "Please choose an ad type" };
+  }
+  if (!platform) {
+    return { error: "Please choose or enter a platform" };
+  }
+  if (!price) {
+    return { error: "Please enter a starting price" };
   }
 
   const { data: updatedRows, error } = await supabase
     .from("seller_price_card_items")
-    .update({ title, price })
+    .update({ ad_type: adType as AdType, platform, price })
     .eq("id", itemId)
     .eq("seller_id", user.id)
     .select("id");

@@ -1,7 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
+import {
+  AD_TYPES,
+  AD_TYPE_LABELS,
+  PRICE_CARD_PLATFORM_OPTIONS,
+} from "@/lib/supabase/enums";
 import type { PriceCardItem } from "@/lib/supabase/types";
 import { PriceCardItemRow } from "./PriceCardItemRow";
 import {
@@ -34,6 +39,7 @@ export function PriceCardManager({
     updatePriceCardImageAction,
     imageInitialState
   );
+  const [platformChoice, setPlatformChoice] = useState("");
 
   return (
     <div className="flex flex-col gap-6">
@@ -88,28 +94,63 @@ export function PriceCardManager({
         className="grid grid-cols-2 gap-3 rounded-2xl border border-zinc-200 p-4"
       >
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="title" className={labelClass}>
-            Title
+          <label htmlFor="ad_type" className={labelClass}>
+            Ad type
           </label>
-          <input
-            id="title"
-            name="title"
-            type="text"
-            required
-            placeholder="e.g. Static Image Ad (TikTok)"
-            className={inputClass}
-          />
+          <select id="ad_type" name="ad_type" required defaultValue="" className={inputClass}>
+            <option value="" disabled>
+              Choose an ad type
+            </option>
+            {AD_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {AD_TYPE_LABELS[type]}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="flex flex-col gap-1.5">
+          <label htmlFor="platform_choice" className={labelClass}>
+            Platform
+          </label>
+          <select
+            id="platform_choice"
+            value={platformChoice}
+            onChange={(e) => setPlatformChoice(e.target.value)}
+            required
+            className={inputClass}
+          >
+            <option value="" disabled>
+              Choose a platform
+            </option>
+            {PRICE_CARD_PLATFORM_OPTIONS.map((platform) => (
+              <option key={platform} value={platform}>
+                {platform}
+              </option>
+            ))}
+            <option value="other">Other</option>
+          </select>
+          {platformChoice === "other" ? (
+            <input
+              name="platform"
+              type="text"
+              required
+              placeholder="Type the platform name"
+              className={inputClass}
+            />
+          ) : (
+            <input type="hidden" name="platform" value={platformChoice} />
+          )}
+        </div>
+        <div className="col-span-2 flex flex-col gap-1.5">
           <label htmlFor="price" className={labelClass}>
-            Price
+            Starting price
           </label>
           <input
             id="price"
             name="price"
             type="text"
             required
-            placeholder="e.g. £20"
+            placeholder="e.g. £20 or From £20"
             className={inputClass}
           />
         </div>
