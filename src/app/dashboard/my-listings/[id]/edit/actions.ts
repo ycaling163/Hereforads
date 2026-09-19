@@ -127,7 +127,24 @@ export async function updateListingAction(
   // revoked from `authenticated` for exactly this reason (see README
   // "顺手补的一个安全洞"), so this needs the service-role client — still
   // scoped to this row/owner/prior status, not a general status-setting hole.
-  if (original.status === "active") {
+  //
+  // 2026-09-19 加的例外:只改价格(price_amount/price_currency/pricing_unit)
+  // 不触发重新审核——这三列不是内容审核的对象(审核审的是标题/描述/图片/类目
+  // /投放位这些"这个广告到底是什么"的信息,不是卖多少钱),加这条主要是为了
+  // "custom" 广告类型的场景:买卖双方私信谈好价格后,卖家改价能立刻生效让买家
+  // 下单,不用等管理员重新批准。只要标题/描述/类目/Ad type/投放位/媒体图任何
+  // 一项也变了,还是老规矩退回 pending_review。
+  const isPriceOnlyChange =
+    fields.title === original.title &&
+    fields.description === original.description &&
+    fields.adType === original.ad_type &&
+    fields.socialAccountId === original.social_account_id &&
+    fields.isWebsitePlacement === original.is_website_placement &&
+    JSON.stringify([...fields.categories].sort()) ===
+      JSON.stringify([...original.categories].sort()) &&
+    JSON.stringify(mediaUrls) === JSON.stringify(original.media_urls);
+
+  if (original.status === "active" && !isPriceOnlyChange) {
     await createServiceClient()
       .from("listings")
       .update({ status: "pending_review" })
