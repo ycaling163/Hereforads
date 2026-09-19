@@ -1,6 +1,8 @@
+import { HiOutlineGlobeAlt } from "react-icons/hi2";
 import { ListingCard } from "@/components/ListingCard";
 import { SocialStatCard } from "@/components/SocialStatCard";
 import { LISTING_CATEGORY_LABELS } from "@/lib/supabase/enums";
+import { displayWebsiteUrl } from "@/lib/format";
 import type { Listing, Profile, SellerProfile, SocialAccount } from "@/lib/supabase/types";
 
 // Shared by /sellers/[id] (the stable, always-available link) and
@@ -65,9 +67,10 @@ export function SellerProfileView({
                 href={sellerExtra.website_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-1.5 inline-flex items-center gap-1 text-sm text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-900"
+                className="mt-1.5 inline-flex items-center gap-1.5 text-sm text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-900"
               >
-                {sellerExtra.website_url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                <HiOutlineGlobeAlt className="h-4 w-4 shrink-0 text-zinc-500" />
+                {displayWebsiteUrl(sellerExtra.website_url)}
               </a>
             )}
             {sellerExtra?.content_categories &&

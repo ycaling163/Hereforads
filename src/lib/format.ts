@@ -1,3 +1,12 @@
+// Displays a stored website URL without the scheme, always with a "www."
+// prefix for a familiar look — sellers usually type "example.com" without
+// it. Checked case-insensitively but left as stored otherwise, so a seller
+// who did type "www." themselves doesn't end up with "www.www.example.com".
+export function displayWebsiteUrl(url: string): string {
+  const withoutScheme = url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+  return /^www\./i.test(withoutScheme) ? withoutScheme : `www.${withoutScheme}`;
+}
+
 // Prefixes a social handle with "@" for display, e.g. "7smilelinda" ->
 // "@7smilelinda". Leaves it alone if the seller already typed the "@"
 // themselves, so we never end up with "@@handle".
