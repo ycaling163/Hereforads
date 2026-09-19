@@ -934,17 +934,23 @@ alter table public.listings add column if not exists terms_accepted_at timestamp
 
 **产品需求**:买家点进卖家的个人主页(`/sellers/[id]`/`/[username]`)想快速知道大概价位,不想一条一条点开 listing 才能看到价格。加一个"价目表"卡片,展示在个人主页 "Social reach" 旁边(桌面宽度下两栏并排,复制截图里红框的位置)。
 
-**做成了结构化列表,不是一张图**:卖家在 `/dashboard/profile` 新的 "Price card" 板块里,一行一行填"标题 + 价格"(自由文本,比如标题填 `Static Image Ad (TikTok)`,价格填 `£20`),可以选配一张背景图。这些行**不绑定** `ad_type`/`social_platform` 这些固定枚举,也**不是真的可下单的 listing**——纯展示、给买家一个大致预期,真正下单还是要点进具体的 listing 走 Buy now(卖家管理页和公开页都有文案说明这一点,避免被误认为是能直接结算的报价)。
+**做成了结构化列表,不是一张图,每行三个字段都是选的、不是自己想文案**(2026-09-19 中途改过一版:最早每行是"标题+价格"两个自由文本框,发现卖家不知道标题该怎么写,改成了下面这版):
+
+- **Ad type**:下拉选,复用 `listings` 那个固定的 `ad_type` 枚举(`AD_TYPES`/`AD_TYPE_LABELS`),跟发布 listing 时选的是同一份选项
+- **Platform**:下拉选一份常见平台列表(`PRICE_CARD_PLATFORM_OPTIONS`,新加在 `enums.ts` 里——**故意不复用** `SOCIAL_PLATFORMS` 那个绑定真实社交账号/粉丝数的枚举,这里只是一份文案建议清单,列了 TikTok/Instagram/YouTube/X/Facebook/Douyin/小红书/微博/视频号/B 站/Blog-Website),选不到就选 "Other" 弹出一个文本框自己打字。落库的 `seller_price_card_items.platform` 就是一个 `text` 列,不是枚举——不管是选的还是自己打的,存的都是最终这段文字
+- **Starting price**:自由文本(比如 `£20` 或 `From £20`),这个字段留自由文本是因为价格没法用固定选项覆盖
+
+这些行**不是真的可下单的 listing**——纯展示、给买家一个大致预期,真正下单还是要点进具体的 listing 走 Buy now(卖家管理页和公开页都有文案说明这一点,避免被误认为是能直接结算的报价)。
 
 **代码结构**(照抄 `social_accounts` 那一套"列表 + 加一行表单 + 逐行编辑/删除"的既有模式,没有发明新的交互范式):
 
-- 新表 `seller_price_card_items`(id/seller_id/title/price/sort_order),RLS 跟 `social_accounts` 一样(公开可读,只有本人能增删改)
+- 新表 `seller_price_card_items`(id/seller_id/ad_type/platform/price/sort_order),RLS 跟 `social_accounts` 一样(公开可读,只有本人能增删改)
 - `seller_profiles.price_card_image_url`(背景图,可选),上传/替换/删除复用 `updateProfileAction` 那一套 avatar/banner 的存储桶逻辑(先确认新 URL 存库成功,再删旧文件)
 - 管理界面:`src/app/dashboard/profile/PriceCardManager.tsx` + `PriceCardItemRow.tsx`,server actions 加在现有的 `src/app/dashboard/profile/actions.ts` 里(`updatePriceCardImageAction`/`removePriceCardImageAction`/`addPriceCardItemAction`/`updatePriceCardItemAction`/`deletePriceCardItemAction`)
 - 展示组件:`src/components/PriceCard.tsx`,挂在 `SellerProfileView.tsx` 里,跟 "Social reach" 那块一起包进一个 `sm:grid-cols-2` 的两栏布局(桌面宽度下并排,手机上各自占一整行堆叠)——`/sellers/[id]` 和 `/[username]` 两条路由共用这一个 view 组件,两边都要传 `priceCardItems` 这个新 prop
 - 没有做拖拽排序——`sort_order` 就是加入的顺序(insert 时取当前最大值 + 1),想调整顺序目前得删了重加,这是刻意的范围控制,不是漏做
 
-**数据库变更**:
+**数据库变更**(依赖上面"广告类型 ad_type"一节先建好的 `public.ad_type` 枚举类型):
 
 ```sql
 alter table public.seller_profiles add column if not exists price_card_image_url text;
@@ -952,7 +958,8 @@ alter table public.seller_profiles add column if not exists price_card_image_url
 create table public.seller_price_card_items (
   id uuid primary key default gen_random_uuid(),
   seller_id uuid not null references public.profiles(id),
-  title text not null,
+  ad_type public.ad_type not null,
+  platform text not null,
   price text not null,
   sort_order integer not null default 0,
   created_at timestamptz not null default now()

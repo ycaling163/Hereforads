@@ -31,6 +31,25 @@ export const SOCIAL_PLATFORM_LABELS: Record<SocialPlatform, string> = {
   other: "Other",
 };
 
+// Price Card(个人主页价目表,2026-09-19 加)的平台下拉选项——纯 UI 层面的建议
+// 列表,不是数据库枚举(`seller_price_card_items.platform` 就是一个 text 列,
+// 想填什么都行)。故意不复用上面 SOCIAL_PLATFORMS:那边是"已绑定的真实社交
+// 账号"要跟粉丝数据对齐的枚举,这里只是给卖家一份常见平台清单,不用自己想
+// 怎么写,选不到就选 Other 自己打字。
+export const PRICE_CARD_PLATFORM_OPTIONS = [
+  "TikTok",
+  "Instagram",
+  "YouTube",
+  "X (Twitter)",
+  "Facebook",
+  "Douyin",
+  "Xiaohongshu",
+  "Weibo",
+  "WeChat Channels",
+  "Bilibili",
+  "Blog / Website",
+] as const;
+
 /**
  * MVP v2("HereForAds MVP 产品方案"文档)新模型的枚举 —— listings/orders/payments/messages。
  * 跟上面 ad_spaces 时代的枚举并存,不复用,避免混淆两套完全不同的产品形态。

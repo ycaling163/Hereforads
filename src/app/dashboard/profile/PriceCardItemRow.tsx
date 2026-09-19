@@ -2,6 +2,11 @@
 
 import { useActionState, useState } from "react";
 import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
+import {
+  AD_TYPES,
+  AD_TYPE_LABELS,
+  PRICE_CARD_PLATFORM_OPTIONS,
+} from "@/lib/supabase/enums";
 import type { PriceCardItem } from "@/lib/supabase/types";
 import {
   deletePriceCardItemAction,
@@ -19,12 +24,19 @@ export function PriceCardItemRow({ item }: { item: PriceCardItem }) {
   const [isEditing, setIsEditing] = useState(false);
   const updateAction = updatePriceCardItemAction.bind(null, item.id);
   const [state, formAction, pending] = useActionState(updateAction, initialState);
+  const [platformChoice, setPlatformChoice] = useState(
+    (PRICE_CARD_PLATFORM_OPTIONS as readonly string[]).includes(item.platform)
+      ? item.platform
+      : "other"
+  );
 
   if (!isEditing) {
     return (
       <li className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 px-4 py-2.5 text-sm">
         <span className="flex flex-1 items-center justify-between gap-2 pr-2">
-          <span className="text-zinc-700">{item.title}</span>
+          <span className="text-zinc-700">
+            {AD_TYPE_LABELS[item.ad_type]} — {item.platform}
+          </span>
           <span className="font-medium text-zinc-900">{item.price}</span>
         </span>
         <span className="flex shrink-0 items-center gap-3">
@@ -50,21 +62,61 @@ export function PriceCardItemRow({ item }: { item: PriceCardItem }) {
     <li className="rounded-lg border border-zinc-300 p-4">
       <form action={formAction} className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
-          <label htmlFor={`title-${item.id}`} className={labelClass}>
-            Title
+          <label htmlFor={`ad_type-${item.id}`} className={labelClass}>
+            Ad type
           </label>
-          <input
-            id={`title-${item.id}`}
-            name="title"
-            type="text"
+          <select
+            id={`ad_type-${item.id}`}
+            name="ad_type"
             required
-            defaultValue={item.title}
+            defaultValue={item.ad_type}
             className={inputClass}
-          />
+          >
+            {AD_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {AD_TYPE_LABELS[type]}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="flex flex-col gap-1.5">
+          <label htmlFor={`platform_choice-${item.id}`} className={labelClass}>
+            Platform
+          </label>
+          <select
+            id={`platform_choice-${item.id}`}
+            value={platformChoice}
+            onChange={(e) => setPlatformChoice(e.target.value)}
+            required
+            className={inputClass}
+          >
+            {PRICE_CARD_PLATFORM_OPTIONS.map((platform) => (
+              <option key={platform} value={platform}>
+                {platform}
+              </option>
+            ))}
+            <option value="other">Other</option>
+          </select>
+          {platformChoice === "other" ? (
+            <input
+              name="platform"
+              type="text"
+              required
+              defaultValue={
+                (PRICE_CARD_PLATFORM_OPTIONS as readonly string[]).includes(item.platform)
+                  ? ""
+                  : item.platform
+              }
+              placeholder="Type the platform name"
+              className={inputClass}
+            />
+          ) : (
+            <input type="hidden" name="platform" value={platformChoice} />
+          )}
+        </div>
+        <div className="col-span-2 flex flex-col gap-1.5">
           <label htmlFor={`price-${item.id}`} className={labelClass}>
-            Price
+            Starting price
           </label>
           <input
             id={`price-${item.id}`}
