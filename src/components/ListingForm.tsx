@@ -6,6 +6,7 @@ import type { Listing, SocialAccount } from "@/lib/supabase/types";
 import {
   AD_TYPES,
   AD_TYPE_LABELS,
+  CURRENCIES,
   LISTING_CATEGORIES,
   LISTING_CATEGORY_LABELS,
   MIN_LISTING_PRICE,
@@ -21,8 +22,6 @@ export interface ListingFormState {
 const inputClass =
   "rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900";
 const labelClass = "text-sm font-medium text-zinc-700";
-
-const CURRENCIES = ["USD", "GBP", "EUR", "CAD", "AUD", "SGD", "HKD", "JPY"];
 
 export function ListingForm({
   action,

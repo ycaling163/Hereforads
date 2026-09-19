@@ -69,16 +69,21 @@ export interface SocialAccount {
 }
 
 // 个人主页的价目表(2026-09-19 加,见 README"Price Card"一节)——一行是
-// "广告类型(复用 listings 那个固定的 ad_type 枚举)+ 平台(自由文本,前端给一份
-// 常见平台下拉,选 Other 才需要自己打字,见 PRICE_CARD_PLATFORM_OPTIONS)+ 起价"。
-// 卖家不用自己想怎么写文案。纯展示用,跟买家实际下单的 listing 完全独立,不
-// 代表真的有这么一条 listing 在卖。
+// "广告类型(复用 listings 那个固定的 ad_type 枚举)+ 平台(自由文本,可选,前端
+// 给一份常见平台下拉,选 Other 才需要自己打字,见 PRICE_CARD_PLATFORM_OPTIONS)
+// + 起价(金额+币种,展示的时候前面加 "From")+ 备注(可选,自由文本,比如"最终
+// 价格取决于需求")"。卖家不用自己想怎么写文案。纯展示用,跟买家实际下单的
+// listing 完全独立,不代表真的有这么一条 listing 在卖。
 export interface PriceCardItem {
   id: string;
   seller_id: string;
   ad_type: AdType;
-  platform: string;
-  price: string;
+  // 可选——如果这条价目跟平台无关(比如报价本身就是通用的),不强制选。
+  platform: string | null;
+  price_amount: number;
+  price_currency: string;
+  // 可选备注,比如"最终价格取决于需求,具体细节请私信"。
+  note: string | null;
   sort_order: number;
   created_at: string;
 }
