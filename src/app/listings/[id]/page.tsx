@@ -88,7 +88,6 @@ export default async function ListingDetailPage({
 
   const media = listing.media_urls ?? [];
   const isOwnListing = user?.id === listing.seller_id;
-  const isVisitorBuyer = !!user && !isOwnListing;
   // status='draft' listing 只有卖家自己能看到(见 RLS),但直接访问 URL 时还是要
   // 在页面这层挡一下,免得给其他登录用户看见"未发布"的内部状态。
   const isVisible = listing.status === "active" || isOwnListing;
@@ -223,15 +222,8 @@ export default async function ListingDetailPage({
             <div className="mt-4">
               {isOwnListing ? (
                 <p className="text-sm text-zinc-500">This is your own listing.</p>
-              ) : isVisitorBuyer ? (
-                <BuyListingButton listingId={listing.id} />
               ) : (
-                <Link
-                  href="/login"
-                  className="block w-full rounded-full bg-zinc-900 px-6 py-3 text-center text-sm font-medium text-white transition-colors hover:bg-zinc-700"
-                >
-                  Log in to buy
-                </Link>
+                <BuyListingButton listingId={listing.id} isLoggedIn={!!user} />
               )}
             </div>
           </div>

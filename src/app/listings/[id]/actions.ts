@@ -3,7 +3,9 @@
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { stripe } from "@/lib/stripe/server";
+import { EMAIL_PATTERN, resolveGuestBuyerId } from "@/lib/supabase/guest-checkout";
 import type { Listing } from "@/lib/supabase/types";
 
 // 私信图片复用已有的 ad-space-photos bucket,不用新建。
@@ -24,13 +26,40 @@ export async function buyListingAction(
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect("/login");
-  }
-
   const listingId = String(formData.get("listing_id") ?? "");
 
-  const { data: listingRow, error: listingError } = await supabase
+  // Guest 结账(不强制先注册/登录):买家只填邮箱,后台静默建号 + 发登录魔法
+  // 链接,见 src/lib/supabase/guest-checkout.ts 和 README"Guest 结账"一节。
+  // 登录用户走原来的路径(用当前 session 的 client,靠 RLS 保证只能建自己是
+  // buyer_id 的订单);guest 没有 session,下面统一改用 service_role client
+  // 读 listing / 建 order,自己校验一遍权限(listing 存不存在、状态是不是
+  // active、买家是不是卖家本人)。
+  let buyerId: string;
+  let buyerEmail: string | undefined;
+  const db = user ? supabase : createServiceClient();
+
+  if (user) {
+    buyerId = user.id;
+    buyerEmail = user.email;
+  } else {
+    const guestEmail = String(formData.get("guest_email") ?? "").trim().toLowerCase();
+    if (!guestEmail || !EMAIL_PATTERN.test(guestEmail)) {
+      return { error: "Please enter a valid email address" };
+    }
+
+    const resolved = await resolveGuestBuyerId(
+      supabase,
+      guestEmail,
+      "/dashboard/purchases"
+    );
+    if (!resolved.buyerId) {
+      return { error: resolved.error };
+    }
+    buyerId = resolved.buyerId;
+    buyerEmail = guestEmail;
+  }
+
+  const { data: listingRow, error: listingError } = await db
     .from("listings")
     .select("*")
     .eq("id", listingId)
@@ -44,15 +73,15 @@ export async function buyListingAction(
   if (listing.status !== "active") {
     return { error: "This listing isn't available for purchase right now" };
   }
-  if (listing.seller_id === user.id) {
+  if (listing.seller_id === buyerId) {
     return { error: "You can't buy your own listing" };
   }
 
-  const { data: order, error: orderError } = await supabase
+  const { data: order, error: orderError } = await db
     .from("listing_orders")
     .insert({
       listing_id: listing.id,
-      buyer_id: user.id,
+      buyer_id: buyerId,
       seller_id: listing.seller_id,
       amount: listing.price_amount,
       currency: listing.price_currency,
@@ -71,6 +100,7 @@ export async function buyListingAction(
   // 交付 action 和 dashboard/purchases 的 release action。
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
+    customer_email: buyerEmail,
     line_items: [
       {
         price_data: {
@@ -82,7 +112,9 @@ export async function buyListingAction(
       },
     ],
     metadata: { order_id: order.id },
-    success_url: `${SITE_URL}/dashboard/purchases?checkout=success`,
+    success_url: user
+      ? `${SITE_URL}/dashboard/purchases?checkout=success`
+      : `${SITE_URL}/checkout/guest-success?email=${encodeURIComponent(buyerEmail ?? "")}`,
     cancel_url: `${SITE_URL}/listings/${listing.id}?checkout=cancelled`,
   });
 

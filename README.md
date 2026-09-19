@@ -627,6 +627,50 @@ alter table public.profiles add constraint profiles_username_format check (
 
 Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。
 
+## Guest 结账(买家不强制先注册,2026-09-19 加)
+
+**产品决策**:买家点"Buy now"不再被强制跳去 `/login`/`/register`——没登录的访客只需要在按钮上方填一个邮箱就能直接走 Stripe Checkout 付款。付款/托管放款流程本身完全不变(还是 `pending_payment` → `paid_in_escrow` → `delivered` → 买家确认/超时自动确认 → `released`),因为这套流程需要买家事后能回来"确认收货",纯匿名、完全不落任何账号是做不到这一步的。
+
+**实现方式**:选的是"静默建号 + 邮件魔法链接",不是完全匿名订单(那种做法需要新建一套脱离账号体系的 token 订单页,买家没法用站内私信联系卖家,改动量大很多,这次没有做)。具体流程:
+
+1. `src/app/listings/[id]/actions.ts` 的 `buyListingAction` 发现没有登录用户时,读表单里的 `guest_email`;
+2. `src/lib/supabase/guest-checkout.ts` 的 `resolveGuestBuyerId()` 用匿名 key 的 client 调 `supabase.auth.signInWithOtp({ email })`——这个邮箱之前没注册过就静默建一个新账号(不设密码),已经注册过就直接给现有账号发一封登录邮件;
+3. `signInWithOtp` 本身不会把新建用户的 `id` 返回给调用方,所以紧接着用 `service_role` client 调下面新加的 `get_user_id_by_email()` 函数把邮箱查回 `id`,再 upsert 一条 `profiles` 记录(跟 `ensureProfile()` 一样用 `ignoreDuplicates`,不会覆盖已有账号);
+4. 后续插入 `listing_orders`/发起 Stripe Checkout 复用这个 `id` 当 `buyer_id`,跟登录买家走的是同一张表、同一套状态机;
+5. 付款成功的 `success_url` 对 guest 单独指向一个不需要登录的 `/checkout/guest-success` 页面(登录买家的 `success_url` 不变,还是 `/dashboard/purchases`)——guest 这个浏览器里没有 session,直接跳 `/dashboard/purchases` 只会被弹回 `/login`；
+6. guest 收到的邮件里点登录链接,落地到新加的 `src/app/auth/confirm/route.ts`,用 `token_hash` 换一个真正的 session(写 cookie),之后就能像普通登录买家一样在 `/dashboard/purchases` 看订单、确认收货,也能用站内私信联系卖家。
+
+**这次没有改的地方**(明确排除在这次改动范围外,免得以后被误以为也支持了):"Ask the seller" 私信联系卖家仍然要求先登录/走完 guest 的邮件登录环节——没有做匿名留言这块。
+
+**数据库变更**——只加了一个函数,没改任何表结构(`listing_orders.buyer_id`/`profiles.id` 还是引用真实账号,guest 也是一个真实账号,只是建号过程对买家不可见):
+
+```sql
+-- get_user_id_by_email(): service_role 专用,按邮箱查回 auth.users.id。
+-- security definer + 只 grant 给 service_role,不给 anon/authenticated 执行
+-- 权限——不然会变成一个能被任何人拿去探测"这个邮箱是否已注册"的接口。
+create or replace function public.get_user_id_by_email(p_email text)
+returns uuid
+language sql
+security definer
+set search_path = auth, pg_temp
+as $$
+  select id from auth.users where lower(email) = lower(p_email) limit 1;
+$$;
+
+revoke all on function public.get_user_id_by_email(text) from public;
+grant execute on function public.get_user_id_by_email(text) to service_role;
+```
+
+**必须手动做的 Supabase 后台配置(代码/SQL 之外,漏掉任何一步 guest 都收不到能用的登录链接)**:
+
+1. **Authentication → URL Configuration → Redirect URLs**:加一条 `{站点域名}/auth/confirm`(本地开发是 `http://localhost:3000/auth/confirm`),不在白名单里 `signInWithOtp` 会报 redirect 不合法。
+2. **Authentication → Email Templates → Magic Link**:默认模板的链接是 `{{ .ConfirmationURL }}`,点开会直接落在 GoTrue 自己托管的 `/verify` 上做 token 交换,根本不会经过这个项目的 `/auth/confirm` 路由(这个项目至今没有任何页面在处理 URL fragment 里的 `access_token`,所以默认模板在这个项目里其实换不出登录态)。要把模板里的链接换成:
+   ```html
+   <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/dashboard/purchases">Log in</a>
+   ```
+   这是 Supabase 官方 Next.js SSR 教程推荐的做法,`type=email` 是故意的(新版 GoTrue 把 magic link/邮箱确认统一成 `email` 这个 OTP 类型,不是历史上的 `magiclink`)。
+3. **确认 `NEXT_PUBLIC_SITE_URL` 在生产环境配的是真实域名**(部署环境变量,不是 `localhost`)——`resolveGuestBuyerId()` 拼 `emailRedirectTo` 用的就是这个值。
+
 ### 收付款设计要点(实现前必读)
 
 - **卖家必须 `stripe_onboarded = true` 才能把 listing 从 `draft` 推进到 `pending_review`**(2026-09-18 起,`pending_review` 之后还要管理员审核通过才是 `active`,见下面"管理员系统"),发布表单/action 里两头都要校验(RLS 只挡"是不是自己的 listing",挡不住状态值本身)
