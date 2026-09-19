@@ -884,6 +884,22 @@ alter table public.listings add column if not exists ad_type public.ad_type;
 
 不需要新的 RLS 策略——这一列走的是 `listings` 表原有的 insert/update 策略(`auth.uid() = seller_id`),没有单独授权的必要。
 
+### 类目加一个 "Any category" 选项,详情页布局微调(2026-09-19 加,自测反馈)
+
+上线 `ad_type` 之后自测发现三个问题,这次一起修:
+
+1. **类目必选,但有些卖家什么类目都能接**——之前"Ad categories you accept"是纯多选,必须至少选一个,没有"我全都接"这个快捷方式,逼着接受任意类目的卖家把 19 个类目全勾一遍,详情页也会因此堆出一整排类目标签。加了一个 `any` 值(`LISTING_CATEGORIES`/`listing_category` 枚举新增),跟具体类目互斥:`ListingForm.tsx` 勾选"Any category"之后隐藏具体类目的勾选格,提交时只带 `categories=any` 一个值;`parseListingFormFields` 也做了服务端归一化(万一前端状态出岔子,只要提交里出现 `any` 就强制只存 `['any']`),这样详情页"Accepts ads from"那一行天然只会渲染一个"Any category"标签,不会变成"any + 19 个具体类目"堆一起。**`seller_profiles.content_categories`(创作者自己的内容领域,复用同一个枚举类型)故意没加这个选项**——"我的内容领域是任意"这个语义不成立,`ProfileForm.tsx` 那边的勾选列表过滤掉了 `any`。
+2. **详情页布局:类目标签跟标题挤在一起,新加的 Ad type 标签也在那一排,顶部太挤**——把"Accepts ads from"那一块从标题上方挪到了 Details/描述区块下面,标题上方现在只留 Ad type + 非 active 状态这两个信息量大的标签。
+3. **投放位置只显示平台图标,没有文字**——`SocialStatChip` 组件本身是故意做成"图标 + 粉丝数,不重复文字"的(2026-09-17 的一次改动,图标已经能识别平台、卡片这种寸土寸金的地方不需要再堆文字),但自测发现在 listing 详情页(空间明显更宽松、买家又特别需要确认"这条广告到底投在哪个平台")这样不够清楚。**只在 listing 详情页**的卖家信息区块单独加了平台文字(`SOCIAL_PLATFORM_LABELS[placementAccount.platform]`),没有改 `SocialStatChip` 这个共享组件本身——`ListingCard.tsx`/`PublisherCard.tsx` 那些空间紧张的地方保持不变。
+
+**数据库变更**:
+
+```sql
+alter type public.listing_category add value if not exists 'any';
+```
+
+不需要新的 RLS/权限调整。
+
 ## 发布免审核 + KYC 后置(2026-09-19 决策记录)
 
 **这次讨论的产品定位**:团队想把 HereForAds 定位成一个轻量工具型平台,不是每一条 listing 都要人工把关的重内容平台。2026-09-18 才加上的"必须先做 Stripe KYC + 管理员批准才能上线"这套流程,被认为对新用户太重——刚注册的卖家发一条广告要等审核通过才能被买家看到,容易在这个等待期就流失掉。这次改成"发布即上线,问题事后处理"。
