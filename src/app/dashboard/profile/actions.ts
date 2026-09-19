@@ -305,101 +305,14 @@ export async function deleteSocialAccountAction(accountId: string): Promise<void
 }
 
 // ===== Price card(2026-09-19 加,见 README"Price Card"一节)=====
-// 背景图存 seller_profiles.price_card_image_url,复用 updateProfileAction
-// 那一套 avatar/banner 上传逻辑;价目行是独立的 seller_price_card_items 表,
-// 增删改跟 social_accounts 是同一套模式(用 .select() 拿返回行判断 RLS 是不是
-// 真的放行了,而不是只看 error 是不是 null)。
-
-export interface PriceCardImageState {
-  error?: string;
-}
-
-export async function updatePriceCardImageAction(
-  _prevState: PriceCardImageState,
-  formData: FormData
-): Promise<PriceCardImageState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const imageFile = formData.get("price_card_image");
-  if (!(imageFile instanceof File) || imageFile.size === 0) {
-    return { error: "Please choose an image" };
-  }
-
-  const { data: existingSellerProfile } = await supabase
-    .from("seller_profiles")
-    .select("price_card_image_url")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  const ext = imageFile.name.split(".").pop() || "jpg";
-  const path = `${user.id}/price-card/${randomUUID()}.${ext}`;
-  const { error: uploadError } = await supabase.storage
-    .from(AVATAR_BUCKET)
-    .upload(path, imageFile, { contentType: imageFile.type || undefined });
-
-  if (uploadError) {
-    return { error: `Image upload failed: ${uploadError.message}` };
-  }
-
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
-
-  const { error: upsertError } = await supabase
-    .from("seller_profiles")
-    .upsert({ user_id: user.id, price_card_image_url: publicUrl }, { onConflict: "user_id" });
-
-  if (upsertError) {
-    return { error: upsertError.message };
-  }
-
-  const oldPath = existingSellerProfile?.price_card_image_url
-    ? storagePathFromPublicUrl(existingSellerProfile.price_card_image_url, AVATAR_BUCKET)
-    : null;
-  if (oldPath) {
-    await supabase.storage.from(AVATAR_BUCKET).remove([oldPath]);
-  }
-
-  redirect("/dashboard/profile");
-}
-
-export async function removePriceCardImageAction(): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const { data: existingSellerProfile } = await supabase
-    .from("seller_profiles")
-    .select("price_card_image_url")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  await supabase
-    .from("seller_profiles")
-    .update({ price_card_image_url: null })
-    .eq("user_id", user.id);
-
-  const oldPath = existingSellerProfile?.price_card_image_url
-    ? storagePathFromPublicUrl(existingSellerProfile.price_card_image_url, AVATAR_BUCKET)
-    : null;
-  if (oldPath) {
-    await supabase.storage.from(AVATAR_BUCKET).remove([oldPath]);
-  }
-
-  redirect("/dashboard/profile");
-}
+// 背景图那版(seller_profiles.price_card_image_url)上线测试后发现自由上传的
+// 图片很容易跟站内其他卡片的极简风格不搭、还可能盖住价格文字,2026-09-19 当天
+// 就去掉了,只留干净的列表样式(见 src/components/PriceCard.tsx)。这一列还
+// 留在数据库里(没删,历史遗留、允许为空),只是没有代码再读写它了。
+//
+// 价目行是独立的 seller_price_card_items 表,增删改跟 social_accounts 是
+// 同一套模式(用 .select() 拿返回行判断 RLS 是不是真的放行了,而不是只看
+// error 是不是 null)。
 
 export interface PriceCardItemFormState {
   error?: string;

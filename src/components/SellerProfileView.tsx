@@ -112,12 +112,7 @@ export function SellerProfileView({
                 </div>
               </div>
             )}
-            {priceCardItems.length > 0 && (
-              <PriceCard
-                items={priceCardItems}
-                imageUrl={sellerExtra?.price_card_image_url ?? null}
-              />
-            )}
+            {priceCardItems.length > 0 && <PriceCard items={priceCardItems} />}
           </div>
         )}
 

@@ -112,10 +112,7 @@ export default async function ProfilePage({
           here roughly match what you publish.
         </p>
         <div className="mt-6 max-w-xl">
-          <PriceCardManager
-            items={(priceCardItems ?? []) as PriceCardItem[]}
-            imageUrl={(sellerProfile as SellerProfile | null)?.price_card_image_url ?? null}
-          />
+          <PriceCardManager items={(priceCardItems ?? []) as PriceCardItem[]} />
         </div>
       </div>
     </div>
