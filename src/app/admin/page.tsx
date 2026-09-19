@@ -4,18 +4,23 @@ import { StatCard } from "@/components/StatCard";
 export default async function AdminOverviewPage() {
   const admin = createServiceClient();
 
-  const [{ count: pendingCount }, { count: userCount }, { count: bannedCount }] =
-    await Promise.all([
-      admin
-        .from("listings")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pending_review"),
-      admin.from("profiles").select("id", { count: "exact", head: true }),
-      admin
-        .from("profiles")
-        .select("id", { count: "exact", head: true })
-        .eq("is_banned", true),
-    ]);
+  const [
+    { count: pendingCount },
+    { count: userCount },
+    { count: bannedCount },
+    { count: contactMessageCount },
+  ] = await Promise.all([
+    admin
+      .from("listings")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending_review"),
+    admin.from("profiles").select("id", { count: "exact", head: true }),
+    admin
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("is_banned", true),
+    admin.from("contact_messages").select("id", { count: "exact", head: true }),
+  ]);
 
   return (
     <div>
@@ -27,7 +32,7 @@ export default async function AdminOverviewPage() {
         <code>admins</code> table.
       </p>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Listings pending review"
           value={String(pendingCount ?? 0)}
@@ -42,6 +47,11 @@ export default async function AdminOverviewPage() {
           label="Banned users"
           value={String(bannedCount ?? 0)}
           href="/admin/users"
+        />
+        <StatCard
+          label="Contact messages"
+          value={String(contactMessageCount ?? 0)}
+          href="/admin/contact"
         />
       </div>
     </div>

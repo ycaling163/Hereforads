@@ -70,7 +70,7 @@ Next.js 16 把 `middleware.ts` 改名成了 `proxy.ts`(功能一样),本项目�
 | `/dashboard/messages`、`/dashboard/messages/[listingId]/[otherUserId]` | 绑在某个 listing 下的一对一消息,不是群聊;打开某个会话会把对方发来的未读消息标记已读;可以只发图片不写字(比如甩效果图/参考图),没有邮件通知,得自己点进来看 |
 | `/api/stripe/webhook` | Stripe webhook:`account.updated` 刷新 `stripe_onboarded`,`checkout.session.completed` 把订单推进到 `paid_in_escrow` |
 | `/api/cron/auto-confirm` | 需要外部定时器(Vercel Cron / Supabase pg_cron)调用,处理卖家标记交付(`delivered`)后 `ESCROW_HOLD_DAYS` 天买家没反应的自动放款,见下面"平台责任边界"一节 |
-| `/admin`、`/admin/listings`、`/admin/users`、`/admin/orders`、`/admin/contact` | 管理员后台(2026-09-18 加,同日下午从 `/dashboard/admin/*` 挪到跟 `/dashboard` 平级的独立路由),只有 `admins` 表里有记录的账号能进,见下面"管理员系统"一节。`/admin/contact` 是 2026-09-18 晚些时候加的,只读列出 `contact_messages` 表(footer 联系表单的提交记录),没有站内回复功能,回复要管理员自己点邮箱地址发邮件 |
+| `/admin`、`/admin/listings`、`/admin/users`、`/admin/orders`、`/admin/contact` | 管理员后台(2026-09-18 加,同日下午从 `/dashboard/admin/*` 挪到跟 `/dashboard` 平级的独立路由),只有 `admins` 表里有记录的账号能进,见下面"管理员系统"一节。`/admin/contact` 是 2026-09-18 晚些时候加的,只读列出 `contact_messages` 表(footer 联系表单的提交记录),没有站内回复功能,回复要管理员自己点邮箱地址发邮件。`/admin`(Overview)总览页有一张 "Contact messages" 统计卡片(2026-09-19 加,跟"总用户数"这些卡片同一排),点进去跳 `/admin/contact`——之前没有这张卡片,管理员如果不知道顶部导航栏还有一个单独的 "Contact" 标签页,很容易以为表单提交了但"系统没收到" |
 | `/banned` | 账号被封禁后跳转到的静态说明页,不需要登录 |
 | `/terms`、`/privacy` | 服务条款/隐私政策(2026-09-18 加),footer 里链接。内容是把已经拍板的产品规则(托管放款、佣金、线下交易不受保护等,见上面"MVP v2 产品方案"和"平台责任边界"两节)转成大白话条款,页面顶部有一条黄色提示条说明**还没有律师审过,不是最终法律文本**——先把已知信息展示出来,不是假装这是一份正式生效的法律文件 |
 | `/contact` | "联系我们"表单落地页(2026-09-18 加)。表单本身(`ContactForm.tsx`)没变,只是从直接摆在 footer 里改成 footer 只放一个 "Contact us" 链接、点了才跳到这个独立页面——一堆输入框直接堆在 footer 里视觉上不像样子,是这次改的直接原因 |
