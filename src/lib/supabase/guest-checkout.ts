@@ -16,12 +16,13 @@ export type ResolveGuestBuyerResult =
  * 把邮箱查回 id,再补一条 profiles 记录(跟 ensureProfile 一样用
  * ignoreDuplicates,已存在的账号不会被这次调用覆盖)。
  *
- * 依赖两处手动配置,见 README"Guest 结账"一节:1) 数据库里的
+ * 依赖三处手动配置,见 README"Guest 结账"一节:1) 数据库里的
  * get_user_id_by_email() 函数;2) Supabase 后台 Authentication → URL
- * Configuration 把 `{站点域名}/auth/confirm` 加进 Redirect URLs 白名单。
- * 故意不带 query string(比如 `?next=...`)——保持这个跳转地址是个固定字面量,
- * 白名单那边照抄就行,不用猜 Supabase 的通配符匹配规则。这两步没做完,买家
- * 会收不到邮件/邮件里的链接打不开对应的登录态,但下单本身(建
+ * Configuration 把 `{站点域名}/auth/confirm` 加进 Redirect URLs 白名单
+ * (故意不带 query string,保持这个跳转地址是个固定字面量,白名单那边照抄就行);
+ * 3) 配了 custom SMTP(2026-09-19 接入 Resend)之后,把 Magic Link 邮件模板
+ * 换成 token_hash 格式,落地到 src/app/auth/confirm/route.ts。这几步没做完,
+ * 买家会收不到邮件/邮件里的链接打不开对应的登录态,但下单本身(建
  * profiles/listing_orders、走 Stripe Checkout)不受影响。
  */
 export async function resolveGuestBuyerId(
