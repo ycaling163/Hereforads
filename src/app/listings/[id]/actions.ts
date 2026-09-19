@@ -112,6 +112,17 @@ export async function buyListingAction(
       ? `${SITE_URL}/dashboard/purchases?checkout=success`
       : `${SITE_URL}/checkout/guest-success?email=${encodeURIComponent(buyerEmail ?? "")}`,
     cancel_url: `${SITE_URL}/listings/${listing.id}?checkout=cancelled`,
+    // Guest 没走注册表单,邮箱之外没有任何联系方式留底——让 Stripe Checkout 自己
+    // 的付款页顺手收一下姓名/地址/电话(买家反正要填卡号,多这几个字段不算额外
+    // 的一步),webhook 收到 checkout.session.completed 后把这些写进
+    // listing_orders(见 README"Guest 结账"一节)。登录买家不加这两项,免得给
+    // 老用户的一键购买添麻烦。
+    ...(user
+      ? {}
+      : {
+          billing_address_collection: "required" as const,
+          phone_number_collection: { enabled: true },
+        }),
   });
 
   if (!session.url) {

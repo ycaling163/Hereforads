@@ -674,6 +674,25 @@ grant execute on function public.get_user_id_by_email(text) to service_role;
 3. **Authentication → URL Configuration → Redirect URLs**:加一条 `{站点域名}/auth/confirm`(本地开发再加一条 `http://localhost:3000/auth/confirm`)。不在白名单里 `signInWithOtp` 会报 redirect 不合法。
 4. **确认 `NEXT_PUBLIC_SITE_URL` 在生产环境配的是真实域名**(部署环境变量,不是 `localhost`)——`resolveGuestBuyerId()` 拼 `emailRedirectTo` 用的就是这个值,同时也是模板里 `{{ .SiteURL }}` 的来源。
 
+### Guest 联系方式留底(姓名/地址/电话,2026-09-19 加)
+
+**产品要求**:guest 不走注册表单,除了邮箱不会再留下别的联系方式——万一后续有纠纷/退款需要联系,平台这边应该有个记录。没有新增我们自己的表单字段(不想在结账按钮上方再堆更多输入框),借的是买家反正要填卡号的 Stripe Checkout 页面本身:
+
+- `buyListingAction` 对 guest 单独在 Stripe Checkout session 上开了 `billing_address_collection: "required"` 和 `phone_number_collection: { enabled: true }`(登录买家不开,不给已有用户的一键购买加步骤);
+- `/api/stripe/webhook` 收到 `checkout.session.completed` 时,从 `session.customer_details` 里把 `name`/`phone`/`address` 抄一份写进 `listing_orders`(新增的三列,见下面 SQL)——存在订单本身而不是只存 `profiles`,因为同一个账号以后可能换地址/换电话下单,按订单留底更准确;
+- 同时如果这个买家 `profiles.display_name` 还是空的(guest 静默建号时没填过,见上面 `resolveGuestBuyerId()`),顺手拿 Checkout 收集到的姓名回填一下,这样卖家在 `/dashboard/sales`/`/dashboard/messages` 看到的就不再是"Anonymous buyer"——只在原本是空的时候才回填,不会覆盖用户自己在 `/dashboard/profile` 设置过的名字;
+- 这几列现在**没有**展示给卖家看(只存库,不上 `/dashboard/sales` 的卡片)——是不是要给卖家看到买家电话/地址是另一个隐私层面的产品决策,这次没做,只是先把数据留底。
+
+**这行以前建过的 `listing_orders` 要补三列**(nullable,登录买家走的老流程不填这三列,读出来是 null):
+
+```sql
+alter table public.listing_orders add column if not exists buyer_name text;
+alter table public.listing_orders add column if not exists buyer_phone text;
+alter table public.listing_orders add column if not exists buyer_address text;
+```
+
+不需要新的 RLS 策略——这三列只由 `/api/stripe/webhook` 用 `service_role` 写,普通登录用户的 `listing_orders` UPDATE 策略管的是别的字段,不受影响。
+
 ### 收付款设计要点(实现前必读)
 
 - **卖家必须 `stripe_onboarded = true` 才能把 listing 从 `draft` 推进到 `pending_review`**(2026-09-18 起,`pending_review` 之后还要管理员审核通过才是 `active`,见下面"管理员系统"),发布表单/action 里两头都要校验(RLS 只挡"是不是自己的 listing",挡不住状态值本身)

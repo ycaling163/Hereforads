@@ -113,7 +113,7 @@ export async function POST(request: Request) {
       // 不是老流程的订单,按 MVP v2 的 listing_orders 处理。
       const { data: order, error: orderFetchError } = await supabase
         .from("listing_orders")
-        .select("amount,status")
+        .select("amount,status,buyer_id")
         .eq("id", orderId)
         .single();
 
@@ -129,15 +129,59 @@ export async function POST(request: Request) {
       const platformFeeAmount =
         Math.round(order.amount * PLATFORM_COMMISSION_RATE * 100) / 100;
 
+      // Guest 结账(见 README"Guest 结账"一节)在 Checkout 页顺手收了姓名/地址/
+      // 电话(billing_address_collection/phone_number_collection,登录买家没开
+      // 这两项,customer_details 里对应字段是 null),这是 guest 唯一留下的联系
+      // 方式存底,存进订单本身而不是只存 profiles——同一个账号以后可能用不同
+      // 地址/电话下单。
+      const customerDetails = session.customer_details;
+      const buyerAddress = customerDetails?.address
+        ? [
+            customerDetails.address.line1,
+            customerDetails.address.line2,
+            customerDetails.address.city,
+            customerDetails.address.state,
+            customerDetails.address.postal_code,
+            customerDetails.address.country,
+          ]
+            .filter(Boolean)
+            .join(", ")
+        : null;
+
       const { error: updateError } = await supabase
         .from("listing_orders")
-        .update({ status: "paid_in_escrow", paid_at: new Date().toISOString() })
+        .update({
+          status: "paid_in_escrow",
+          paid_at: new Date().toISOString(),
+          buyer_name: customerDetails?.name ?? null,
+          buyer_phone: customerDetails?.phone ?? null,
+          buyer_address: buyerAddress,
+        })
         .eq("id", orderId)
         .eq("status", "pending_payment");
 
       if (updateError) {
         console.error("Failed to mark order paid_in_escrow:", updateError.message);
         break;
+      }
+
+      // 卖家在 Sales/Messages 页看到的买家名字来自 profiles.display_name——guest
+      // 静默建号时没填过这一列(见 src/lib/supabase/guest-checkout.ts),这里用
+      // Checkout 页收集到的姓名补一下,只在还没有值的时候补(不覆盖真实用户自己
+      // 在 /dashboard/profile 设置过的名字)。
+      if (customerDetails?.name) {
+        const { error: nameBackfillError } = await supabase
+          .from("profiles")
+          .update({ display_name: customerDetails.name })
+          .eq("id", order.buyer_id)
+          .is("display_name", null);
+
+        if (nameBackfillError) {
+          console.error(
+            "Failed to backfill guest display_name:",
+            nameBackfillError.message
+          );
+        }
       }
 
       const { error: paymentError } = await supabase.from("payments").insert({
