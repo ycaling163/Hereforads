@@ -36,13 +36,17 @@ export default async function MyListingsPage({
     redirect("/login");
   }
 
-  const { data: listingRows, error } = await supabase
-    .from("listings")
-    .select("*")
-    .eq("seller_id", user.id)
-    .order("created_at", { ascending: false });
+  const [{ data: listingRows, error }, { data: profile }] = await Promise.all([
+    supabase
+      .from("listings")
+      .select("*")
+      .eq("seller_id", user.id)
+      .order("created_at", { ascending: false }),
+    supabase.from("profiles").select("stripe_onboarded").eq("id", user.id).single(),
+  ]);
 
   const listings = (listingRows ?? []) as Listing[];
+  const hasActiveListing = listings.some((listing) => listing.status === "active");
 
   return (
     <div>
@@ -52,6 +56,20 @@ export default async function MyListingsPage({
       <p className="mt-2 text-zinc-600">
         Everything you&apos;ve published, including drafts buyers can&apos;t see yet.
       </p>
+
+      {/* 发布免审核 + KYC 后置(见 README 同名一节):listing 上线不再要求先做
+          Stripe KYC,买家随时可能真的下单,这里提醒卖家早点连好,免得到了要
+          标记交付/放款那一刻才发现连不上。 */}
+      {!profile?.stripe_onboarded && hasActiveListing && (
+        <p className="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Your listing is live and buyers can already buy it, but you
+          haven&apos;t connected Stripe yet —{" "}
+          <Link href="/dashboard/stripe-connect" className="underline">
+            finish Stripe setup
+          </Link>{" "}
+          so you&apos;re ready to get paid on your first sale.
+        </p>
+      )}
 
       {errorCode && DELETE_ERROR_MESSAGES[errorCode] && (
         <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">

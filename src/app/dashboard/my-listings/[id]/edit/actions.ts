@@ -3,7 +3,6 @@
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { createServiceClient } from "@/lib/supabase/service";
 import { parseListingFormFields } from "@/lib/listingFormValidation";
 import { storagePathFromPublicUrl } from "@/lib/storage";
 import type { ListingFormState } from "@/components/ListingForm";
@@ -90,6 +89,7 @@ export async function updateListingAction(
       title: fields.title,
       description: fields.description,
       categories: fields.categories,
+      ad_type: fields.adType,
       price_amount: fields.priceAmount,
       price_currency: fields.priceCurrency,
       pricing_unit: fields.pricingUnit,
@@ -120,20 +120,9 @@ export async function updateListingAction(
     }
   }
 
-  // Editing a live listing sends it back for review — content can change
-  // after approval, so silently keeping it `active` would let a seller
-  // bypass moderation entirely by editing post-approval. `status` is
-  // revoked from `authenticated` for exactly this reason (see README
-  // "顺手补的一个安全洞"), so this needs the service-role client — still
-  // scoped to this row/owner/prior status, not a general status-setting hole.
-  if (original.status === "active") {
-    await createServiceClient()
-      .from("listings")
-      .update({ status: "pending_review" })
-      .eq("id", listingId)
-      .eq("seller_id", user.id)
-      .eq("status", "active");
-  }
-
+  // 发布免审核 + KYC 后置(2026-09-19 决策记录,见 README 同名一节)之后,编辑
+  // 已经 active 的 listing 不再退回 pending_review 排队等审核——既然发布本身
+  // 都不需要人工批准了,编辑也没道理需要。内容层面的事后监督完全靠
+  // /admin/listings 的 Remove(任何状态都能下架),不靠这里拦截编辑。
   redirect(`/listings/${listingId}`);
 }

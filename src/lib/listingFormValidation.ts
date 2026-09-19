@@ -1,7 +1,9 @@
 import {
+  AD_TYPES,
   LISTING_CATEGORIES,
   MIN_LISTING_PRICE,
   PRICING_UNITS,
+  type AdType,
   type ListingCategory,
   type PricingUnit,
 } from "@/lib/supabase/enums";
@@ -10,6 +12,7 @@ export interface ParsedListingFields {
   title: string;
   description: string | null;
   categories: ListingCategory[];
+  adType: AdType;
   priceAmount: number;
   priceCurrency: string;
   pricingUnit: PricingUnit;
@@ -31,6 +34,7 @@ export function parseListingFormFields(
   const priceAmountRaw = String(formData.get("price_amount") ?? "").trim();
   const priceCurrency = String(formData.get("price_currency") ?? "").trim();
   const pricingUnitRaw = String(formData.get("pricing_unit") ?? "");
+  const adTypeRaw = String(formData.get("ad_type") ?? "");
   const categories = formData
     .getAll("categories")
     .map(String)
@@ -78,12 +82,16 @@ export function parseListingFormFields(
   if (categories.length === 0) {
     return { error: "Please select at least one category" };
   }
+  if (!(AD_TYPES as readonly string[]).includes(adTypeRaw)) {
+    return { error: "Please choose an ad type" };
+  }
 
   return {
     fields: {
       title,
       description: description || null,
       categories,
+      adType: adTypeRaw as AdType,
       priceAmount,
       priceCurrency,
       pricingUnit: pricingUnitRaw as PricingUnit,

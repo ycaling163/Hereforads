@@ -56,11 +56,23 @@ export default function TermsPage() {
             3. What we don&rsquo;t review or guarantee
           </h2>
           <p className="mt-2">
-            Listings are published by users, not vetted by us for ad
-            performance or business outcomes. We review new listings before
-            they go live and can remove listings or suspend accounts that
-            violate these terms, but that review doesn&rsquo;t amount to
-            certifying the quality or results of any ad placement.
+            Listings go live as soon as a publisher submits them — we
+            don&rsquo;t pre-review or vet listings for ad performance,
+            business outcomes, or the accuracy of what a publisher claims
+            about their own account or content. We can remove listings or
+            suspend accounts after the fact (including in response to
+            reports), but publishing a listing doesn&rsquo;t mean we&rsquo;ve
+            certified anything about it.
+          </p>
+          <p className="mt-2">
+            When publishing a listing, a publisher confirms that they own
+            the account or have explicit authorization to run ads on it, and
+            that the content is original and not subject to any copyright or
+            other dispute. <strong>The publisher is solely responsible for
+            any legal claims — including copyright, trademark, or fraud
+            claims — arising from false, unauthorized, or infringing
+            content in their listing.</strong> We don&rsquo;t independently
+            verify these confirmations before a listing goes live.
           </p>
         </section>
 

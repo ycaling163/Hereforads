@@ -96,6 +96,32 @@ export const PRICING_UNIT_LABELS: Record<PricingUnit, string> = {
   monthly: "Per month",
 };
 
+// 广告类型(2026-09-19 加,产品讨论见 README"广告类型"一节)——固定模板,方便
+// 买家跨卖家比较"这是哪种广告",不开放自定义文案。跟 categories(接哪些品牌
+// 类目)是两个independent维度:一条 listing 一个 ad_type + 一组 categories。
+// `custom` 不是"没填",是卖家主动选的"这个投放位不是标准套餐,买家下单前先
+// 私信谈清楚范围/价格"——listing 详情页会在 Buy now 上方提示先私信卖家,但
+// 不强制拦掉购买按钮(卖家标了 custom 也可能已经想好了固定价)。老 listing
+// (这个字段上线前发布的)这一列是 null,前端按"Other"处理,不强制补录。
+export const AD_TYPES = [
+  "static_image_ad",
+  "video_product_placement",
+  "product_intro_video",
+  "sponsored_feature",
+  "product_test_video",
+  "custom",
+] as const;
+export type AdType = (typeof AD_TYPES)[number];
+
+export const AD_TYPE_LABELS: Record<AdType, string> = {
+  static_image_ad: "Static image ad",
+  video_product_placement: "Video product placement",
+  product_intro_video: "Product introduction in video",
+  sponsored_feature: "Sponsored feature",
+  product_test_video: "Product test / review video",
+  custom: "Custom (discuss with seller)",
+};
+
 // pending_review/rejected/removed 是 2026-09-18 加的管理员审核流程用的状态,
 // 见 README"管理员系统"一节。draft -> (卖家连好 Stripe 提交) -> pending_review
 // -> 管理员 approve -> active,或 reject -> rejected;active 之后管理员随时可以

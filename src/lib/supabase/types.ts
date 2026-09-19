@@ -1,4 +1,5 @@
 import type {
+  AdType,
   ListingCategory,
   ListingOrderStatus,
   ListingStatus,
@@ -90,6 +91,16 @@ export interface Listing {
   // 这个状态)。加之前读出来是 undefined。
   social_account_id: string | null;
   is_website_placement: boolean;
+  // 固定的广告类型模板(2026-09-19 加,见 README"广告类型"一节),跟 categories
+  // (接哪些品牌类目)是两个独立维度。这个字段上线前发布的老 listing 是 null,
+  // 前端按"Other/未指定"处理,不强制补录。
+  ad_type: AdType | null;
+  // 发布时两个必勾选框的留痕(2026-09-19 加,见 README"发布免审核 + KYC 后置"
+  // 一节)——卖家勾了才能提交,勾选那一刻的时间戳存这两列,作为"卖家当时确认过
+  // 这些"的记录。只在创建时问一次,编辑不会重新要求勾选,所以这两列不代表"最近
+  // 一次编辑时";这个改动之前发布的老 listing 是 null。
+  rights_attested_at: string | null;
+  terms_accepted_at: string | null;
   created_at: string;
   updated_at: string;
 }
