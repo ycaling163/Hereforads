@@ -8,6 +8,7 @@ import { storagePathFromPublicUrl } from "@/lib/storage";
 import { normalizeUsername } from "@/lib/username";
 import {
   AD_TYPES,
+  CURRENCIES,
   LISTING_CATEGORIES,
   SOCIAL_PLATFORMS,
   type AdType,
@@ -404,6 +405,46 @@ export interface PriceCardItemFormState {
   error?: string;
 }
 
+// 三个字段(Ad type/起价+币种)必填,Platform/备注可选——加/改两个 action 共用,
+// 避免同一份校验写两遍。
+function parsePriceCardItemFields(
+  formData: FormData
+):
+  | {
+      adType: AdType;
+      platform: string | null;
+      priceAmount: number;
+      priceCurrency: string;
+      note: string | null;
+    }
+  | { error: string } {
+  const adType = String(formData.get("ad_type") ?? "");
+  const platform = String(formData.get("platform") ?? "").trim();
+  const priceAmountRaw = String(formData.get("price_amount") ?? "").trim();
+  const priceCurrency = String(formData.get("price_currency") ?? "").trim();
+  const note = String(formData.get("note") ?? "").trim();
+
+  if (!(AD_TYPES as readonly string[]).includes(adType)) {
+    return { error: "Please choose an ad type" };
+  }
+
+  const priceAmount = Number(priceAmountRaw);
+  if (!priceAmountRaw || Number.isNaN(priceAmount) || priceAmount < 0) {
+    return { error: "Please enter a valid starting price" };
+  }
+  if (!(CURRENCIES as readonly string[]).includes(priceCurrency)) {
+    return { error: "Please choose a currency" };
+  }
+
+  return {
+    adType: adType as AdType,
+    platform: platform || null,
+    priceAmount,
+    priceCurrency,
+    note: note || null,
+  };
+}
+
 export async function addPriceCardItemAction(
   _prevState: PriceCardItemFormState,
   formData: FormData
@@ -417,18 +458,9 @@ export async function addPriceCardItemAction(
     redirect("/login");
   }
 
-  const adType = String(formData.get("ad_type") ?? "");
-  const platform = String(formData.get("platform") ?? "").trim();
-  const price = String(formData.get("price") ?? "").trim();
-
-  if (!(AD_TYPES as readonly string[]).includes(adType)) {
-    return { error: "Please choose an ad type" };
-  }
-  if (!platform) {
-    return { error: "Please choose or enter a platform" };
-  }
-  if (!price) {
-    return { error: "Please enter a starting price" };
+  const parsed = parsePriceCardItemFields(formData);
+  if ("error" in parsed) {
+    return { error: parsed.error };
   }
 
   const { data: lastItem } = await supabase
@@ -441,9 +473,11 @@ export async function addPriceCardItemAction(
 
   const { error } = await supabase.from("seller_price_card_items").insert({
     seller_id: user.id,
-    ad_type: adType as AdType,
-    platform,
-    price,
+    ad_type: parsed.adType,
+    platform: parsed.platform,
+    price_amount: parsed.priceAmount,
+    price_currency: parsed.priceCurrency,
+    note: parsed.note,
     sort_order: (lastItem?.sort_order ?? -1) + 1,
   });
 
@@ -468,23 +502,20 @@ export async function updatePriceCardItemAction(
     redirect("/login");
   }
 
-  const adType = String(formData.get("ad_type") ?? "");
-  const platform = String(formData.get("platform") ?? "").trim();
-  const price = String(formData.get("price") ?? "").trim();
-
-  if (!(AD_TYPES as readonly string[]).includes(adType)) {
-    return { error: "Please choose an ad type" };
-  }
-  if (!platform) {
-    return { error: "Please choose or enter a platform" };
-  }
-  if (!price) {
-    return { error: "Please enter a starting price" };
+  const parsed = parsePriceCardItemFields(formData);
+  if ("error" in parsed) {
+    return { error: parsed.error };
   }
 
   const { data: updatedRows, error } = await supabase
     .from("seller_price_card_items")
-    .update({ ad_type: adType as AdType, platform, price })
+    .update({
+      ad_type: parsed.adType,
+      platform: parsed.platform,
+      price_amount: parsed.priceAmount,
+      price_currency: parsed.priceCurrency,
+      note: parsed.note,
+    })
     .eq("id", itemId)
     .eq("seller_id", user.id)
     .select("id");

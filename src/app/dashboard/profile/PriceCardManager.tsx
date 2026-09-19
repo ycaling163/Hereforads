@@ -5,6 +5,7 @@ import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
 import {
   AD_TYPES,
   AD_TYPE_LABELS,
+  CURRENCIES,
   PRICE_CARD_PLATFORM_OPTIONS,
 } from "@/lib/supabase/enums";
 import type { PriceCardItem } from "@/lib/supabase/types";
@@ -110,18 +111,15 @@ export function PriceCardManager({
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="platform_choice" className={labelClass}>
-            Platform
+            Platform (optional)
           </label>
           <select
             id="platform_choice"
             value={platformChoice}
             onChange={(e) => setPlatformChoice(e.target.value)}
-            required
             className={inputClass}
           >
-            <option value="" disabled>
-              Choose a platform
-            </option>
+            <option value="">Not specified</option>
             {PRICE_CARD_PLATFORM_OPTIONS.map((platform) => (
               <option key={platform} value={platform}>
                 {platform}
@@ -141,16 +139,48 @@ export function PriceCardManager({
             <input type="hidden" name="platform" value={platformChoice} />
           )}
         </div>
-        <div className="col-span-2 flex flex-col gap-1.5">
-          <label htmlFor="price" className={labelClass}>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="price_currency" className={labelClass}>
+            Currency
+          </label>
+          <select
+            id="price_currency"
+            name="price_currency"
+            required
+            defaultValue="USD"
+            className={inputClass}
+          >
+            {CURRENCIES.map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="price_amount" className={labelClass}>
             Starting price
           </label>
           <input
-            id="price"
-            name="price"
-            type="text"
+            id="price_amount"
+            name="price_amount"
+            type="number"
+            step="0.01"
+            min={0}
             required
-            placeholder="e.g. £20 or From £20"
+            placeholder="e.g. 20"
+            className={inputClass}
+          />
+        </div>
+        <div className="col-span-2 flex flex-col gap-1.5">
+          <label htmlFor="note" className={labelClass}>
+            Note (optional)
+          </label>
+          <input
+            id="note"
+            name="note"
+            type="text"
+            placeholder="e.g. Final price depends on requirements — message me for a quote"
             className={inputClass}
           />
         </div>

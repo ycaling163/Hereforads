@@ -23,14 +23,17 @@ export function PriceCard({
         <div className={imageUrl ? "bg-white/90 p-4 backdrop-blur-sm" : "bg-zinc-50 p-4"}>
           <ul className="flex flex-col divide-y divide-zinc-200">
             {items.map((item) => (
-              <li
-                key={item.id}
-                className="flex items-center justify-between gap-3 py-2 text-sm"
-              >
-                <span className="text-zinc-700">
-                  {AD_TYPE_LABELS[item.ad_type]} — {item.platform}
-                </span>
-                <span className="shrink-0 font-medium text-zinc-900">{item.price}</span>
+              <li key={item.id} className="py-2 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-zinc-700">
+                    {AD_TYPE_LABELS[item.ad_type]}
+                    {item.platform ? ` — ${item.platform}` : ""}
+                  </span>
+                  <span className="shrink-0 font-medium text-zinc-900">
+                    From {item.price_currency} {item.price_amount}
+                  </span>
+                </div>
+                {item.note && <p className="mt-0.5 text-xs text-zinc-500">{item.note}</p>}
               </li>
             ))}
           </ul>

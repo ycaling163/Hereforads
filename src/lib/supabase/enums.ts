@@ -31,6 +31,12 @@ export const SOCIAL_PLATFORM_LABELS: Record<SocialPlatform, string> = {
   other: "Other",
 };
 
+// 结账用的货币列表——`listings.price_currency`/Price Card 价格都是自由文本列
+// (不是数据库枚举),这里只是发布表单/Price Card 表单共用的一份下拉选项,原来
+// 只在 ListingForm.tsx 里定义,2026-09-19 挪到这里给 Price Card 也复用,避免
+// 两处各写一份、以后改动漏掉一边。
+export const CURRENCIES = ["USD", "GBP", "EUR", "CAD", "AUD", "SGD", "HKD", "JPY"];
+
 // Price Card(个人主页价目表,2026-09-19 加)的平台下拉选项——纯 UI 层面的建议
 // 列表,不是数据库枚举(`seller_price_card_items.platform` 就是一个 text 列,
 // 想填什么都行)。故意不复用上面 SOCIAL_PLATFORMS:那边是"已绑定的真实社交

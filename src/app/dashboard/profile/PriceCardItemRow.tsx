@@ -5,6 +5,7 @@ import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
 import {
   AD_TYPES,
   AD_TYPE_LABELS,
+  CURRENCIES,
   PRICE_CARD_PLATFORM_OPTIONS,
 } from "@/lib/supabase/enums";
 import type { PriceCardItem } from "@/lib/supabase/types";
@@ -20,24 +21,35 @@ const inputClass =
   "rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900";
 const labelClass = "text-sm font-medium text-zinc-700";
 
+// Not a real platform value — the select's own sentinel for "didn't pick a
+// specific platform" (see PriceCardManager.tsx for why Platform is optional).
+const UNSET_PLATFORM = "";
+
 export function PriceCardItemRow({ item }: { item: PriceCardItem }) {
   const [isEditing, setIsEditing] = useState(false);
   const updateAction = updatePriceCardItemAction.bind(null, item.id);
   const [state, formAction, pending] = useActionState(updateAction, initialState);
-  const [platformChoice, setPlatformChoice] = useState(
-    (PRICE_CARD_PLATFORM_OPTIONS as readonly string[]).includes(item.platform)
+  const [platformChoice, setPlatformChoice] = useState(() => {
+    if (!item.platform) return UNSET_PLATFORM;
+    return (PRICE_CARD_PLATFORM_OPTIONS as readonly string[]).includes(item.platform)
       ? item.platform
-      : "other"
-  );
+      : "other";
+  });
 
   if (!isEditing) {
     return (
       <li className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 px-4 py-2.5 text-sm">
-        <span className="flex flex-1 items-center justify-between gap-2 pr-2">
-          <span className="text-zinc-700">
-            {AD_TYPE_LABELS[item.ad_type]} — {item.platform}
+        <span className="flex flex-1 flex-col gap-0.5 pr-2">
+          <span className="flex items-center justify-between gap-2">
+            <span className="text-zinc-700">
+              {AD_TYPE_LABELS[item.ad_type]}
+              {item.platform ? ` — ${item.platform}` : ""}
+            </span>
+            <span className="font-medium text-zinc-900">
+              From {item.price_currency} {item.price_amount}
+            </span>
           </span>
-          <span className="font-medium text-zinc-900">{item.price}</span>
+          {item.note && <span className="text-xs text-zinc-500">{item.note}</span>}
         </span>
         <span className="flex shrink-0 items-center gap-3">
           <button
@@ -81,15 +93,15 @@ export function PriceCardItemRow({ item }: { item: PriceCardItem }) {
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor={`platform_choice-${item.id}`} className={labelClass}>
-            Platform
+            Platform (optional)
           </label>
           <select
             id={`platform_choice-${item.id}`}
             value={platformChoice}
             onChange={(e) => setPlatformChoice(e.target.value)}
-            required
             className={inputClass}
           >
+            <option value={UNSET_PLATFORM}>Not specified</option>
             {PRICE_CARD_PLATFORM_OPTIONS.map((platform) => (
               <option key={platform} value={platform}>
                 {platform}
@@ -103,9 +115,10 @@ export function PriceCardItemRow({ item }: { item: PriceCardItem }) {
               type="text"
               required
               defaultValue={
-                (PRICE_CARD_PLATFORM_OPTIONS as readonly string[]).includes(item.platform)
-                  ? ""
-                  : item.platform
+                item.platform &&
+                !(PRICE_CARD_PLATFORM_OPTIONS as readonly string[]).includes(item.platform)
+                  ? item.platform
+                  : ""
               }
               placeholder="Type the platform name"
               className={inputClass}
@@ -114,16 +127,49 @@ export function PriceCardItemRow({ item }: { item: PriceCardItem }) {
             <input type="hidden" name="platform" value={platformChoice} />
           )}
         </div>
-        <div className="col-span-2 flex flex-col gap-1.5">
-          <label htmlFor={`price-${item.id}`} className={labelClass}>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={`price_currency-${item.id}`} className={labelClass}>
+            Currency
+          </label>
+          <select
+            id={`price_currency-${item.id}`}
+            name="price_currency"
+            required
+            defaultValue={item.price_currency}
+            className={inputClass}
+          >
+            {CURRENCIES.map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={`price_amount-${item.id}`} className={labelClass}>
             Starting price
           </label>
           <input
-            id={`price-${item.id}`}
-            name="price"
-            type="text"
+            id={`price_amount-${item.id}`}
+            name="price_amount"
+            type="number"
+            step="0.01"
+            min={0}
             required
-            defaultValue={item.price}
+            defaultValue={item.price_amount}
+            className={inputClass}
+          />
+        </div>
+        <div className="col-span-2 flex flex-col gap-1.5">
+          <label htmlFor={`note-${item.id}`} className={labelClass}>
+            Note (optional)
+          </label>
+          <input
+            id={`note-${item.id}`}
+            name="note"
+            type="text"
+            defaultValue={item.note ?? ""}
+            placeholder="e.g. Final price depends on requirements — message me for a quote"
             className={inputClass}
           />
         </div>
