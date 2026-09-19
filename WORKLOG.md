@@ -194,3 +194,39 @@
 - **联系表单没有已读/回复状态**——`/admin/contact` 现在是纯列表,消息一旦看过没有"已读"标记,回复也只能自己点邮箱手动发邮件,消息一多容易漏。以后如果用量上来了,值得加个 `status`/`read_at` 字段
 - **没有提醒老用户"你还没设置好记链接"**——`username` 是新加的可选字段,已经注册的卖家(包括 7smile-Linda 这种)默认都是空的,除非自己想起来去 `/dashboard/profile` 设置,或者像这次一样找人直接在后台 SQL 改。以后可以考虑在 `/dashboard/profile` 页面加一句提示,或者卖家有 listing 但没 username 时在 dashboard 首页提醒一下
 - **OG 分享图还是拿 `logo.png` 这张窄长 wordmark 顶的**(老问题,不是这次引入的,顺手再记一遍免得又被忘掉)——分享到社交媒体/群聊缩略图不好看,以后可以用 `next/og` 单独做一张 1200×630 的
+
+- **同一天再往后,另一个 session 做了一轮更大的改动:Guest 结账、发布流程整个改成免审核、Price Card。9 个 PR(#26–#34)全部已经用户自己合并进 `main`**——这个 session 每次改完推送后,PR 都被极快地(几分钟内)合并掉了,导致好几次要先 `git fetch origin main` 发现自己的分支已经落后、`git rebase origin/main` 之后才能继续推下一版,这是这轮工作流程上的一个特点,不是异常,以后接手类似"改一堆小的反馈驱动的调整"的活儿时预期到这一点。详细决策记录见 README 对应章节标题(小结见下面),这里只按 PR 顺序列一遍:
+  - **#26 Guest 结账(不强制先注册)**:买家不登录也能点 "Buy now",只填邮箱;后台用 `supabase.auth.signInWithOtp()` 静默建号(不存在就建、存在就发登录链接),`src/lib/supabase/guest-checkout.ts` 的 `resolveGuestBuyerId()` 紧接着用 `service_role` 调新建的 `get_user_id_by_email()` 函数把邮箱查回 `id`。新增 `src/app/auth/confirm/route.ts`(Magic Link 落地页,`verifyOtp` 换 session)、`src/app/checkout/guest-success/page.tsx`(guest 结账成功后的免登录落地页)。**中间来回改过两版登录链接方案**:第一版想绕开"没装 custom SMTP 编辑不了邮件模板"这个 Supabase 后台限制,做了一版纯客户端解析 URL fragment 的方案;当天下午接入 Resend 当 custom SMTP 之后,又换回了 Supabase 官方推荐的 `token_hash` 方案(更简单、少一次跳转),最终代码是后者。详见 README"Guest 结账"一节。
+  - **#26 附带:Guest 联系方式留底**:guest 结账时 Stripe Checkout 顺手开了 `billing_address_collection`/`phone_number_collection`(只对 guest,登录买家不开),webhook 把 `customer_details` 里的姓名/电话/地址写进 `listing_orders` 新增的三列,姓名还会回填空的 `profiles.display_name`。**这几列一度在 `/dashboard/sales` 卖家页也能看到,用户反馈"手机号不该给卖家看",改成只在 `/admin/orders` 展示**(#27 里一起改的)。详见 README"Guest 联系方式留底"一节。
+  - **#27/#28 广告类型 `ad_type`**:发布 listing 新增必选的 Ad type(Static Image Ad / Video Product Placement / Product Introduction in Video / Sponsored Feature / Product Test Video / Custom),复用同一份枚举给 Price Card(见下面)。**Platform 没有像 ChatGPT 那边给的方案建议的那样改回多选**——跟 9-18 那次"一个 listing 一个投放位"的决定保持一致,继续单选,多平台打包价是明确的未来事项。类目(`Ad categories you accept`)加了一个 `any` 特殊值("接受任何类目"),跟具体类目互斥,选了就不用一个个勾。详情页布局也顺手理了一下:类目标签从标题边上挪到 Details 描述下面,`SocialStatChip` 只在 listing 详情页(不是卡片)额外加了平台文字标签。详见 README"广告类型 ad_type"一节。
+  - **#27 发布免审核 + KYC 后置(这轮最大的一次产品方向调整)**:用户参考另一个"产品经理"对话(ChatGPT)的建议,决定把 HereForAds 定位成轻量工具型平台——**去掉了 Stripe KYC 和管理员审核这两道发布前置关卡**,新 listing 直接落 `active`,买家立刻能看到能买。KYC 挪到真正需要它的时刻:标记订单交付(`markDeliveredAction`)现在硬性要求 `stripe_onboarded`,因为这一步开始倒计时、最终会真的发起 Stripe Transfer(escrow 模式下钱在此之前一直在平台自己的 Stripe 账户里,技术上本来就不需要卖家提前连好 Connect 账户)。`/admin/listings` 从"发布前必经审核"变成"事后监督"(它的 Remove 功能本来就支持任意状态下架,直接复用)。发布表单新增两个必勾选框(内容授权/无版权纠纷 + 同意 Terms),时间戳存进 `listings.rights_attested_at`/`terms_accepted_at`,`src/app/terms/page.tsx` 同步改了措辞。**这条決定的技术前提**(为什么能安全去掉 KYC 前置)、**没有一起做的**(自动化内容审核)详见 README"发布免审核 + KYC 后置"一节,里面也记了一条关于"平台自己的 Stripe dispute 风险敞口,ToS 免责声明覆盖不到"的提醒,回应的是之前 9-18 "平台责任边界"那次讨论的延续。
+  - **#27 顺手改的**:编辑 listing 时"只改价格不触发重新审核"这条规则(`updateListingAction` 的 `isPriceOnlyChange` 判断)在发布免审核上线的同一天就跟着废弃了(既然发布本身都不用审核,编辑也没道理卡),但中间过程写进了 git 历史,不是绕圈子,是真实的决策演进顺序。
+  - **#29–#34 Price Card(个人主页价目表)**:`/sellers/[id]`/`/[username]` 页新增一块"价目表"卡片(挨着 "Social reach"),`/dashboard/profile` 新增管理板块,让卖家不用一条条发布 listing 也能给买家一个大致报价。**这是这轮里唯一一个来回改了好几版才定型的功能**,记一下演进顺序方便理解为什么最终代码长这样:①最早每行是"标题+价格"两个自由文本框→发现卖家不知道标题怎么写,改成 Ad type + Platform 两个下拉;②Platform 强制必选导致表单太长,改成可选,价格拆成金额+币种(复用发布 listing 表单那份 `CURRENCIES`,顺手挪到了 `enums.ts` 共享),加了可选的 Note 字段(给"最终价格取决于需求"这类说明用);③加了一个可选的自定义背景图,上线自测后发现效果不好(卖家上传的图容易跟站内其它卡片的极简风格不搭、还可能压低文字可读性),来回调过两次遮罩透明度,最后**当天就把整个背景图子功能拆掉了**,`PriceCard.tsx` 改成纯白/浅灰斑马纹列表。`seller_price_card_items` 这张新表的字段定义因此变过三次(README 里的 SQL 已经是最终版,不是历史上贴过的任何一版),`seller_profiles.price_card_image_url` 这一列留在数据库里没删(历史遗留,没代码再读写)。详见 README"Price Card"一节。
+
+### 今天(guest 结账 / 发布免审核 / Price Card)工作小结
+
+写在这里方便下一个 session 5 分钟内知道"发生了什么",详细原因见上面对应条目和 README 里点名的章节。
+
+**上线了什么(9 个 PR,#26–#34,全部已合并进 `main`)**:
+1. Guest 结账——买家不注册也能买,靠 Supabase magic link 静默建号,登录链接走 Resend(custom SMTP)发送
+2. Guest 下单顺手收集姓名/电话/地址(通过 Stripe Checkout,不是自己的表单),只有 `/admin/orders` 能看,卖家看不到
+3. 发布 listing 新增必选的 **Ad type**,类目加了 **Any category** 快捷选项
+4. **发布 listing 不再要求 Stripe KYC、不再要求管理员审核**——直接上线,KYC 卡在"标记交付"那一步;发布表单加两个必勾选框(内容授权 + 同意 Terms)
+5. 个人主页新增 **Price Card**(价目表),卖家填 Ad type + 可选平台 + 起价 + 可选备注,没有自定义背景图(试过又去掉了)
+
+**必须确认已经在 Supabase 后台跑过的 SQL(这次没有逐条重新核对,按功能列一遍,建议按这个顺序检查)**:
+1. `get_user_id_by_email()` 函数(见 README"Guest 结账")
+2. `listing_orders` 新增 `buyer_name`/`buyer_phone`/`buyer_address` 三列(见 README"Guest 联系方式留底")
+3. `create type public.ad_type` + `listings.ad_type` 列(见 README"广告类型 ad_type")——**已确认跑过**,用户截图测试过 Static image ad 正常显示
+4. `alter type public.listing_category add value 'any'`(见 README"类目加一个 Any category 选项"小节)
+5. `listings.rights_attested_at`/`terms_accepted_at` 两列(见 README"发布免审核 + KYC 后置")
+6. `seller_price_card_items` 建表 + RLS(见 README"Price Card")——**已确认跑过**,用户截图测试过真实价目数据正常显示、也确认过背景图去掉后的新版样式
+
+**Supabase 后台配置(非 SQL,这次新增,确认已经做完)**:custom SMTP 接了 Resend(域名 `hereforads.com` 已验证)、Magic Link 邮件模板换成了 `token_hash` 格式、Redirect URLs 加了 `/auth/confirm`。
+
+**还没处理 / 下一步**:
+- **没有自动化内容审核**——发布免审核之后,事后监督完全靠 `/admin/listings` 的 Remove + 举报,这是这轮明确的范围控制,不是漏做,但如果滥用情况变严重需要重新评估
+- **多平台打包价("套餐价")没做**——用户在讨论 ad_type 时提过,这次明确排除在范围外,继续保持"一个 listing 一个投放位",卖家想多平台卖就多发几条(现成的 Duplicate 功能)
+- **Price Card 没有拖拽排序**——`sort_order` 就是加入顺序,想调整目前得删了重加
+- **Terms of Service 那条"虚假/侵权内容责任由发布者承担"的新增措辞,还没给律师看过**——上一轮(9-18)"Terms 没给律师看过"这条提醒还在,这次又加了新内容,风险点没有变小
+- ~~Price 卡片背景图相关代码/文案是否清干净~~——写完这条小结后又跑了一次全仓库 `grep price_card_image`,确认除了 README/本文件的说明性文字,代码里没有任何残留引用,这条可以划掉
