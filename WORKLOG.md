@@ -172,3 +172,25 @@
 - **顺手确认了网站链接图标 + www 前缀那条(2026-09-18 晚些时候那次改动)线上效果**,配合 `/dashboard/profile` 页面表单一起验证过,没有另开新问题。
 - **用户反馈发了条 footer 联系表单消息,`/admin` 总览页没看到**:排查下来不是 bug,是这版 Overview 总览页压根没给 `contact_messages` 留位置——`contact_messages` 表本身有数据(SQL 查出来能查到那条提交记录),`SUPABASE_SERVICE_ROLE_KEY` 也是好的(`/admin` 总览页其他统计数字、`/admin/orders` 等页面数据都正常,证明 service_role key 没问题),纯粹是这批新加的 `/admin/contact` 只有顶部导航栏一个 "Contact" 标签页入口,总览页四个统计卡片(pending listings / total users / banned users)里没有它,管理员如果不知道还有这个单独的标签页,很容易以为"表单提交了但系统没收到"。补了第四张 "Contact messages" 统计卡片(`src/app/admin/page.tsx`,查 `contact_messages` 表的总行数,点进去跳 `/admin/contact`),网格布局从 `sm:grid-cols-3` 改成 `sm:grid-cols-2 lg:grid-cols-4` 塞下第四张卡片。
 - 验证:`npm run build` + `npx eslint src` 全绿。这条卡片的计数逻辑在这个开发环境没法接真实数据跑一遍(连不上 Supabase),但查询写法跟同一个文件里另外三张卡片完全一样的模式,风险很低。
+
+### 今天(9-18 晚到 9-19)的工作小结
+
+写在这里方便下一个 session(或者人)5 分钟内知道"发生了什么",不用把上面一条条 bullet 全看一遍。详细原因/取舍都在上面对应日期的条目里,这里只列结论。
+
+**上线了什么(6 个 PR,全部已合并进 `main`):**
+1. 新增 `/publishers` 创作者/卖家网格页(展示头像、社交粉丝数、广告数、价格区间),原来叫 "Creators" 当天改名成 "Publishers"(卖家不一定是内容创作者,"publisher" 更贴合"发布广告位"这个动作)
+2. 全站加了 footer(品牌 + Terms/Privacy/Contact us 链接),新增 `/terms`、`/privacy`(大白话条款,标了"还没律师审过")、`/contact`(联系表单落地页,提交存进新表 `contact_messages`)
+3. 新增 `/publishers/join` 招募落地页——因为 `/publishers` 现在还没有真实卖家,用户明确否决了"造空卡片给人 claim"这个方向(伪造供给,买家发现是空的会砸信任),改成一个可以直接发给潜在创作者的外联链接。顺带给 `/login`、`/register` 加了 `?next=` 支持,注册完直接落到发布页而不是默认的浏览页
+4. 新增 `profiles.username`,支持 `hereforads.com/{username}` 这种好记链接(替代分享 UUID 链接),`/sellers/[id]` 和新的 `/[username]` 现在共用同一个 `SellerProfileView` 组件
+5. 卖家主页的网站链接加了地球图标 + `www.` 前缀
+6. `/admin` 总览页加了第四张 "Contact messages" 统计卡片(排查"消息发了但仪表盘没显示"这个反馈时发现总览页压根没给联系表单留入口)
+
+**已经跑过的 Supabase SQL(用户已确认,不用再提醒执行)**:`contact_messages` 建表、`profiles.username` 列 + unique/check 约束。**这两条之外、README 里记录的其余 MVP v2 SQL 是不是都跑过,这次没有重新逐条核对**——线上账号数/listing 数据看着是正常的,大概率早就跑过了,只是没有专门确认。
+
+**还没处理 / 下一步**(按优先级粗排):
+- **`/publishers` 现在还是空的**——这是接下来最要紧的事,不是代码问题:需要 CTO 拿着 `hereforads.com/publishers/join` 这个链接去外联真实创作者,一个个邀请,参考 WORKLOG 昨天讨论的"不做空卡片"结论
+- **Terms of Service / Privacy Policy 还没给律师看过**——两个页面顶部都留了黄色提示条,正式对外宣传/大规模获客之前应该找人过一遍,尤其是托管放款/佣金那几条涉及钱的表述
+- **`/dashboard/profile` 设置用户名这条路径,只验证过"直接在 Supabase 后台 SQL 改",没有真人从头点过表单**——建议找一个真实账号走一遍:填用户名 → 存 → 跳转确认 → 故意跟别人重名试一次看报错提示对不对
+- **联系表单没有已读/回复状态**——`/admin/contact` 现在是纯列表,消息一旦看过没有"已读"标记,回复也只能自己点邮箱手动发邮件,消息一多容易漏。以后如果用量上来了,值得加个 `status`/`read_at` 字段
+- **没有提醒老用户"你还没设置好记链接"**——`username` 是新加的可选字段,已经注册的卖家(包括 7smile-Linda 这种)默认都是空的,除非自己想起来去 `/dashboard/profile` 设置,或者像这次一样找人直接在后台 SQL 改。以后可以考虑在 `/dashboard/profile` 页面加一句提示,或者卖家有 listing 但没 username 时在 dashboard 首页提醒一下
+- **OG 分享图还是拿 `logo.png` 这张窄长 wordmark 顶的**(老问题,不是这次引入的,顺手再记一遍免得又被忘掉)——分享到社交媒体/群聊缩略图不好看,以后可以用 `next/og` 单独做一张 1200×630 的
