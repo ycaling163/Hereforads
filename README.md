@@ -810,7 +810,15 @@ revoke update (status, is_featured)
 - **没有邮件通知**:新私信、新订单只能靠登录后看账号头像/侧边栏的红点提示,没有发邮件提醒——用户已经明确说这个先不做,等要做的时候需要去注册 [Resend](https://resend.com)(或类似邮件服务)拿 API key
 - **OG 分享图直接用的是 `logo.png`**:那张图是 968×157 的窄长 wordmark,不是标准 OG 图推荐的 1200×630 比例,分享到社交媒体/群聊时缩略图会比较小或者留白——以后如果要做得更好看,可以像 `src/app/icon.tsx` 那样用 `next/og` 的 `ImageResponse` 单独生成一张标准比例的分享卡片(`src/app/opengraph-image.tsx`),这次先用现成的 logo 顶上,没有另外做设计
 
-以下是已经解决、不用再查的老问题(留个记录):
+下面这几条是 2026-09-18/19 这批(Publishers 改名、footer/Terms/Privacy/Contact、`/publishers/join`、`profiles.username` 好记链接、admin Contact 统计卡片,详见 WORKLOG 同期条目和文末"今天的工作小结")留下的、还没处理的事:
+
+- **`/publishers` 现在还是空的,没有真实卖家**——这是接下来最要紧的事,不是代码问题:需要拿着 `/publishers/join` 这个链接去外联真实创作者一个个邀请,不做"空卡片等人 claim"(见 2026-09-18 WORKLOG 的讨论和结论)
+- **`/terms`、`/privacy` 还没给律师看过**,两个页面顶部有黄色提示条——正式对外宣传/大规模获客之前应该找人审一遍,尤其是托管放款/佣金那几条涉及钱的表述
+- **设置用户名(`/dashboard/profile` 的 "Public profile link" 字段)这条路径只验证过直接在 Supabase 后台改 SQL,没有真人从头点过表单**——建议找一个真实账号走一遍,包括故意跟别人重名一次,确认唯一性冲突的报错提示正常
+- **联系表单没有已读/回复状态**:`/admin/contact` 是纯列表,看过的消息没有"已读"标记,回复也只能手动点邮箱地址发邮件,量一大容易漏,以后可以考虑加 `status`/`read_at` 字段
+- **没有机制提醒老用户"你还没设置好记链接"**:`username` 是新加的可选字段,已经注册的卖家默认都是空的,除非自己想起来去设置。以后可以在 `/dashboard/profile` 或 dashboard 首页给没设置的卖家一句提示
+
+以下是更早之前已经解决、不用再查的老问题(留个记录):
 - ~~Stripe webhook 没配~~——见本文件顶部"已解决"一节
 - ~~没做真实的 Stripe 测试~~——已用 Stripe 测试卡跑通完整 Checkout → webhook → `paid_in_escrow` 链路
 - ~~新旧两套流程并存,没有下线决定~~——已下线老流程
