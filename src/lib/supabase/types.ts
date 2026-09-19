@@ -45,6 +45,10 @@ export interface SellerProfile {
   website_url: string | null;
   // 个人主页顶部的横幅图,只在 /sellers/[id] 展示。加之前读出来是 undefined。
   banner_url: string | null;
+  // Price card(2026-09-19 加,见 README"Price Card"一节)的可选背景图——具体
+  // 价目行存在独立的 seller_price_card_items 表,这里只放卡片本身的背景图。
+  // 加之前读出来是 undefined。
+  price_card_image_url: string | null;
   // Stripe Connect(Express 账户)相关字段,加之前读出来是 undefined。
   // 见 README 支付章节的 SQL。
   stripe_account_id: string | null;
@@ -61,6 +65,19 @@ export interface SocialAccount {
   handle: string | null;
   url: string;
   follower_count: number | null;
+  created_at: string;
+}
+
+// 个人主页的价目表(2026-09-19 加,见 README"Price Card"一节)——一行一个
+// "标题 + 价格",都是自由文本(比如 "Static Image Ad (TikTok)" / "£20"),不
+// 绑定 ad_type/social_platform 这些固定枚举,卖家想怎么写都行。纯展示用,
+// 跟买家实际下单的 listing 完全独立,不代表真的有这么一条 listing 在卖。
+export interface PriceCardItem {
+  id: string;
+  seller_id: string;
+  title: string;
+  price: string;
+  sort_order: number;
   created_at: string;
 }
 

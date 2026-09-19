@@ -1,9 +1,16 @@
 import { HiOutlineGlobeAlt } from "react-icons/hi2";
 import { ListingCard } from "@/components/ListingCard";
+import { PriceCard } from "@/components/PriceCard";
 import { SocialStatCard } from "@/components/SocialStatCard";
 import { LISTING_CATEGORY_LABELS } from "@/lib/supabase/enums";
 import { displayWebsiteUrl } from "@/lib/format";
-import type { Listing, Profile, SellerProfile, SocialAccount } from "@/lib/supabase/types";
+import type {
+  Listing,
+  PriceCardItem,
+  Profile,
+  SellerProfile,
+  SocialAccount,
+} from "@/lib/supabase/types";
 
 // Shared by /sellers/[id] (the stable, always-available link) and
 // /[username] (the optional pretty link a seller can set on their profile
@@ -13,11 +20,13 @@ export function SellerProfileView({
   sellerExtra,
   accounts,
   listings,
+  priceCardItems,
 }: {
   seller: Profile;
   sellerExtra: SellerProfile | null;
   accounts: SocialAccount[];
   listings: Listing[];
+  priceCardItems: PriceCardItem[];
 }) {
   const accountById = new Map(accounts.map((account) => [account.id, account]));
 
@@ -89,16 +98,26 @@ export function SellerProfileView({
           </div>
         </div>
 
-        {accounts.length > 0 && (
-          <div className="mt-8">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
-              Social reach
-            </h2>
-            <div className="mt-3 flex flex-col gap-2 sm:max-w-md">
-              {accounts.map((account) => (
-                <SocialStatCard key={account.id} account={account} />
-              ))}
-            </div>
+        {(accounts.length > 0 || priceCardItems.length > 0) && (
+          <div className="mt-8 grid grid-cols-1 gap-8 sm:grid-cols-2">
+            {accounts.length > 0 && (
+              <div>
+                <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
+                  Social reach
+                </h2>
+                <div className="mt-3 flex flex-col gap-2">
+                  {accounts.map((account) => (
+                    <SocialStatCard key={account.id} account={account} />
+                  ))}
+                </div>
+              </div>
+            )}
+            {priceCardItems.length > 0 && (
+              <PriceCard
+                items={priceCardItems}
+                imageUrl={sellerExtra?.price_card_image_url ?? null}
+              />
+            )}
           </div>
         )}
 
