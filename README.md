@@ -943,19 +943,18 @@ alter table public.listings add column if not exists terms_accepted_at timestamp
 
 这些行**不是真的可下单的 listing**——纯展示、给买家一个大致预期,真正下单还是要点进具体的 listing 走 Buy now(卖家管理页和公开页都有文案说明这一点,避免被误认为是能直接结算的报价)。
 
+**背景图这个想法试过、又去掉了(2026-09-19 同一天)**:最早还做过一版让卖家上传自定义背景图,铺在价目表底下。上线自测发现两个问题:一是自由上传的图片很容易跟站内其他卡片(比如旁边的 "Social reach")的极简 zinc/white 风格不搭,观感不统一;二是就算调淡遮罩透明度让图片看得见,深色文字压在花哨图片上也常常不好读。**当天就整个去掉了这个子功能**,只保留干净的列表样式。`seller_profiles.price_card_image_url` 这一列还留在数据库里(历史遗留,允许为空,没有代码再读写),`updatePriceCardImageAction`/`removePriceCardImageAction` 这两个 action 和管理页那个上传框都已经删掉。
+
 **代码结构**(照抄 `social_accounts` 那一套"列表 + 加一行表单 + 逐行编辑/删除"的既有模式,没有发明新的交互范式):
 
 - 新表 `seller_price_card_items`(id/seller_id/ad_type/platform/price_amount/price_currency/note/sort_order),RLS 跟 `social_accounts` 一样(公开可读,只有本人能增删改)
-- `seller_profiles.price_card_image_url`(背景图,可选),上传/替换/删除复用 `updateProfileAction` 那一套 avatar/banner 的存储桶逻辑(先确认新 URL 存库成功,再删旧文件)
-- 管理界面:`src/app/dashboard/profile/PriceCardManager.tsx` + `PriceCardItemRow.tsx`,server actions 加在现有的 `src/app/dashboard/profile/actions.ts` 里(`updatePriceCardImageAction`/`removePriceCardImageAction`/`addPriceCardItemAction`/`updatePriceCardItemAction`/`deletePriceCardItemAction`)
-- 展示组件:`src/components/PriceCard.tsx`,挂在 `SellerProfileView.tsx` 里,跟 "Social reach" 那块一起包进一个 `sm:grid-cols-2` 的两栏布局(桌面宽度下并排,手机上各自占一整行堆叠)——`/sellers/[id]` 和 `/[username]` 两条路由共用这一个 view 组件,两边都要传 `priceCardItems` 这个新 prop
+- 管理界面:`src/app/dashboard/profile/PriceCardManager.tsx` + `PriceCardItemRow.tsx`,server actions 加在现有的 `src/app/dashboard/profile/actions.ts` 里(`addPriceCardItemAction`/`updatePriceCardItemAction`/`deletePriceCardItemAction`)
+- 展示组件:`src/components/PriceCard.tsx`(纯列表,白/浅灰斑马纹分行,没有背景图),挂在 `SellerProfileView.tsx` 里,跟 "Social reach" 那块一起包进一个 `sm:grid-cols-2` 的两栏布局(桌面宽度下并排,手机上各自占一整行堆叠)——`/sellers/[id]` 和 `/[username]` 两条路由共用这一个 view 组件,两边都要传 `priceCardItems` 这个新 prop
 - 没有做拖拽排序——`sort_order` 就是加入的顺序(insert 时取当前最大值 + 1),想调整顺序目前得删了重加,这是刻意的范围控制,不是漏做
 
-**数据库变更**(依赖上面"广告类型 ad_type"一节先建好的 `public.ad_type` 枚举类型):
+**数据库变更**(依赖上面"广告类型 ad_type"一节先建好的 `public.ad_type` 枚举类型;不需要 `seller_profiles.price_card_image_url` 这一列了,加过的直接跳过,没加也不用补):
 
 ```sql
-alter table public.seller_profiles add column if not exists price_card_image_url text;
-
 create table public.seller_price_card_items (
   id uuid primary key default gen_random_uuid(),
   seller_id uuid not null references public.profiles(id),

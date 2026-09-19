@@ -45,10 +45,6 @@ export interface SellerProfile {
   website_url: string | null;
   // 个人主页顶部的横幅图,只在 /sellers/[id] 展示。加之前读出来是 undefined。
   banner_url: string | null;
-  // Price card(2026-09-19 加,见 README"Price Card"一节)的可选背景图——具体
-  // 价目行存在独立的 seller_price_card_items 表,这里只放卡片本身的背景图。
-  // 加之前读出来是 undefined。
-  price_card_image_url: string | null;
   // Stripe Connect(Express 账户)相关字段,加之前读出来是 undefined。
   // 见 README 支付章节的 SQL。
   stripe_account_id: string | null;
