@@ -35,12 +35,16 @@ export function parseListingFormFields(
   const priceCurrency = String(formData.get("price_currency") ?? "").trim();
   const pricingUnitRaw = String(formData.get("pricing_unit") ?? "");
   const adTypeRaw = String(formData.get("ad_type") ?? "");
-  const categories = formData
+  const rawCategories = formData
     .getAll("categories")
     .map(String)
     .filter((c): c is ListingCategory =>
       (LISTING_CATEGORIES as readonly string[]).includes(c)
     );
+  // "any" 是"接任何类目"的特殊值,跟具体类目互斥——不管前端提交了什么组合,
+  // 只要出现 "any" 就归一化成只存这一个值,避免存成 "any" + 一堆具体类目
+  // 混在一起,详情页渲染出来会很奇怪。
+  const categories = rawCategories.includes("any") ? (["any"] as ListingCategory[]) : rawCategories;
   const placementRaw = String(formData.get("placement") ?? "");
 
   if (!title) {

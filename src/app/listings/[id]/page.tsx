@@ -11,6 +11,7 @@ import {
   LISTING_CATEGORY_LABELS,
   LISTING_STATUS_LABELS,
   PRICING_UNIT_LABELS,
+  SOCIAL_PLATFORM_LABELS,
 } from "@/lib/supabase/enums";
 import type {
   Listing,
@@ -100,29 +101,18 @@ export default async function ListingDetailPage({
     <div className="mx-auto w-full max-w-7xl px-6 py-12">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
-            Accepts ads from
-          </p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            {listing.categories.map((category) => (
-              <span
-                key={category}
-                className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600"
-              >
-                {LISTING_CATEGORY_LABELS[category] ?? category}
+          <div className="flex flex-wrap items-center gap-2">
+            {listing.ad_type && (
+              <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+                {AD_TYPE_LABELS[listing.ad_type]}
               </span>
-            ))}
+            )}
             {listing.status !== "active" && (
               <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
                 {LISTING_STATUS_LABELS[listing.status]}
               </span>
             )}
           </div>
-          {listing.ad_type && (
-            <p className="mt-2 inline-block rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
-              {AD_TYPE_LABELS[listing.ad_type]}
-            </p>
-          )}
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900">
             {listing.title}
           </h1>
@@ -158,8 +148,11 @@ export default async function ListingDetailPage({
                 <WebsiteStatChip />
               </div>
             ) : placementAccount ? (
-              <div className="mt-1.5 flex items-center">
+              <div className="mt-1.5 flex items-center gap-1.5">
                 <SocialStatChip account={placementAccount} />
+                <span className="text-xs text-zinc-500">
+                  {SOCIAL_PLATFORM_LABELS[placementAccount.platform]}
+                </span>
               </div>
             ) : (
               <p className="mt-0.5 text-xs text-zinc-500">Placement not specified</p>
@@ -208,6 +201,22 @@ export default async function ListingDetailPage({
               </p>
             </div>
           )}
+
+          <div className="mt-6">
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
+              Accepts ads from
+            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              {listing.categories.map((category) => (
+                <span
+                  key={category}
+                  className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600"
+                >
+                  {LISTING_CATEGORY_LABELS[category] ?? category}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-col gap-6">

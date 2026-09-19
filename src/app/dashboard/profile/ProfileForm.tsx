@@ -177,7 +177,9 @@ export function ProfileForm({
           outside your niche).
         </p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-          {LISTING_CATEGORIES.map((category) => (
+          {/* "any"(接任何类目的广告)只对 listings.categories 有意义,这里是
+              创作者自己的内容领域,不该出现这个选项。 */}
+          {LISTING_CATEGORIES.filter((category) => category !== "any").map((category) => (
             <label
               key={category}
               className="flex items-center gap-2 text-sm text-zinc-700"

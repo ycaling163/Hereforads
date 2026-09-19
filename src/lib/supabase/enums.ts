@@ -36,8 +36,15 @@ export const SOCIAL_PLATFORM_LABELS: Record<SocialPlatform, string> = {
  * 跟上面 ad_spaces 时代的枚举并存,不复用,避免混淆两套完全不同的产品形态。
  */
 
-// 固定类目列表,卖家可多选(标签式),不开放自定义,避免同义词泛滥。
+// 固定类目列表,卖家可多选(标签式),不开放自定义,避免同义词泛滥。`any` 是
+// 2026-09-19 加的特殊值("这个位置接任何类目的广告"),跟其他类目互斥——勾了
+// `any`,`parseListingFormFields` 会把 categories 强制归一化成只剩 `['any']`
+// 这一个元素(不管前端有没有同时勾了别的),这样详情页渲染"Accepts ads
+// from"那一行 map 出来天然就只有一个"Any category"标签,不会出现"any + 20
+// 个具体类目"堆一起的情况。目前站内没有按类目筛选 listing 的功能,`any` 不
+// 涉及任何"筛选时要不要也匹配 any"的额外逻辑,纯展示层面的简化。
 export const LISTING_CATEGORIES = [
+  "any",
   "beauty_skincare",
   "fashion_style",
   "fitness_health",
@@ -62,6 +69,7 @@ export const LISTING_CATEGORIES = [
 export type ListingCategory = (typeof LISTING_CATEGORIES)[number];
 
 export const LISTING_CATEGORY_LABELS: Record<ListingCategory, string> = {
+  any: "Any category",
   beauty_skincare: "Beauty & Skincare",
   fashion_style: "Fashion & Style",
   fitness_health: "Fitness & Health",

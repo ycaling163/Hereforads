@@ -49,6 +49,9 @@ export function ListingForm({
 }) {
   const [state, formAction, pending] = useActionState(action, {});
   const [keptMedia, setKeptMedia] = useState(initialListing?.media_urls ?? []);
+  const [acceptsAnyCategory, setAcceptsAnyCategory] = useState(
+    initialListing?.categories.includes("any") ?? false
+  );
 
   const defaultPlacement = initialListing?.social_account_id
     ? `account:${initialListing.social_account_id}`
@@ -181,25 +184,42 @@ export function ListingForm({
           <Link href="/dashboard/profile" className="underline">
             profile
           </Link>
-          ) — e.g. a crafts creator can still take fashion or food ads.
+          ) — e.g. a crafts creator can still take fashion or food ads. Not
+          sure, or happy to take anything? Check &ldquo;Any category&rdquo;
+          instead of picking one by one.
         </p>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-          {LISTING_CATEGORIES.map((category) => (
-            <label
-              key={category}
-              className="flex items-center gap-2 text-sm text-zinc-700"
-            >
-              <input
-                type="checkbox"
-                name="categories"
-                value={category}
-                defaultChecked={initialListing?.categories?.includes(category)}
-                className="h-4 w-4 rounded border-zinc-300"
-              />
-              {LISTING_CATEGORY_LABELS[category]}
-            </label>
-          ))}
-        </div>
+        <label className="flex items-center gap-2 text-sm font-medium text-zinc-800">
+          <input
+            type="checkbox"
+            checked={acceptsAnyCategory}
+            onChange={(e) => setAcceptsAnyCategory(e.target.checked)}
+            className="h-4 w-4 rounded border-zinc-300"
+          />
+          {LISTING_CATEGORY_LABELS.any}
+        </label>
+        {acceptsAnyCategory ? (
+          <input type="hidden" name="categories" value="any" />
+        ) : (
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+            {LISTING_CATEGORIES.filter((category) => category !== "any").map(
+              (category) => (
+                <label
+                  key={category}
+                  className="flex items-center gap-2 text-sm text-zinc-700"
+                >
+                  <input
+                    type="checkbox"
+                    name="categories"
+                    value={category}
+                    defaultChecked={initialListing?.categories?.includes(category)}
+                    className="h-4 w-4 rounded border-zinc-300"
+                  />
+                  {LISTING_CATEGORY_LABELS[category]}
+                </label>
+              )
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-4">
