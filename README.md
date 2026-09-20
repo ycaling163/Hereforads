@@ -991,6 +991,79 @@ to authenticated
 using (auth.uid() = seller_id);
 ```
 
+## 站内页面内容管理(Terms/Privacy 后台可编辑,2026-09-20 加)
+
+**背景**:`/terms`、`/privacy` 原来是写死在 `page.tsx` 里的静态 JSX,改一个字都要改代码、重新部署。这次改成从数据库读,加了个 `/admin/pages` 后台,管理员可以直接用富文本编辑器改标题和正文,保存后前台立刻生效,不用发版。顺带把这两个页面的外层容器宽度从 `max-w-3xl` 改成了跟首页/listings 一致的 `max-w-7xl`(`src/lib/legalPageDefaults.ts` 里的 `LEGAL_CONTENT_CLASSNAME`)。
+
+**怎么存的**:`site_pages` 表,`slug` 是 `terms`/`privacy` 两个固定值的主键,`content_html` 存管理员编辑器(`src/components/RichTextEditor.tsx`,基于 Tiptap)导出的 HTML,提交时先经过 `updateSitePageAction`(`src/app/admin/pages/[slug]/actions.ts`)里的 `sanitize-html` 清洗一遍,只放行 `p`/`h2`/`h3`/`ul`/`ol`/`li`/`strong`/`em`/`a` 这类语义标签、`class`/`style`/`script` 之类一律剥掉,前台 `dangerouslySetInnerHTML` 渲染前不需要再处理。写权限跟 `admins` 表一个思路:只开了公开 select 策略,insert/update/delete 全靠 `/admin/pages/[slug]/actions.ts` 用 `createServiceClient()` 绕过 RLS,`authenticated` 没有任何直接写权限。
+
+**兜底**:`src/app/terms/page.tsx`、`src/app/privacy/page.tsx` 查不到这张表(还没跑下面的 SQL)或者某一行还没填过内容时,会退回 `src/lib/legalPageDefaults.ts` 里硬编码的默认文案(就是这次改动之前那两个页面原来的文字)——先把这份代码部署上线也不会导致页面变空白,SQL 什么时候找空跑都行。
+
+### 完整 SQL(站内页面内容管理这部分)
+
+```sql
+-- ===== site_pages(Terms/Privacy 正文,只有 service_role 能写)=====
+create table public.site_pages (
+  slug text primary key check (slug in ('terms', 'privacy')),
+  title text not null,
+  content_html text not null default '',
+  updated_at timestamptz not null default now(),
+  updated_by uuid references public.profiles(id)
+);
+
+alter table public.site_pages enable row level security;
+
+create policy "anyone can read site pages"
+on public.site_pages for select
+using (true);
+
+-- 故意不建 insert/update/delete 策略,写入只能走 service_role(见上面说明)。
+
+insert into public.site_pages (slug, title, content_html) values
+('terms', 'Terms of Service', $terms_html$<p><em>Draft — this page summarizes the platform rules we’ve settled on so far. It hasn’t been reviewed by a lawyer yet and shouldn’t be treated as final legal terms until it has.</em></p>
+<h2>1. What HereForAds is</h2>
+<p>HereForAds is a marketplace where publishers list ad placements (a spot on a social account, website, or other digital space) and buyers pay to advertise there. We provide the listing, payment, and messaging tools — we don’t create, sell, or manage ad inventory ourselves, and we don’t guarantee the performance or results of any ad placement.</p>
+<h2>2. Payments and escrow</h2>
+<p>Payments are processed through Stripe. When you buy a listing, your payment is held in escrow until the publisher marks the order as delivered and you confirm receipt — or a fixed number of days pass after delivery with no response, at which point funds are released automatically. Publishers must complete Stripe’s identity verification (KYC) before they can publish a live listing.</p>
+<p>HereForAds charges a platform commission on completed transactions, deducted from the publisher’s payout alongside Stripe’s own processing fees.</p>
+<h2>3. What we don’t review or guarantee</h2>
+<p>Listings go live as soon as a publisher submits them — we don’t pre-review or vet listings for ad performance, business outcomes, or the accuracy of what a publisher claims about their own account or content. We can remove listings or suspend accounts after the fact (including in response to reports), but publishing a listing doesn’t mean we’ve certified anything about it.</p>
+<p>When publishing a listing, a publisher confirms that they own the account or have explicit authorization to run ads on it, and that the content is original and not subject to any copyright or other dispute. <strong>The publisher is solely responsible for any legal claims — including copyright, trademark, or fraud claims — arising from false, unauthorized, or infringing content in their listing.</strong> We don’t independently verify these confirmations before a listing goes live.</p>
+<h2>4. Staying on-platform</h2>
+<p>Escrow protection, payment security, and any dispute assistance we offer only cover transactions completed through HereForAds checkout. If you and another user agree to pay or deliver outside the platform, that transaction isn’t protected by us in any way — we strongly recommend keeping the full transaction on HereForAds.</p>
+<h2>5. Disputes and refunds</h2>
+<p>We don’t arbitrate disagreements about ad content or quality. If a payment itself is disputed (for example, a Stripe chargeback or fraud claim), that’s handled through Stripe’s dispute process. Contact us using the form below if you run into a problem and we’ll help where we can.</p>
+<h2>6. Account suspension</h2>
+<p>We can suspend or ban accounts that violate these terms, commit fraud, or otherwise abuse the platform. Banned accounts lose access immediately.</p>
+<h2>7. Availability</h2>
+<p>HereForAds is only available where our payment processor (Stripe) supports payouts — this currently excludes mainland China.</p>
+<h2>8. Contact</h2>
+<p>Questions about these terms? Use the contact form in the footer of any page.</p>$terms_html$),
+('privacy', 'Privacy Policy', $privacy_html$<p><em>Draft — this page describes what we actually collect and how it’s actually used today. It hasn’t been reviewed by a lawyer yet and shouldn’t be treated as final legal terms until it has.</em></p>
+<h2>1. What we collect</h2>
+<ul>
+<li>Account info: email address and password (via Supabase Auth)</li>
+<li>Profile info you add: display name, bio, avatar/banner images, website link, content categories</li>
+<li>Social account info you add: platform, handle, profile URL, follower counts</li>
+<li>Listing content: titles, descriptions, prices, photos</li>
+<li>Messages you send other users through the platform, including any images attached</li>
+<li>Payment and payout info handled directly by Stripe — we don’t see or store your card number or bank details ourselves</li>
+<li>Anything you submit through the contact form (name, email, message)</li>
+</ul>
+<h2>2. How we use it</h2>
+<p>To run the marketplace: showing listings, processing payments and payouts, connecting buyers and publishers, moderating content, and responding to support requests. We don’t sell your personal data.</p>
+<h2>3. Who we share it with</h2>
+<p>We use Supabase for our database, authentication, and file storage, and Stripe for payments and identity verification. Both process data on our behalf under their own privacy policies. We may also disclose information if legally required to.</p>
+<h2>4. Cookies and tracking</h2>
+<p>We use a session cookie to keep you signed in (via Supabase Auth). We don’t currently use third-party analytics or advertising trackers on the site.</p>
+<h2>5. Your choices</h2>
+<p>You can edit or remove most of your profile, listing, and social account info directly from your dashboard. To request a copy or deletion of your account data, use the contact form in the footer.</p>
+<h2>6. Contact</h2>
+<p>Questions about this policy? Use the contact form in the footer of any page.</p>$privacy_html$);
+```
+
+**这次同样没有在真实 Supabase 项目上跑过**(这个开发环境连不上 HereForAds 对应的项目)——上面这段 SQL 需要人工去 Supabase 后台的 SQL Editor 跑一遍,跑完之后 `/admin/pages` 才会列出这两条,`/terms`、`/privacy` 会从写死的默认文案切换成读数据库的内容(内容是一样的,只是变得可编辑了)。`npm run build` + `npx eslint src` 全绿,但没有用真实账号点开过 `/admin/pages/terms` 走一遍"改标题 → 用富文本工具栏加粗/加链接 → 保存 → 刷新 /terms 确认生效"这条关键路径,上线后建议人工测一次。
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀
