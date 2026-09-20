@@ -8,10 +8,19 @@ import { DEFAULT_USER_ROLE } from "./enums";
  * 用 upsert + ignoreDuplicates 保证重复调用是安全的。
  */
 export async function ensureProfile(supabase: SupabaseClient, user: User) {
+  // OAuth(Google/Facebook)登录时 user_metadata 里带着 full_name/name,借这个
+  // 机会顺手填一下 display_name,省得用户还要手动去 /dashboard/profile 填一遍。
+  // 邮箱注册没有这些字段,取出来是 undefined,不影响原来的行为。
+  const displayName =
+    (user.user_metadata?.full_name as string | undefined) ??
+    (user.user_metadata?.name as string | undefined) ??
+    null;
+
   const { error } = await supabase.from("profiles").upsert(
     {
       id: user.id,
       role: DEFAULT_USER_ROLE,
+      display_name: displayName,
     },
     { onConflict: "id", ignoreDuplicates: true }
   );
