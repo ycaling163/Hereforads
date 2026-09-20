@@ -18,6 +18,11 @@ export default async function LoginPage({
             That link is invalid or has expired — please log in below.
           </p>
         )}
+        {error === "oauth_failed" && (
+          <p className="mb-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">
+            That sign-in didn&apos;t go through — please try again below.
+          </p>
+        )}
         <LoginForm next={next} />
       </div>
     </div>
