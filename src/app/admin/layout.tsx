@@ -7,6 +7,7 @@ const ADMIN_NAV: { href: string; label: string }[] = [
   { href: "/admin/users", label: "Users" },
   { href: "/admin/orders", label: "Orders" },
   { href: "/admin/contact", label: "Contact" },
+  { href: "/admin/pages", label: "Pages" },
 ];
 
 // 整个 /admin/* 子树是跟 /dashboard/* 平级的独立页面,不共用 DashboardSidebar ——

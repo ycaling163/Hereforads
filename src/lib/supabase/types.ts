@@ -179,3 +179,14 @@ export interface ListingMessage {
   image_url: string | null;
   created_at: string;
 }
+
+// /terms、/privacy 的正文,管理员在 /admin/pages/[slug] 用富文本编辑器改。
+// content_html 存的是 sanitize-html 清洗过的 HTML(只保留 p/h2/ul/a 这类语义标签,
+// 不含 class/style),前台渲染前不需要再处理。见 README"站内页面内容管理"一节。
+export interface SitePage {
+  slug: "terms" | "privacy";
+  title: string;
+  content_html: string;
+  updated_at: string;
+  updated_by: string | null;
+}
