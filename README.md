@@ -951,6 +951,8 @@ alter table public.listing_orders add column if not exists buyer_address text;
 drop policy if exists "buyers and sellers can update their own orders" on public.listing_orders;
 drop policy if exists "buyers can create their own orders" on public.listing_orders;
 revoke insert, update, delete on public.listing_orders from authenticated, anon;
+-- Supabase 默认还给了 TRUNCATE/REFERENCES/TRIGGER,API 用不到,一并收回(TRUNCATE 不受 RLS 约束)。
+revoke truncate, references, trigger on public.listing_orders, public.payments from authenticated, anon;
 -- select 策略("buyers and sellers can view their own orders")保留不动。
 ```
 
@@ -969,7 +971,7 @@ alter table public.listing_orders
 alter table public.payments add column if not exists stripe_refund_id text;
 ```
 
-执行完可以用这句核对 `authenticated` 已经没有写权限(应该只剩 `SELECT` 等,没有 `INSERT`/`UPDATE`/`DELETE`):
+执行完可以用这句核对 `authenticated`/`anon` 只剩 `SELECT`:
 
 ```sql
 select grantee, privilege_type from information_schema.role_table_grants
