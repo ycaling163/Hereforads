@@ -1,20 +1,25 @@
 import type Stripe from "stripe";
 import { stripe } from "./server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { PLATFORM_COMMISSION_RATE } from "@/lib/supabase/enums";
+import { calculateFees, currencyDecimals, fromMinorUnits } from "@/lib/fees";
 
 /**
  * 买家确认收货,或卖家标记交付后 ESCROW_HOLD_DAYS 天超时自动确认,触发的都是这一个
  * 函数 —— 真正把钱从平台账户转给卖家的 Connect 账户。调用方(release action / 定时
  * 任务)已经用条件更新把 listing_orders 锁到 confirmed 状态,保证同一笔订单不会被
  * 并发触发两次转账。
- * 用 service_role client 写 payments/listing_orders —— 这两张表故意没给认证用户开
- * insert/update 的 RLS 口子(payments 完全没有,listing_orders 的状态流转合法性也
- * 不该交给前端 session 的 client 来把关),调用方(手动确认 action / 定时任务)已经
- * 在各自入口做过身份校验,这里可以放心用高权限 client。
+ * 用 service_role client 写 payments/listing_orders —— 这两张表都没给认证用户开
+ * insert/update 权限,调用方已经在各自入口做过身份校验。
  *
- * 手续费口径:卖家到手 = 实际入账净额(已经扣掉 Stripe 手续费的 balance_transaction.net)
- * 再扣平台 12% 佣金(按订单原价算,不受 Stripe 手续费波动影响,见 README)。
+ * 手续费口径(2026-09-23 起,README"费用、取消与退款规则"第 2 条):固定费率,
+ * 卖家到手 = 订单金额 − 12% Service fee − (4% + 固定部分) Payment processing fee,
+ * 跟 Stripe 实际扣多少手续费无关(那笔由平台承担)。
+ *
+ * 资金安全(同一节第 8 条):
+ * - Transfer 带 source_transaction 绑定原始付款,钱从这笔付款里出,不依赖平台当时的
+ *   可用余额(平台提现改手动之后,托管中的钱也不会被提走);
+ * - 幂等:先按 transfer_group 查这笔订单是不是已经转过账(上次转账成功、但写库失败
+ *   的情况),再带 idempotency key 创建,同一笔订单最多转一次。
  */
 export async function releaseOrderPayout(order: {
   id: string;
@@ -29,6 +34,7 @@ export async function releaseOrderPayout(order: {
       .from("payments")
       .select("stripe_payment_intent_id")
       .eq("order_id", order.id)
+      .eq("status", "paid_in_escrow")
       .single(),
     supabase
       .from("profiles")
@@ -44,42 +50,74 @@ export async function releaseOrderPayout(order: {
     throw new Error(`Seller has no Stripe Connect account for order ${order.id}`);
   }
 
-  const paymentIntent = await stripe.paymentIntents.retrieve(
-    payment.stripe_payment_intent_id,
-    { expand: ["latest_charge.balance_transaction"] }
-  );
-  const charge = paymentIntent.latest_charge as Stripe.Charge | null;
-  const balanceTransaction = charge?.balance_transaction as
-    | Stripe.BalanceTransaction
-    | null;
+  const fees = calculateFees(Number(order.amount), order.currency);
 
-  // 正常情况下 balance_transaction 应该总是能展开到;这个兜底只是防止 Stripe 那边
-  // 数据还没结算完(极少见的时序问题)导致这里直接抛异常。
-  const netCents = balanceTransaction?.net ?? Math.round(order.amount * 100);
+  const existing = await stripe.transfers.list({ transfer_group: order.id, limit: 1 });
+  let transfer: Stripe.Transfer | undefined = existing.data[0];
 
-  const platformFeeCents = Math.round(order.amount * PLATFORM_COMMISSION_RATE * 100);
-  const transferAmountCents = Math.max(netCents - platformFeeCents, 0);
-  // balance_transaction.fee 是 Stripe 实报的处理手续费(卡组织+Stripe 自己那部分),
-  // 跟平台佣金是两笔完全独立的扣款,分开存起来才能在"你的收入"页给卖家拆明细。
-  const stripeFeeCents = balanceTransaction?.fee ?? 0;
+  if (!transfer) {
+    const paymentIntent = await stripe.paymentIntents.retrieve(
+      payment.stripe_payment_intent_id,
+      { expand: ["latest_charge.balance_transaction"] }
+    );
+    const charge = paymentIntent.latest_charge as Stripe.Charge | null;
+    const balanceTransaction = charge?.balance_transaction as
+      | Stripe.BalanceTransaction
+      | null;
+    if (!charge || !balanceTransaction) {
+      throw new Error(`Charge not settled yet for order ${order.id}`);
+    }
 
-  const transfer = await stripe.transfers.create({
-    amount: transferAmountCents,
-    currency: order.currency.toLowerCase(),
-    destination: sellerProfile.stripe_connect_account_id,
-    transfer_group: order.id,
-  });
+    // source_transaction 的 Transfer 必须用这笔付款的结算币种(平台账户没开对应
+    // 币种的结算时,比如 USD 付款会被换成 GBP 入账)。币种不同就按 Stripe 这笔付款
+    // 实际用的汇率换算卖家到手金额,换汇差由平台承担(第 2 条"国际卡 + 换汇会亏")。
+    const settlementCurrency = balanceTransaction.currency.toUpperCase();
+    let transferMinor = fees.sellerNetMinor;
+    if (settlementCurrency !== fees.currency) {
+      const rate = balanceTransaction.exchange_rate ?? 1;
+      transferMinor = Math.round(
+        fromMinorUnits(fees.sellerNetMinor, fees.currency) *
+          rate *
+          10 ** currencyDecimals(settlementCurrency)
+      );
+    }
+    // source_transaction 要求转账金额不超过原付款金额。
+    transferMinor = Math.min(transferMinor, balanceTransaction.amount);
 
-  await supabase.from("listing_orders").update({ status: "released" }).eq("id", order.id);
+    transfer = await stripe.transfers.create(
+      {
+        amount: transferMinor,
+        currency: settlementCurrency.toLowerCase(),
+        destination: sellerProfile.stripe_connect_account_id,
+        transfer_group: order.id,
+        source_transaction: charge.id,
+        metadata: { order_id: order.id },
+      },
+      { idempotencyKey: `order-${order.id}-transfer` }
+    );
+  }
 
-  await supabase
+  const { error: orderUpdateError } = await supabase
+    .from("listing_orders")
+    .update({ status: "released" })
+    .eq("id", order.id)
+    .eq("status", "confirmed");
+  if (orderUpdateError) {
+    throw new Error(`Transfer ${transfer.id} sent but order update failed: ${orderUpdateError.message}`);
+  }
+
+  const { error: paymentUpdateError } = await supabase
     .from("payments")
     .update({
       stripe_transfer_id: transfer.id,
-      platform_fee_amount: platformFeeCents / 100,
-      stripe_fee_amount: stripeFeeCents / 100,
-      net_amount: transferAmountCents / 100,
+      platform_fee_amount: fromMinorUnits(fees.serviceFeeMinor, fees.currency),
+      stripe_fee_amount: fromMinorUnits(fees.processingFeeMinor, fees.currency),
+      net_amount: fromMinorUnits(fees.sellerNetMinor, fees.currency),
       status: "released",
     })
-    .eq("order_id", order.id);
+    .eq("order_id", order.id)
+    .eq("status", "paid_in_escrow");
+  if (paymentUpdateError) {
+    throw new Error(`Transfer ${transfer.id} sent but payment update failed: ${paymentUpdateError.message}`);
+  }
 }

@@ -147,6 +147,11 @@ export interface ListingOrder {
   paid_at: string | null;
   delivered_at: string | null;
   confirmed_at: string | null;
+  // 取消(2026-09-23 加,见 README"费用、取消与退款规则"):目前只有付款后 24 小时内
+  // 的免费取消(cancel_reason = 'free_24h'),cancelled_by 是发起取消的买家或卖家。
+  cancelled_at: string | null;
+  cancelled_by: string | null;
+  cancel_reason: string | null;
   created_at: string;
 }
 
@@ -155,12 +160,16 @@ export interface Payment {
   order_id: string;
   stripe_payment_intent_id: string | null;
   stripe_transfer_id: string | null;
+  // 2026-09-23 起是固定费率(src/lib/fees.ts),三列都在付款时由 webhook 写好,
+  // 金额都是订单币种:
+  // - platform_fee_amount:Service fee(12%)
+  // - stripe_fee_amount:向卖家收的 Payment processing fee(4% + 固定部分)。列名是
+  //   历史遗留,**不是** Stripe 实际扣的手续费(那笔由平台承担,不存在这里)
+  // - net_amount:卖家到手金额
   platform_fee_amount: number | null;
-  // Stripe 自己的处理手续费和卖家实际到手净额,只有订单走到 released(真正发起
-  // Transfer)那一步才知道,之前(paid_in_escrow/delivered/confirmed)读出来是 null。
-  // 见 README 支付章节和 src/lib/stripe/release.ts。
   stripe_fee_amount: number | null;
   net_amount: number | null;
+  stripe_refund_id: string | null;
   status: string;
   created_at: string;
 }

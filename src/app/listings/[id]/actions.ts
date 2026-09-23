@@ -7,6 +7,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { stripe } from "@/lib/stripe/server";
 import { EMAIL_PATTERN, resolveGuestBuyerId } from "@/lib/supabase/guest-checkout";
 import type { Listing } from "@/lib/supabase/types";
+import { isSupportedCurrency, toMinorUnits } from "@/lib/fees";
 
 // 私信图片复用已有的 ad-space-photos bucket,不用新建。
 const MESSAGE_MEDIA_BUCKET = "ad-space-photos";
@@ -30,10 +31,9 @@ export async function buyListingAction(
 
   // Guest 结账(不强制先注册/登录):买家只填邮箱,后台静默建号 + 发登录魔法
   // 链接,见 src/lib/supabase/guest-checkout.ts 和 README"Guest 结账"一节。
-  // 登录用户走原来的路径(用当前 session 的 client,靠 RLS 保证只能建自己是
-  // buyer_id 的订单);guest 没有 session,下面统一改用 service_role client
-  // 读 listing / 建 order,自己校验一遍权限(listing 存不存在、状态是不是
-  // active、买家是不是卖家本人)。
+  // 登录用户用当前 session 的 client 读 listing;guest 没有 session,改用
+  // service_role client 读。建 order 两边都走 service_role(见下面),所以这里
+  // 自己校验一遍权限(listing 存不存在、状态是不是 active、买家是不是卖家本人)。
   let buyerId: string;
   let buyerEmail: string | undefined;
   const db = user ? supabase : createServiceClient();
@@ -72,8 +72,14 @@ export async function buyListingAction(
   if (listing.seller_id === buyerId) {
     return { error: "You can't buy your own listing" };
   }
+  if (!isSupportedCurrency(listing.price_currency)) {
+    return { error: "This listing's currency isn't supported for checkout yet" };
+  }
 
-  const { data: order, error: orderError } = await db
+  // 订单一律用 service_role 写(2026-09-23 起 authenticated 角色对 listing_orders
+  // 没有 insert/update 权限,见 README"费用、取消与退款规则"第 8 条的 SQL):
+  // 金额、币种、状态都只从服务端查到的 listing 取,不信任任何客户端输入。
+  const { data: order, error: orderError } = await createServiceClient()
     .from("listing_orders")
     .insert({
       listing_id: listing.id,
@@ -87,7 +93,8 @@ export async function buyListingAction(
     .single();
 
   if (orderError || !order) {
-    return { error: orderError?.message ?? "Couldn't start checkout, please try again" };
+    console.error("Failed to create listing order:", orderError?.message);
+    return { error: "Couldn't start checkout, please try again" };
   }
 
   // Charges & Transfers 模式:钱先收进平台自己的账户,不是 destination charge,
@@ -102,12 +109,13 @@ export async function buyListingAction(
         price_data: {
           currency: listing.price_currency.toLowerCase(),
           product_data: { name: listing.title },
-          unit_amount: Math.round(listing.price_amount * 100),
+          unit_amount: toMinorUnits(listing.price_amount, listing.price_currency),
         },
         quantity: 1,
       },
     ],
     metadata: { order_id: order.id },
+    payment_intent_data: { metadata: { order_id: order.id }, transfer_group: order.id },
     success_url: user
       ? `${SITE_URL}/dashboard/purchases?checkout=success`
       : `${SITE_URL}/checkout/guest-success?email=${encodeURIComponent(buyerEmail ?? "")}`,

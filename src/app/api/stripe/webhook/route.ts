@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { PLATFORM_COMMISSION_RATE } from "@/lib/supabase/enums";
+import { calculateFees, fromMinorUnits, toMinorUnits } from "@/lib/fees";
 
 // 用 service_role key 写库,绕过 RLS —— webhook 请求没有登录用户的 session/cookie,
 // 走不了 src/lib/supabase/server.ts 那条路。
@@ -113,7 +113,7 @@ export async function POST(request: Request) {
       // 不是老流程的订单,按 MVP v2 的 listing_orders 处理。
       const { data: order, error: orderFetchError } = await supabase
         .from("listing_orders")
-        .select("amount,status,buyer_id")
+        .select("amount,currency,status,buyer_id")
         .eq("id", orderId)
         .single();
 
@@ -126,8 +126,48 @@ export async function POST(request: Request) {
         break;
       }
 
-      const platformFeeAmount =
-        Math.round(order.amount * PLATFORM_COMMISSION_RATE * 100) / 100;
+      // 核对实付金额/币种跟订单一致(README"费用、取消与退款规则"第 8 条)。订单金额
+      // 只由服务端从 listing 抄过来,正常不会对不上;对不上说明有人绕过了下单流程,
+      // 订单不进托管(卖家看不到"待交付",不会发货,也不会放款),在 payments 记一笔
+      // amount_mismatch 留给管理员在 Stripe 后台人工处理——MVP 先不做自动退款。
+      const expectedMinor = toMinorUnits(Number(order.amount), order.currency);
+      const amountMatches =
+        session.payment_status === "paid" &&
+        session.currency === order.currency.toLowerCase() &&
+        session.amount_total === expectedMinor;
+
+      if (!amountMatches) {
+        console.error("Checkout amount mismatch for order", orderId, {
+          paymentStatus: session.payment_status,
+          paid: session.amount_total,
+          paidCurrency: session.currency,
+          expected: expectedMinor,
+          expectedCurrency: order.currency,
+        });
+        const { data: existingMismatch } = await supabase
+          .from("payments")
+          .select("id")
+          .eq("order_id", orderId)
+          .eq("status", "amount_mismatch")
+          .limit(1);
+        if (!existingMismatch || existingMismatch.length === 0) {
+          const { error: mismatchInsertError } = await supabase.from("payments").insert({
+            order_id: orderId,
+            stripe_payment_intent_id: paymentIntentId,
+            status: "amount_mismatch",
+          });
+          if (mismatchInsertError) {
+            console.error(
+              "Failed to record amount mismatch:",
+              mismatchInsertError.message
+            );
+          }
+        }
+        break;
+      }
+
+      const fees = calculateFees(Number(order.amount), order.currency);
+      const platformFeeAmount = fromMinorUnits(fees.serviceFeeMinor, fees.currency);
 
       // Guest 结账(见 README"Guest 结账"一节)在 Checkout 页顺手收了姓名/地址/
       // 电话(billing_address_collection/phone_number_collection,登录买家没开
@@ -188,6 +228,10 @@ export async function POST(request: Request) {
         order_id: orderId,
         stripe_payment_intent_id: paymentIntentId,
         platform_fee_amount: platformFeeAmount,
+        // 固定费率下,卖家的 Payment processing fee 和到手金额付款时就定了,
+        // 不用等放款(列名沿用旧的 stripe_fee_amount,含义见 types.ts 的 Payment)。
+        stripe_fee_amount: fromMinorUnits(fees.processingFeeMinor, fees.currency),
+        net_amount: fromMinorUnits(fees.sellerNetMinor, fees.currency),
         status: "paid_in_escrow",
       });
 

@@ -230,3 +230,11 @@
 - **Price Card 没有拖拽排序**——`sort_order` 就是加入顺序,想调整目前得删了重加
 - **Terms of Service 那条"虚假/侵权内容责任由发布者承担"的新增措辞,还没给律师看过**——上一轮(9-18)"Terms 没给律师看过"这条提醒还在,这次又加了新内容,风险点没有变小
 - ~~Price 卡片背景图相关代码/文案是否清干净~~——写完这条小结后又跑了一次全仓库 `grep price_card_image`,确认除了 README/本文件的说明性文字,代码里没有任何残留引用,这条可以划掉
+
+## 2026-09-23 费用、取消与退款 · 第 1 批(分支 `claude/ecstatic-bohr-khjqnu`)
+
+- 做了:固定费率 12% + 4% + 固定部分(`src/lib/fees.ts`)、放款带 `source_transaction` + 幂等、cron 接受 GET + `vercel.json` 每小时、订单写入全部改走 service_role、webhook 核对实付金额、付款后 24 小时免费取消。细节和 SQL 见 README"费用、取消与退款规则 → 实现进度 → 第 1 批"。
+- 产品负责人本批的回答:旧订单都是测试数据,统一按新规则;Vercel 是 Pro;最低价按 USD 0.99 的等值;金额对不上不做自动退款,复杂退款流程以后再完善。
+- **待确认**:CAD/AUD/SGD/HKD/JPY 的固定手续费和最低价是按汇率取的等值整数,产品负责人还没确认具体金额。
+- **需要人工做**:Supabase 执行 README 里的 3 段 SQL;Stripe 平台账户提现改手动;Vercel 加 `CRON_SECRET`。
+- **没验证的**:这个会话没有 `STRIPE_SECRET_KEY`、也连不上 Supabase,Stripe 测试卡流程没有实际跑过,只做了 `npm run lint`、`npm run build` 和费率计算的本地核对(GBP 100 → 到手 83.80)。README 里写了测试卡的手动测试步骤。

@@ -1,12 +1,13 @@
 import {
   AD_TYPES,
   LISTING_CATEGORIES,
-  MIN_LISTING_PRICE,
+  CURRENCIES,
   PRICING_UNITS,
   type AdType,
   type ListingCategory,
   type PricingUnit,
 } from "@/lib/supabase/enums";
+import { currencyDecimals, minListingPrice } from "@/lib/fees";
 
 export interface ParsedListingFields {
   title: string;
@@ -73,12 +74,16 @@ export function parseListingFormFields(
     socialAccountId = accountId;
   }
 
-  const priceAmount = Number(priceAmountRaw);
-  if (!priceAmountRaw || Number.isNaN(priceAmount) || priceAmount < MIN_LISTING_PRICE) {
-    return { error: `Please enter a valid price (minimum $${MIN_LISTING_PRICE})` };
-  }
-  if (!priceCurrency) {
+  if (!(CURRENCIES as readonly string[]).includes(priceCurrency)) {
     return { error: "Please choose a currency" };
+  }
+  const priceAmount = Number(priceAmountRaw);
+  const minPrice = minListingPrice(priceCurrency);
+  if (!priceAmountRaw || Number.isNaN(priceAmount) || priceAmount < minPrice) {
+    return { error: `Please enter a valid price (minimum ${minPrice} ${priceCurrency})` };
+  }
+  if (currencyDecimals(priceCurrency) === 0 && !Number.isInteger(priceAmount)) {
+    return { error: `${priceCurrency} prices can't have decimals` };
   }
   if (!(PRICING_UNITS as readonly string[]).includes(pricingUnitRaw)) {
     return { error: "Please choose a pricing unit" };

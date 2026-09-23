@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export interface DeliverOrderState {
   error?: string;
@@ -52,7 +53,9 @@ export async function markDeliveredAction(
     };
   }
 
-  const { data: updatedRows, error } = await supabase
+  // 订单写入一律走 service_role(authenticated 对 listing_orders 没有 update 权限,
+  // 见 README"费用、取消与退款规则"第 8 条);上面已经校验过是这单的卖家、状态对。
+  const { data: updatedRows, error } = await createServiceClient()
     .from("listing_orders")
     .update({
       status: "delivered",
@@ -64,7 +67,8 @@ export async function markDeliveredAction(
     .select("id");
 
   if (error || !updatedRows || updatedRows.length === 0) {
-    return { error: error?.message ?? "Couldn't save, please try again" };
+    if (error) console.error("Failed to mark order delivered:", error.message);
+    return { error: "Couldn't save, please try again" };
   }
 
   redirect("/dashboard/sales");

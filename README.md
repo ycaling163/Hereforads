@@ -392,6 +392,8 @@ on public.listing_orders for insert
 to authenticated
 with check (auth.uid() = buyer_id);
 
+-- ⚠️ 2026-09-23 起下面这条 update 策略和上面的 insert 策略都已删除、权限已收回,
+-- 订单只由服务端写,见"费用、取消与退款规则 → 实现进度 → 第 1 批"的 SQL。新建库时不要再建这两条。
 -- 状态流转的合法性(比如不能从 pending_payment 直接跳 released)在 Server Action /
 -- webhook 里校验,这条 RLS 策略只负责"是不是这单的买家/卖家才能碰这一行"。
 create policy "buyers and sellers can update their own orders"
@@ -742,7 +744,7 @@ alter table public.listing_orders add column if not exists buyer_address text;
 
 **跟 Terms / Privacy Policy 相关的备注**:第 1 点直接决定 Terms of Service 里"平台责任范围"那一条怎么写;第 2 点一旦实现,会涉及"平台是否读取/扫描用户私信内容"这件事,必须在 Privacy Policy 里向用户披露,并且要讲清楚扫描的唯一目的和数据不会被另作他用,这个如果做的话不能只在 README 里记一句就算了。
 
-## 费用、取消与退款规则(2026-09-23 决策记录,**待实现**)
+## 费用、取消与退款规则(2026-09-23 决策记录,**分批实现中,进度见本节"实现进度"**)
 
 这一节是 2026-09-23 跟产品负责人逐条确认过的规则,**目前只是决策记录,还没有写成代码**——现有代码仍然是"实报 Stripe 手续费 + 12%"、没有取消/退款流程的旧版本。实现时以这一节为准;标了"待确认"的条目还没拍板,不要当成已决定的规则去实现。本节跟上文"MVP v2 产品方案""收付款设计要点"里的旧表述冲突的地方,以本节为准(那几处已经加了指向这里的备注)。
 
@@ -922,6 +924,71 @@ alter table public.listing_orders add column if not exists buyer_address text;
 | 5 | 部分退款时 `reverse_transfer` + `refund_application_fee` 跟第 4 条算得对得上 | **成立**。文档:部分退款时按比例撤回转账,`refund_application_fee` 也按比例退。验算 £100 订单:`application_fee_amount` = 12 + 4.20 = £16.20,转给卖家 £83.80;退 £40 → 按比例撤回转账 83.80 × 40% = £33.52,平台按比例退 16.20 × 40% = £6.48,33.52 + 6.48 = 40;卖家最终 £50.28,**跟第 4 条的例子完全一致**。只有 1 便士的舍入差,由 Stripe 决定,代码按 Stripe 返回的实际金额记账 | [Create destination charges](https://docs.stripe.com/connect/destination-charges)、[Handle refunds and disputes](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes) |
 
 **5 个点之外发现的冲突(要产品负责人决定)**:destination charges 在**买家付款那一刻**就要写 `transfer_data.destination`,也就是说卖家那时候必须已经有开通了 `transfers` 能力的 Connect 账户。这跟第 9 条"5 个地区之内、还没开通 Stripe 的卖家,买家照常可以付款(KYC 后置)"**直接冲突**——做法 B 下这类卖家的订单根本没法创建。做法 A(separate charges & transfers)没有这个问题,因为它到放款时才需要卖家账户。
+
+### 实现进度
+
+#### 第 1 批(2026-09-23 已写代码,**SQL 要手动执行**):资金安全(第 8 条)+ 固定费率(第 2 条)+ 24 小时免费取消(第 4 条第一行)
+
+**代码改了什么**
+
+- **固定费率**:`src/lib/fees.ts`(服务端和发布表单共用,按最小货币单位整数计算)。Service fee 12%,Payment processing fee 4% + 固定部分。
+  - 固定部分按币种(`PROCESSING_FIXED_FEE_MINOR`):GBP 0.20、USD 0.25、EUR 0.25、CAD 0.35、AUD 0.40、SGD 0.35、HKD 2.00、JPY 40。USD/EUR 是第 2 条写明的,**其余 5 种是按 2026-09 汇率取的等值整数,待产品负责人确认**。
+  - 最低发布价改成按 USD 0.99 的等值(`MIN_LISTING_PRICE_MINOR`):USD 0.99、GBP 0.79、EUR 0.89、CAD 1.39、AUD 1.49、SGD 1.29、HKD 7.99、JPY 150,原来是所有币种都 0.99。
+  - JPY 是零小数位货币,之前下单金额一律 ×100 是错的,现在统一走 `toMinorUnits`。
+  - 发布/编辑广告表单实时显示 "You'll receive"(卖家挂单时就能看到到手金额);Sales 页明细改名 Service fee / Payment processing fee,付款后就显示(不用等放款)。
+  - `payments` 三列的含义变了(列名沿用):`platform_fee_amount` = Service fee,`stripe_fee_amount` = 向卖家收的 Payment processing fee(**不是** Stripe 实际扣的手续费),`net_amount` = 卖家到手,都是订单币种,webhook 收到付款时就写好。
+- **放款**(`src/lib/stripe/release.ts`):Transfer 带 `source_transaction`(绑定原始付款)、`idempotency key`,创建前先按 `transfer_group` 查有没有转过账,同一笔订单最多转一次。付款币种跟平台结算币种不同时(比如 USD 付款按 GBP 入账),按 Stripe 这笔付款实际的汇率换算卖家到手金额,换汇差平台承担。
+- **Cron**(`/api/cron/auto-confirm`):改成同时接受 GET(Vercel Cron)和 POST;新增根目录 `vercel.json`,每小时跑一次;顺带重试停在 `confirmed`(上次放款失败)的订单。没配 `CRON_SECRET` 时一律 401。
+- **订单写入全部改走服务端**(service_role):下单(`buyListingAction`)、标记交付、买家确认、取消、webhook、cron。配合下面的 SQL 收回 `authenticated` 对 `listing_orders` 的 insert/update 权限——之前 RLS 允许买卖双方直接改自己订单的 `status`/`delivered_at`/`amount`,甚至直接插入一条金额随便填、状态直接是 `paid_in_escrow` 的订单。
+- **Webhook 核对实付金额**:`checkout.session.completed` 时核对 `payment_status = paid`、币种、`amount_total` 跟订单一致。对不上:订单停在 `pending_payment`(不进托管,卖家看不到待交付,不会放款),`payments` 记一行 `status = 'amount_mismatch'`,打错误日志,**不自动退款**,由管理员去 Stripe 后台人工处理(MVP 先不做复杂退款流程)。
+- **24 小时免费取消**(`src/lib/orders/actions.ts` 的 `cancelWithin24hAction`,Sales/Purchases 页的 "Cancel order" 按钮):付款后 24 小时内、订单还在 `paid_in_escrow`(卖家还没交付)时,买家或卖家都能直接取消,不需要对方同意。先用条件更新把订单锁成 `cancelled`,再调 Stripe 全额退款(idempotency key `order-<id>-cancel-refund`),退款失败就还原成 `paid_in_escrow`。卖家不承担费用,`cancel_reason = 'free_24h'`,不算违约。
+- 第 4 条其他几行、第 4a/5/6/7 条(超期、协商退款、拒付、强制扣回等)**这一批没做**,后面分批再做。
+
+**要手动执行的 SQL**(Supabase SQL Editor,按顺序执行;`alter type ... add value` 不能跟用到新值的语句放在同一个事务里,所以第 2 段单独执行):
+
+```sql
+-- 1. 收回 authenticated/anon 对 listing_orders 的写权限:订单只能由服务端(service_role)写。
+drop policy if exists "buyers and sellers can update their own orders" on public.listing_orders;
+drop policy if exists "buyers can create their own orders" on public.listing_orders;
+revoke insert, update, delete on public.listing_orders from authenticated, anon;
+-- select 策略("buyers and sellers can view their own orders")保留不动。
+```
+
+```sql
+-- 2. 订单新增"已取消"状态(单独执行这一句)
+alter type public.listing_order_status add value if not exists 'cancelled';
+```
+
+```sql
+-- 3. 取消相关的列
+alter table public.listing_orders
+  add column if not exists cancelled_at timestamptz,
+  add column if not exists cancelled_by uuid references public.profiles(id),
+  add column if not exists cancel_reason text;
+
+alter table public.payments add column if not exists stripe_refund_id text;
+```
+
+执行完可以用这句核对 `authenticated` 已经没有写权限(应该只剩 `SELECT` 等,没有 `INSERT`/`UPDATE`/`DELETE`):
+
+```sql
+select grantee, privilege_type from information_schema.role_table_grants
+where table_schema = 'public' and table_name = 'listing_orders' and grantee in ('authenticated', 'anon');
+```
+
+**要手动在后台配的**
+
+1. **Stripe 后台(平台账户,测试和正式各做一次)**:Settings → Payouts(或 Balance → Payout schedule)把平台自己的提现改成**手动**(第 8 条第 1 点)。不改的话 Stripe 每天自动提现,会把托管中的钱提走;代码里的 `source_transaction` 能保证转账不因余额不足失败,但托管中的钱留在平台余额里才是这套模型的前提。
+2. **Vercel**(Pro):环境变量加 `CRON_SECRET`(随机长字符串),Vercel Cron 会自动带 `Authorization: Bearer $CRON_SECRET`。部署后在 Vercel 项目的 Settings → Cron Jobs 能看到 `/api/cron/auto-confirm` 每小时一次。
+3. Stripe webhook 订阅的事件不变(`checkout.session.completed`、`account.updated`)。
+
+**用测试卡手动走一遍(执行完 SQL、部署到预览环境之后)**
+
+1. 发布一条 GBP 100 的广告,表单上应该显示 Service fee −12.00、Payment processing fee −4.20、You'll receive 83.80。改成 JPY,最低价提示应该是 150 JPY,不能填小数。
+2. 另一个账号(或 guest)用 `4242 4242 4242 4242` 付款 → 订单进 "In escrow",Sales 页明细显示 83.80。
+3. 买家在 Purchases 页点 "Cancel order" → 订单变 "Cancelled — refunded",Stripe 后台这笔付款显示全额退款;再点一次(或刷新重复提交)不会退第二次。卖家那边也能取消(再下一单试)。
+4. 再下一单 → 卖家标记交付 → 买家 "Confirm receipt" → Stripe 后台 Connect → Transfers 出现一笔 83.80、`source_transaction` 指向原付款的转账,订单变 "Paid out"。
+5. 用浏览器控制台拿登录态直接调 Supabase REST 改自己订单的 `status`,应该被拒(permission denied)。
 
 ### 12. 以后视取消率再加的规则(MVP 不写进 Terms、不写代码)
 

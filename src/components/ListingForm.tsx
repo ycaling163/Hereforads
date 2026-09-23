@@ -9,11 +9,19 @@ import {
   CURRENCIES,
   LISTING_CATEGORIES,
   LISTING_CATEGORY_LABELS,
-  MIN_LISTING_PRICE,
   PRICING_UNITS,
   PRICING_UNIT_LABELS,
   SOCIAL_PLATFORM_LABELS,
 } from "@/lib/supabase/enums";
+import {
+  PROCESSING_FEE_RATE,
+  PROCESSING_FIXED_FEE_MINOR,
+  SERVICE_FEE_RATE,
+  calculateFees,
+  currencyDecimals,
+  formatMoney,
+  minListingPrice,
+} from "@/lib/fees";
 
 export interface ListingFormState {
   error?: string;
@@ -47,6 +55,18 @@ export function ListingForm({
   pendingLabel: string;
 }) {
   const [state, formAction, pending] = useActionState(action, {});
+  const [priceAmount, setPriceAmount] = useState(
+    initialListing?.price_amount !== undefined ? String(initialListing.price_amount) : ""
+  );
+  const [priceCurrency, setPriceCurrency] = useState(
+    initialListing?.price_currency ?? "USD"
+  );
+  const minPrice = minListingPrice(priceCurrency);
+  const parsedPrice = Number(priceAmount);
+  const feePreview =
+    priceAmount && !Number.isNaN(parsedPrice) && parsedPrice >= minPrice
+      ? calculateFees(parsedPrice, priceCurrency)
+      : null;
   const [keptMedia, setKeptMedia] = useState(initialListing?.media_urls ?? []);
   const [acceptsAnyCategory, setAcceptsAnyCategory] = useState(
     initialListing?.categories.includes("any") ?? false
@@ -230,13 +250,16 @@ export function ListingForm({
             id="price_amount"
             name="price_amount"
             type="number"
-            step="0.01"
-            min={MIN_LISTING_PRICE}
+            step={currencyDecimals(priceCurrency) === 0 ? "1" : "0.01"}
+            min={minPrice}
             required
-            defaultValue={initialListing?.price_amount}
+            value={priceAmount}
+            onChange={(event) => setPriceAmount(event.target.value)}
             className={inputClass}
           />
-          <p className="text-xs text-zinc-500">Minimum ${MIN_LISTING_PRICE}</p>
+          <p className="text-xs text-zinc-500">
+            Minimum {minPrice} {priceCurrency}
+          </p>
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="price_currency" className={labelClass}>
@@ -246,7 +269,8 @@ export function ListingForm({
             id="price_currency"
             name="price_currency"
             required
-            defaultValue={initialListing?.price_currency ?? "USD"}
+            value={priceCurrency}
+            onChange={(event) => setPriceCurrency(event.target.value)}
             className={inputClass}
           >
             {CURRENCIES.map((code) => (
@@ -274,6 +298,42 @@ export function ListingForm({
             ))}
           </select>
         </div>
+      </div>
+
+      {/* 固定费率(README"费用、取消与退款规则"第 2 条):卖家挂单时就能看到到手金额。 */}
+      <div className="rounded-lg bg-zinc-50 p-3 text-xs text-zinc-600">
+        {feePreview ? (
+          <>
+            <div className="flex justify-between">
+              <span>Buyer pays</span>
+              <span>{formatMoney(feePreview.grossMinor, feePreview.currency)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Service fee ({SERVICE_FEE_RATE * 100}%)</span>
+              <span>−{formatMoney(feePreview.serviceFeeMinor, feePreview.currency)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>
+                Payment processing fee ({PROCESSING_FEE_RATE * 100}% +{" "}
+                {formatMoney(
+                  PROCESSING_FIXED_FEE_MINOR[feePreview.currency],
+                  feePreview.currency
+                )}
+                )
+              </span>
+              <span>−{formatMoney(feePreview.processingFeeMinor, feePreview.currency)}</span>
+            </div>
+            <div className="mt-1 flex justify-between border-t border-zinc-200 pt-1 font-medium text-zinc-900">
+              <span>You&apos;ll receive</span>
+              <span>{formatMoney(feePreview.sellerNetMinor, feePreview.currency)}</span>
+            </div>
+          </>
+        ) : (
+          <p>
+            Enter a price to see what you&apos;ll receive after the {SERVICE_FEE_RATE * 100}%
+            service fee and the payment processing fee.
+          </p>
+        )}
       </div>
 
       {keptMedia.length > 0 && (
