@@ -882,6 +882,21 @@ alter table public.listing_orders add column if not exists buyer_address text;
 - **托管的实现方式待确认**(见文末):如果改成"钱进卖家的 Stripe 余额、平台暂停卖家提现,确认后才放行",条款里"延迟结算指令"的说法就完全符合实际,平台余额里也只有佣金。
 - 条款措辞上线前要找律师确认;另外要书面问 Stripe 客服:这个架构下,英国个人平台需不需要自己的 FCA 授权。
 
+### 11a. 托管实现方式:优先做法 B,验证不通过才用做法 A(2026-09-23 决定)
+
+- **做法 B(优先)**:Stripe **destination charges**(`transfer_data.destination` + `application_fee_amount`),钱付款时就进卖家的 Express 账户余额,平台余额里只有佣金;平台把卖家账户的提现设成**手动**(`settings.payouts.schedule.interval = "manual"`),订单放款时由平台对这个卖家账户发起一笔金额 = 该订单卖家应得的 payout。退款:`refunds.create` 带 `reverse_transfer: true` 和 `refund_application_fee: true`(部分退款时按比例)。
+- **做法 A(备选)**:现在代码里的 separate charges & transfers,加上第 8 条的修复(平台提现改手动、`source_transaction`)。
+
+**写代码前必须先在 Stripe 测试模式里验证做法 B 的这几点,任何一条不成立就用做法 A,并把验证结果写回这里:**
+
+1. 平台能把 Express 账户(英国、EEA、美国、加拿大、瑞士)的提现设成手动,而且**卖家自己在 Express 后台不能绕过去提现**。
+2. 钱在卖家账户余额里**最长能压多久**(各国上限)。必须覆盖一笔订单的最长周期:交付天数上限 60 天 + 审稿 3 天 + 确认期 3 天 + 纠纷处理;压不了这么久,要么缩短交付天数上限,要么用做法 A。
+3. 平台能按单笔订单金额对卖家账户发起 payout,不会把其他还在托管中的订单的钱一起打出去(代码里要按订单记账,payout 金额只算已放款订单)。
+4. 英国平台对这 5 个地区的卖家做 destination charges 可行;另外评估要不要加 `on_behalf_of`(让卖家成为商户,更符合第 11 条"平台只是代理"的表述,但会影响跨境和手续费)。
+5. 部分退款时 `reverse_transfer` + 按比例 `refund_application_fee` 的金额跟第 4 条的规则算得对得上。
+
+做法 B 下,第 6 条"先撤回转账,再退给买家"对应的就是带 `reverse_transfer` 的退款(放款前钱还在卖家余额里,一定够);放款后(已经 payout)的退款才会让卖家余额变负数,走第 6 条的 £10 门槛规则。
+
 ### 12. 以后视取消率再加的规则(MVP 不写进 Terms、不写代码)
 
 - **买家原因退款扣 2% 通道费**:"若因买家自身原因(如填错广告素材、单方面取消等)在卖家接单前申请退款,平台将扣除 2% 的第三方支付通道处理费,退还剩余金额。"——等上线后看实际取消率再决定要不要加。
@@ -890,7 +905,6 @@ alter table public.listing_orders add column if not exists buyer_address text;
 ### 还没拍板的问题(实现前要确认)
 
 - 消费者 14 天取消权的具体条款措辞要找律师确认(做法已定,见上面第 10 条)
-- 托管的实现方式:继续用现在的 separate charges & transfers(钱在平台余额,平台提现必须改成手动),还是改成 destination charges + 卖家账户暂停提现(钱在卖家余额,平台余额里只有佣金,更符合第 11 条的 Terms 表述)——见第 11 条
 - 第 11 条 Terms 英文措辞要找律师确认,并书面问 Stripe 客服是否需要 FCA 授权
 
 ## 管理员系统(2026-09-18 加)
