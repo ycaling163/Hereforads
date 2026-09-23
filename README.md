@@ -897,6 +897,20 @@ alter table public.listing_orders add column if not exists buyer_address text;
 
 做法 B 下,第 6 条"先撤回转账,再退给买家"对应的就是带 `reverse_transfer` 的退款(放款前钱还在卖家余额里,一定够);放款后(已经 payout)的退款才会让卖家余额变负数,走第 6 条的 £10 门槛规则。
 
+#### 11a 验证结果(2026-09-23 第 0 步)
+
+**验证方式及局限**:开发环境的网络策略挡住了 `api.stripe.com` 和 `docs.stripe.com`,也没有 Stripe 测试 key,所以**没能在测试模式里实际跑**,下面的结论只来自 Stripe 官方文档(通过搜索引擎读到的摘录)。标了"需实测"的点,要等拿到测试 key、放开 `api.stripe.com` 之后补测。
+
+| # | 验证点 | 结论 | 依据 |
+|---|---|---|---|
+| 1 | 平台把 Express 账户提现设成手动,卖家不能绕过 | **文档上成立,有前提,需实测**。平台可以用 Accounts API 设 `settings.payouts.schedule.interval = "manual"`;Express 卖家能不能自己改提现计划,由平台在 Connect 设置的 payout schedules 页决定。**有一个绕过口子**:文档写明"账户设成手动也能用 Instant Payouts",所以平台必须在 Connect 设置里**关掉 Express 账户的 Instant Payouts 和"卖家自己改提现计划"**。没关的话,卖家可以在 Express 后台把托管中的钱即时提走 | [Using manual payouts](https://docs.stripe.com/connect/manual-payouts)、[Manage payout schedule](https://docs.stripe.com/connect/manage-payout-schedule)、[Instant Payouts for Connect](https://docs.stripe.com/connect/instant-payouts)、[Express 用户帮助:How do I manage my payouts](https://support.stripe.com/express/questions/how-do-i-manage-my-payouts) |
+| 2 | 钱最长能压多久 | **最多约 90 天**(按卖家国家,英国/EEA/加拿大/瑞士都按 90 天算;美国账户的上限更长)。超过上限 Stripe 会**自动把钱打给卖家**,也就是任务还没做完卖家就拿到了钱。搜索摘录只确认了"最多 90 天"这句话,各国上限表没能完整读到,**需实测/人工看一眼文档表格**。订单正常周期是 60 + 3 + 3 = 66 天,但**修改后重新提交没有时限、纠纷裁决也没有时限**,极端情况会超过 90 天 | [Using manual payouts](https://docs.stripe.com/connect/manual-payouts)、[Payouts to connected accounts](https://docs.stripe.com/connect/payouts-connected-accounts) |
+| 3 | 能按单笔订单金额发 payout | **成立**。手动模式下平台用 Payouts API(以卖家账户身份)指定金额发起 payout,不会把其他托管中的钱一起打出去。要注意:payout 只能动**已结算(available)**的余额,刚付款几天内的钱还是 pending,订单很快完成时 payout 会失败,代码要能稍后重试 | [Using manual payouts](https://docs.stripe.com/connect/manual-payouts) |
+| 4 | 英国平台对 5 个地区做 destination charges;要不要加 `on_behalf_of` | **不加 `on_behalf_of` 时成立**:美国/英国/EEA/加拿大/瑞士的平台可以给这几个地区的 Connect 账户转账,destination charges 支持这些地区之间的跨境资金流。**建议 MVP 不加 `on_behalf_of`**:加了之后卖家变成结算商户,卖家账户要额外开 `card_payments` 能力(KYC 更重),手续费和结算按卖家国家算,跟第 2 条"平台承担 Stripe 实际手续费"的口径也对不上 | [Create destination charges](https://docs.stripe.com/connect/destination-charges)、[Cross-border payouts](https://docs.stripe.com/connect/cross-border-payouts) |
+| 5 | 部分退款时 `reverse_transfer` + `refund_application_fee` 跟第 4 条算得对得上 | **成立**。文档:部分退款时按比例撤回转账,`refund_application_fee` 也按比例退。验算 £100 订单:`application_fee_amount` = 12 + 4.20 = £16.20,转给卖家 £83.80;退 £40 → 按比例撤回转账 83.80 × 40% = £33.52,平台按比例退 16.20 × 40% = £6.48,33.52 + 6.48 = 40;卖家最终 £50.28,**跟第 4 条的例子完全一致**。只有 1 便士的舍入差,由 Stripe 决定,代码按 Stripe 返回的实际金额记账 | [Create destination charges](https://docs.stripe.com/connect/destination-charges)、[Handle refunds and disputes](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes) |
+
+**5 个点之外发现的冲突(要产品负责人决定)**:destination charges 在**买家付款那一刻**就要写 `transfer_data.destination`,也就是说卖家那时候必须已经有开通了 `transfers` 能力的 Connect 账户。这跟第 9 条"5 个地区之内、还没开通 Stripe 的卖家,买家照常可以付款(KYC 后置)"**直接冲突**——做法 B 下这类卖家的订单根本没法创建。做法 A(separate charges & transfers)没有这个问题,因为它到放款时才需要卖家账户。
+
 ### 12. 以后视取消率再加的规则(MVP 不写进 Terms、不写代码)
 
 - **买家原因退款扣 2% 通道费**:"若因买家自身原因(如填错广告素材、单方面取消等)在卖家接单前申请退款,平台将扣除 2% 的第三方支付通道处理费,退还剩余金额。"——等上线后看实际取消率再决定要不要加。
@@ -906,6 +920,7 @@ alter table public.listing_orders add column if not exists buyer_address text;
 
 - 消费者 14 天取消权的具体条款措辞要找律师确认(做法已定,见上面第 10 条)
 - 第 11 条 Terms 英文措辞要找律师确认,并书面问 Stripe 客服是否需要 FCA 授权
+- 第 11a 条选 B 还是 A:验证结果见 11a,B 跟第 9 条"KYC 后置"冲突,另外 B 下订单最长周期要压在 90 天以内(修改重新提交、纠纷裁决现在都没有时限)
 
 ## 管理员系统(2026-09-18 加)
 
