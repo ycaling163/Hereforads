@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createServiceClient } from "@/lib/supabase/service";
 import { LISTING_ORDER_STATUS_LABELS } from "@/lib/supabase/enums";
 import type { Listing, ListingOrder, Payment, Profile } from "@/lib/supabase/types";
+import { formatOrderNumber, parseOrderNumber } from "@/lib/orders/orderNumber";
 
 const RECENT_LIMIT = 200;
 
@@ -28,9 +29,12 @@ function sumByCurrency(orders: ListingOrder[]): string {
 export default async function AdminOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ seller?: string }>;
+  searchParams: Promise<{ seller?: string; q?: string }>;
 }) {
-  const { seller: sellerFilter } = await searchParams;
+  const { seller: sellerFilter, q } = await searchParams;
+  // 按订单号(HFA-000118 / 118)或买家邮箱搜索,见 README"订单号与订单查询"。
+  const search = (q ?? "").trim();
+  const searchOrderNumber = search ? parseOrderNumber(search) : null;
   const admin = createServiceClient();
   let orderQuery = admin
     .from("listing_orders")
@@ -39,6 +43,12 @@ export default async function AdminOrdersPage({
     .limit(RECENT_LIMIT);
   if (sellerFilter) {
     orderQuery = orderQuery.eq("seller_id", sellerFilter);
+  }
+  if (searchOrderNumber) {
+    orderQuery = orderQuery.eq("order_number", searchOrderNumber);
+  } else if (search) {
+    // ilike 的 % 和 _ 是通配符,转义掉,按字面匹配邮箱片段。
+    orderQuery = orderQuery.ilike("buyer_email", `%${search.replace(/[\\%_]/g, "\\$&")}%`);
   }
   const { data: orderRows, error } = await orderQuery;
 
@@ -89,6 +99,30 @@ export default async function AdminOrdersPage({
         — for dispute/support lookups, not for editing order state.
       </p>
 
+      <form action="/admin/orders" className="mt-6 flex gap-2">
+        {sellerFilter && <input type="hidden" name="seller" value={sellerFilter} />}
+        <input
+          name="q"
+          defaultValue={search}
+          placeholder="Order number (HFA-000118) or buyer email"
+          className="w-full max-w-sm rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
+        />
+        <button
+          type="submit"
+          className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
+        >
+          Search
+        </button>
+        {search && (
+          <Link
+            href={sellerFilter ? `/admin/orders?seller=${sellerFilter}` : "/admin/orders"}
+            className="self-center text-sm text-zinc-500 underline"
+          >
+            Clear
+          </Link>
+        )}
+      </form>
+
       {sellerFilter && (
         <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -129,6 +163,7 @@ export default async function AdminOrdersPage({
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-400">
+              <th className="py-2 pr-4">Order</th>
               <th className="py-2 pr-4">Listing</th>
               <th className="py-2 pr-4">Buyer</th>
               <th className="py-2 pr-4">Buyer contact</th>
@@ -142,6 +177,11 @@ export default async function AdminOrdersPage({
           <tbody>
             {orders.map((order) => (
               <tr key={order.id} className="border-b border-zinc-100">
+                <td className="whitespace-nowrap py-2 pr-4 font-mono text-xs text-zinc-600">
+                  <Link href={`/orders/${order.view_token}`} className="hover:underline">
+                    {formatOrderNumber(order.order_number)}
+                  </Link>
+                </td>
                 <td className="py-2 pr-4 text-zinc-900">
                   <Link href={`/listings/${order.listing_id}`} className="hover:underline">
                     {listingTitleById.get(order.listing_id) ?? "Listing"}

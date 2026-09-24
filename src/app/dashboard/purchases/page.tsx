@@ -6,6 +6,7 @@ import { CancelOrderForm } from "@/components/CancelOrderForm";
 import { ProofLinkHistory } from "@/components/ProofLinkHistory";
 import { LISTING_ORDER_STATUS_LABELS, freeCancelDeadline } from "@/lib/supabase/enums";
 import { formatBookingRange } from "@/lib/booking";
+import { formatOrderNumber } from "@/lib/orders/orderNumber";
 import { releaseNowAction } from "./actions";
 import type { Listing, ListingOrder, ListingOrderProofChange } from "@/lib/supabase/types";
 
@@ -113,6 +114,9 @@ export default async function PurchasesPage({
                 >
                   {listingsById.get(order.listing_id) ?? "Listing"}
                 </Link>
+                <span className="text-xs text-zinc-400">
+                  {formatOrderNumber(order.order_number)}
+                </span>
                 <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600">
                   {LISTING_ORDER_STATUS_LABELS[order.status]}
                 </span>

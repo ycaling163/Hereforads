@@ -8,6 +8,7 @@ import { stripe } from "@/lib/stripe/server";
 import { EMAIL_PATTERN, resolveGuestBuyerId } from "@/lib/supabase/guest-checkout";
 import type { Listing } from "@/lib/supabase/types";
 import { fromMinorUnits, isSupportedCurrency, toMinorUnits } from "@/lib/fees";
+import { formatOrderNumber } from "@/lib/orders/orderNumber";
 import {
   CHECKOUT_EXPIRES_MINUTES,
   MAX_ADVANCE_DAYS,
@@ -201,6 +202,14 @@ async function startCheckout(
     }
     orderId = order.id;
   }
+  // 订单号(HFA-000118)由数据库序列在插入时生成,读回来写进 Stripe 的描述和 metadata,
+  // 在 Stripe 后台能直接按订单号搜。
+  const { data: numbered } = await createServiceClient()
+    .from("listing_orders")
+    .select("order_number")
+    .eq("id", orderId)
+    .maybeSingle();
+  const orderNumber = formatOrderNumber(numbered?.order_number);
   const order = { id: orderId };
 
   // Charges & Transfers 模式:钱先收进平台自己的账户,不是 destination charge,
@@ -218,6 +227,7 @@ async function startCheckout(
   const sellerName = sellerProfile?.display_name ?? "Unnamed seller";
   const stripeMetadata = {
     order_id: order.id,
+    order_number: orderNumber,
     listing_id: listing.id,
     listing_title: listing.title.slice(0, 450),
     seller_id: listing.seller_id,
@@ -228,7 +238,7 @@ async function startCheckout(
     booking_end: endDate ?? "",
   };
   const paymentDescription =
-    `Seller: ${sellerName} · ${listing.title} · order ${order.id.slice(0, 8)}`.slice(0, 1000);
+    `${orderNumber ? `${orderNumber} · ` : ""}Seller: ${sellerName} · ${listing.title} · order ${order.id.slice(0, 8)}`.slice(0, 1000);
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
