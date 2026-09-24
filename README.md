@@ -633,6 +633,8 @@ Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。
 
 **产品决策**:买家点"Buy now"不再被强制跳去 `/login`/`/register`——没登录的访客只需要在按钮上方填一个邮箱就能直接走 Stripe Checkout 付款。付款/托管放款流程本身完全不变(还是 `pending_payment` → `paid_in_escrow` → `delivered` → 买家确认/超时自动确认 → `released`),因为这套流程需要买家事后能回来"确认收货",纯匿名、完全不落任何账号是做不到这一步的。
 
+**2026-09-24 调整入口文案(产品负责人决定)**:广告页上不再写"No account needed to buy"——主动宣传"不用注册"会让更多人不注册,流失客户。现在未登录访客点 Buy now 之后,才出现三个选项:**Log in to buy**、**Create an account**(都带 `next` 参数,登录/注册完回到这条广告)、**Continue as guest**(填邮箱,走原来的 guest 结账)。跟常见网店的结账页一致,优先引导注册/登录,guest 作为兜底。"Ask the seller" 私信继续要求登录(防垃圾消息),未登录时显示"Log in or create an account"。代码在 `src/components/BuyListingButton.tsx`。
+
 **实现方式**:选的是"静默建号 + 邮件魔法链接",不是完全匿名订单(那种做法需要新建一套脱离账号体系的 token 订单页,买家没法用站内私信联系卖家,改动量大很多,这次没有做)。具体流程:
 
 1. `src/app/listings/[id]/actions.ts` 的 `buyListingAction` 发现没有登录用户时,读表单里的 `guest_email`;

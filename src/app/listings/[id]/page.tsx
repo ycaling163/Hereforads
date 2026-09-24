@@ -259,9 +259,20 @@ export default async function ListingDetailPage({
               {user ? (
                 <ContactSellerForm listingId={listing.id} />
               ) : (
+                // 私信要求登录(防垃圾消息、出了问题能找到人),不开放 guest。
                 <p className="text-sm text-zinc-500">
-                  <Link href="/login" className="underline">
+                  <Link
+                    href={`/login?next=${encodeURIComponent(`/listings/${listing.id}`)}`}
+                    className="underline"
+                  >
                     Log in
+                  </Link>{" "}
+                  or{" "}
+                  <Link
+                    href={`/register?next=${encodeURIComponent(`/listings/${listing.id}`)}`}
+                    className="underline"
+                  >
+                    create an account
                   </Link>{" "}
                   to message the seller.
                 </p>
