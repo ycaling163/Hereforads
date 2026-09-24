@@ -937,7 +937,7 @@ alter table public.listing_orders add column if not exists buyer_address text;
 
 - **固定费率**:`src/lib/fees.ts`(服务端和发布表单共用,按最小货币单位整数计算)。Service fee 12%,Payment processing fee 4% + 固定部分。
   - 固定部分按币种(`PROCESSING_FIXED_FEE_MINOR`):GBP 0.20、USD 0.25、EUR 0.25、CAD 0.35、AUD 0.40、SGD 0.35、HKD 2.00、JPY 40。USD/EUR 是第 2 条写明的,**其余 5 种是按 2026-09 汇率取的等值整数,待产品负责人确认**。
-  - 最低发布价改成按 USD 0.99 的等值(`MIN_LISTING_PRICE_MINOR`):USD 0.99、GBP 0.79、EUR 0.89、CAD 1.39、AUD 1.49、SGD 1.29、HKD 7.99、JPY 150,原来是所有币种都 0.99。
+  - 最低发布价改成约 USD 1 的等值(`MIN_LISTING_PRICE_MINOR`,2026-09-24 定):USD 1.00、GBP 0.80、EUR 0.90、CAD 1.40、AUD 1.50、SGD 1.30、HKD 8.00、JPY 150,原来是所有币种都 0.99。
   - JPY 是零小数位货币,之前下单金额一律 ×100 是错的,现在统一走 `toMinorUnits`。
   - 发布/编辑广告表单实时显示 "You'll receive"(卖家挂单时就能看到到手金额);Sales 页明细改名 Service fee / Payment processing fee,付款后就显示(不用等放款)。
   - `payments` 三列的含义变了(列名沿用):`platform_fee_amount` = Service fee,`stripe_fee_amount` = 向卖家收的 Payment processing fee(**不是** Stripe 实际扣的手续费),`net_amount` = 卖家到手,都是订单币种,webhook 收到付款时就写好。
@@ -1412,6 +1412,13 @@ alter table public.payments
   add column if not exists transfer_amount numeric,
   add column if not exists transfer_currency text;
 ```
+## 给卖家打款:每周一次(2026-09-24)
+
+Stripe Connect 给卖家打款到银行的成本(英国价目,以 Stripe 官网 Connect 定价页为准):**每次打款 0.25% + £0.10**,外加**当月有打款的卖家账户 £2/月**。Etsy 能一个月打 £0.80 是因为它用自己的支付系统、成本自担,我们用 Stripe 做不到。
+
+**决定**:新开户的卖家 Stripe 账户打款计划设成**每周一次(周一)**,一周内放款的钱合并成一笔打到卖家银行(`src/app/dashboard/stripe-connect/actions.ts` 建号时写 `settings.payouts.schedule`)。**已经开户的卖家**不会自动改,要在 Stripe 后台 → Connect → 选中账户 → Payouts 手动改成 Weekly(目前都是测试账户,可以不管)。另外建议在 Stripe 后台 → Connect → Settings 里**关掉 Express 账户自己改打款计划 / Instant Payouts**,不然卖家可以自己改回每天打款。
+
+以后小额订单多了再考虑"满 £20 才打款"(要改成平台手动控制打款,工作量大),最低价暂定约 USD 1。
 
 ## 部署(Vercel)
 

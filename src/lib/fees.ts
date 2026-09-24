@@ -22,16 +22,16 @@ export const PROCESSING_FIXED_FEE_MINOR: Record<string, number> = {
   JPY: 40,
 };
 
-// 最低发布价:按 USD 0.99 的等值(不是每种货币都 0.99——0.99 日元连 Stripe 的最低
-// 收款额都不到)。同样是最小货币单位。
+// 最低发布价:约等于 USD 1(2026-09-24 产品负责人定;不是每种货币都填 1——1 日元连
+// Stripe 的最低收款额都不到)。最小货币单位。
 export const MIN_LISTING_PRICE_MINOR: Record<string, number> = {
-  USD: 99,
-  GBP: 79,
-  EUR: 89,
-  CAD: 139,
-  AUD: 149,
-  SGD: 129,
-  HKD: 799,
+  USD: 100,
+  GBP: 80,
+  EUR: 90,
+  CAD: 140,
+  AUD: 150,
+  SGD: 130,
+  HKD: 800,
   JPY: 150,
 };
 

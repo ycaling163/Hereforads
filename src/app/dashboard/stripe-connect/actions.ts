@@ -47,6 +47,12 @@ export async function startStripeOnboardingAction(
         card_payments: { requested: true },
         transfers: { requested: true },
       },
+      // 每周一合并打款一次(2026-09-24 决定):Stripe Connect 按"每次打款"收
+      // 0.25% + 固定费,并按"当月有打款的账户"收月费,默认每天打款会让小额订单的
+      // 打款成本比平台收入还高。见 README"给卖家打款:每周一次"。
+      settings: {
+        payouts: { schedule: { interval: "weekly", weekly_anchor: "monday" } },
+      },
     });
     accountId = account.id;
 
