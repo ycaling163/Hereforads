@@ -116,6 +116,8 @@ export async function createListingAction(
       status: "active",
       social_account_id: fields.socialAccountId,
       is_website_placement: fields.isWebsitePlacement,
+      booking_enabled: fields.bookingEnabled,
+      min_booking_days: fields.minBookingDays,
       rights_attested_at: now,
       terms_accepted_at: now,
     })

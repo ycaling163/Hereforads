@@ -8,6 +8,7 @@ import {
   type PricingUnit,
 } from "@/lib/supabase/enums";
 import { currencyDecimals, minListingPrice } from "@/lib/fees";
+import { DEFAULT_MIN_BOOKING_DAYS, MAX_BOOKING_DAYS } from "@/lib/booking";
 
 export interface ParsedListingFields {
   title: string;
@@ -19,6 +20,8 @@ export interface ParsedListingFields {
   pricingUnit: PricingUnit;
   socialAccountId: string | null;
   isWebsitePlacement: boolean;
+  bookingEnabled: boolean;
+  minBookingDays: number | null;
 }
 
 // Shared between createListingAction and updateListingAction — everything a
@@ -88,6 +91,18 @@ export function parseListingFormFields(
   if (!(PRICING_UNITS as readonly string[]).includes(pricingUnitRaw)) {
     return { error: "Please choose a pricing unit" };
   }
+  // 日历预订只对按天/周/月计价开放(README"日历按天预订"第 1 条);一次性交付的
+  // 广告就算前端提交了开关也不存。最少预订天数只对按天计价有意义。
+  const bookingEnabled =
+    formData.get("booking_enabled") === "on" && pricingUnitRaw !== "one_time";
+  let minBookingDays: number | null = null;
+  if (bookingEnabled && pricingUnitRaw === "daily") {
+    const minDaysRaw = String(formData.get("min_booking_days") ?? "").trim();
+    minBookingDays = minDaysRaw ? Number(minDaysRaw) : DEFAULT_MIN_BOOKING_DAYS;
+    if (!Number.isInteger(minBookingDays) || minBookingDays < 1 || minBookingDays > MAX_BOOKING_DAYS) {
+      return { error: `Minimum booking must be between 1 and ${MAX_BOOKING_DAYS} days` };
+    }
+  }
   if (categories.length === 0) {
     return { error: "Please select at least one category" };
   }
@@ -106,6 +121,8 @@ export function parseListingFormFields(
       pricingUnit: pricingUnitRaw as PricingUnit,
       socialAccountId,
       isWebsitePlacement,
+      bookingEnabled,
+      minBookingDays,
     },
   };
 }

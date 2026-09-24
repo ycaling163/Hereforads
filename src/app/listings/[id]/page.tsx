@@ -5,6 +5,18 @@ import { createClient } from "@/lib/supabase/server";
 import { BuyListingButton } from "@/components/BuyListingButton";
 import { ContactSellerForm } from "@/components/ContactSellerForm";
 import { DailyCountdown } from "@/components/DailyCountdown";
+import type { BookingOptions } from "@/components/BookingPicker";
+import { getBookedRanges } from "@/lib/orders/bookings";
+import { toMinorUnits } from "@/lib/fees";
+import {
+  MAX_ADVANCE_DAYS,
+  addDays,
+  bookingToday,
+  isBookingUnit,
+  isValidDate,
+  maxBookingUnits,
+  minBookingUnits,
+} from "@/lib/booking";
 import { SocialStatChip, WebsiteStatChip } from "@/components/SocialStatChip";
 import {
   AD_TYPE_LABELS,
@@ -45,7 +57,7 @@ export default async function ListingDetailPage({
   searchParams,
 }: PageProps<"/listings/[id]">) {
   const { id } = await params;
-  const { resume } = await searchParams;
+  const { resume, start, units } = await searchParams;
   const supabase = await createClient();
 
   const { data: listingRow } = await supabase
@@ -92,6 +104,31 @@ export default async function ListingDetailPage({
 
   const media = listing.media_urls ?? [];
   const isOwnListing = user?.id === listing.seller_id;
+
+  // 日历按天预订(README"日历按天预订"):已被预订的日期置灰,开始日期最远 60 天后。
+  let booking: BookingOptions | undefined;
+  if (listing.booking_enabled && isBookingUnit(listing.pricing_unit) && !isOwnListing) {
+    const today = bookingToday();
+    booking = {
+      unit: listing.pricing_unit,
+      unitAmountMinor: toMinorUnits(listing.price_amount, listing.price_currency),
+      currency: listing.price_currency,
+      minUnits: minBookingUnits(listing.pricing_unit, listing.min_booking_days),
+      maxUnits: maxBookingUnits(listing.pricing_unit),
+      today,
+      maxStart: addDays(today, MAX_ADVANCE_DAYS),
+      bookedRanges: await getBookedRanges(listing.id, today),
+    };
+  }
+  // 登录/注册回跳时带回之前选好的日期(见 BuyListingButton),不合法就当没选。
+  const resumeStart =
+    booking && typeof start === "string" && isValidDate(start) && start >= booking.today
+      ? start
+      : null;
+  const resumeUnits =
+    booking && typeof units === "string" && Number.isInteger(Number(units))
+      ? Math.min(Math.max(Number(units), booking.minUnits), booking.maxUnits)
+      : undefined;
   // status='draft' listing 只有卖家自己能看到(见 RLS),但直接访问 URL 时还是要
   // 在页面这层挡一下,免得给其他登录用户看见"未发布"的内部状态。
   const isVisible = listing.status === "active" || isOwnListing;
@@ -251,7 +288,16 @@ export default async function ListingDetailPage({
                 </span>
               )}
             </div>
-            {listing.pricing_unit === "daily" && <DailyCountdown />}
+            {listing.pricing_unit === "daily" && !listing.booking_enabled && <DailyCountdown />}
+            {listing.booking_enabled && isBookingUnit(listing.pricing_unit) && (
+              <p className="mt-1 text-xs text-zinc-500">
+                {listing.pricing_unit === "daily"
+                  ? `Pick your dates · minimum ${minBookingUnits("daily", listing.min_booking_days)} days`
+                  : listing.pricing_unit === "weekly"
+                    ? "Pick your dates · booked by the week"
+                    : "Pick your dates · booked by the month (30 days)"}
+              </p>
+            )}
 
             <div className="mt-4">
               {isOwnListing ? (
@@ -264,7 +310,13 @@ export default async function ListingDetailPage({
                       agree on scope before buying.
                     </p>
                   )}
-                  <BuyListingButton listingId={listing.id} isLoggedIn={!!user} />
+                  <BuyListingButton
+                    listingId={listing.id}
+                    isLoggedIn={!!user}
+                    booking={booking}
+                    initialStart={resumeStart}
+                    initialUnits={resumeUnits}
+                  />
                 </>
               )}
             </div>

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { DeliverOrderForm } from "@/components/DeliverOrderForm";
 import { CancelOrderForm } from "@/components/CancelOrderForm";
 import { LISTING_ORDER_STATUS_LABELS, freeCancelDeadline } from "@/lib/supabase/enums";
+import { bookingToday, formatBookingDate, formatBookingRange } from "@/lib/booking";
 import type { Listing, ListingOrder, Payment, Profile } from "@/lib/supabase/types";
 
 // 订单按"钱现在在哪"分成 4 个标签页(2026-09-24 产品负责人要求,避免各种状态
@@ -51,6 +52,7 @@ const TABS: {
 const ERROR_MESSAGES: Record<string, string> = {
   cancel_invalid_state: "This order can't be cancelled right now.",
   cancel_window_passed: "The 24-hour free cancellation window has passed.",
+  cancel_starts_soon: "Bookings starting within 24 hours can't be cancelled for free.",
   cancel_failed: "Couldn't cancel the order, please try again.",
 };
 
@@ -105,6 +107,7 @@ export default async function SalesPage({
   // Server Component, re-rendered fresh on every request (see dashboard/page.tsx).
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
+  const today = bookingToday(new Date(now));
   const buyerNameById = new Map(
     ((buyerRows ?? []) as Pick<Profile, "id" | "display_name">[]).map((b) => [
       b.id,
@@ -178,7 +181,7 @@ export default async function SalesPage({
             <div className="mt-3 flex flex-col gap-4">
               {sectionOrders.map((order) => {
                 const payment = paymentsByOrderId.get(order.id);
-                const cancelDeadline = freeCancelDeadline(order.paid_at);
+                const cancelDeadline = freeCancelDeadline(order);
                 const canCancel =
                   order.status === "paid_in_escrow" &&
                   cancelDeadline !== null &&
@@ -214,6 +217,12 @@ export default async function SalesPage({
                         Message buyer
                       </Link>
                     </div>
+                    {order.start_date && order.end_date && (
+                      <p className="mt-1 text-sm text-zinc-700">
+                        Booked: {formatBookingRange(order.start_date, order.end_date)}{" "}
+                        <span className="text-zinc-400">(UK time)</span>
+                      </p>
+                    )}
 
                     {payment && order.status === "cancelled" && (
                       <p className="mt-3 text-xs text-zinc-500">
@@ -258,9 +267,15 @@ export default async function SalesPage({
                       </div>
                     )}
 
-                    {order.status === "paid_in_escrow" && (
-                      <DeliverOrderForm orderId={order.id} />
-                    )}
+                    {order.status === "paid_in_escrow" &&
+                      (order.start_date && order.start_date > today ? (
+                        <p className="mt-3 text-xs text-zinc-500">
+                          Put the ad live on {formatBookingDate(order.start_date)} and submit
+                          the live link here from that day.
+                        </p>
+                      ) : (
+                        <DeliverOrderForm orderId={order.id} />
+                      ))}
 
                     {canCancel && cancelDeadline && (
                       <CancelOrderForm

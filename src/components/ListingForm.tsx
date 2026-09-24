@@ -23,6 +23,7 @@ import {
   minListingPrice,
 } from "@/lib/fees";
 import { FileInput } from "@/components/FileInput";
+import { DEFAULT_MIN_BOOKING_DAYS, MAX_BOOKING_DAYS } from "@/lib/booking";
 
 export interface ListingFormState {
   error?: string;
@@ -62,6 +63,8 @@ export function ListingForm({
   const [priceCurrency, setPriceCurrency] = useState(
     initialListing?.price_currency ?? "USD"
   );
+  const [pricingUnit, setPricingUnit] = useState(initialListing?.pricing_unit ?? "one_time");
+  const [bookingEnabled, setBookingEnabled] = useState(initialListing?.booking_enabled ?? false);
   const minPrice = minListingPrice(priceCurrency);
   const parsedPrice = Number(priceAmount);
   const feePreview =
@@ -289,7 +292,8 @@ export function ListingForm({
             id="pricing_unit"
             name="pricing_unit"
             required
-            defaultValue={initialListing?.pricing_unit ?? "one_time"}
+            value={pricingUnit}
+            onChange={(event) => setPricingUnit(event.target.value as typeof pricingUnit)}
             className={inputClass}
           >
             {PRICING_UNITS.map((unit) => (
@@ -300,6 +304,53 @@ export function ListingForm({
           </select>
         </div>
       </div>
+
+      {/* 日历按天预订(README"日历按天预订"第 1 条):只有按天/周/月计价才出现这个开关。
+          按周/按月的广告按整周/30 天一段订,没有最少天数设置。 */}
+      {pricingUnit !== "one_time" && (
+        <div className="flex flex-col gap-2 rounded-lg border border-zinc-200 p-4">
+          <label className="flex items-start gap-2 text-sm font-medium text-zinc-800">
+            <input
+              type="checkbox"
+              name="booking_enabled"
+              checked={bookingEnabled}
+              onChange={(event) => setBookingEnabled(event.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-zinc-300"
+            />
+            <span>
+              Let buyers pick dates
+              <span className="mt-0.5 block text-xs font-normal text-zinc-500">
+                For ads that run for a period of time (banner, pinned post, bio
+                link…). Buyers choose a start date and how long; booked dates
+                can&apos;t be booked again.{" "}
+                {pricingUnit === "weekly"
+                  ? "Buyers book whole weeks at your weekly price."
+                  : pricingUnit === "monthly"
+                    ? "Buyers book whole months (30 days each) at your monthly price."
+                    : "Buyers pay your daily price × number of days."}{" "}
+                Dates are in UK time.
+              </span>
+            </span>
+          </label>
+          {bookingEnabled && pricingUnit === "daily" && (
+            <div className="flex items-center gap-2 pl-6 text-sm text-zinc-700">
+              <label htmlFor="min_booking_days">Minimum booking</label>
+              <input
+                id="min_booking_days"
+                name="min_booking_days"
+                type="number"
+                min={1}
+                max={MAX_BOOKING_DAYS}
+                step={1}
+                required
+                defaultValue={initialListing?.min_booking_days ?? DEFAULT_MIN_BOOKING_DAYS}
+                className={`${inputClass} w-20`}
+              />
+              <span>days</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 固定费率(README"费用、取消与退款规则"第 2 条):卖家挂单时就能看到到手金额。 */}
       <div className="rounded-lg bg-zinc-50 p-3 text-xs text-zinc-600">

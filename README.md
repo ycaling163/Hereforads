@@ -1420,7 +1420,7 @@ Stripe Connect 给卖家打款到银行的成本(英国价目,以 Stripe 官网 
 
 以后小额订单多了再考虑"满 £20 才打款"(要改成平台手动控制打款,工作量大),最低价暂定约 USD 1。
 
-## 日历按天预订(2026-09-24 决策记录,**待实现**,下一个对话做)
+## 日历按天预订(2026-09-24 决策记录,**分批实现中**,进度见本节"实现进度")
 
 **为什么要做**:发布广告时已经能选 Per day / Per week / Per month 计价,但买家下单时既不能选天数也不能选日期,付的永远只是一个单位的价格(`listing_orders.start_date` / `end_date` 两列一直没用上)。按时间展示的广告(网站横幅、置顶帖、主页 bio 链接、头图)同一时段只能卖给一个买家,需要日历。
 
@@ -1436,6 +1436,151 @@ Stripe Connect 给卖家打款到银行的成本(英国价目,以 Stripe 官网 
 - 40% 那次放款前,是否要求卖家先提交"已上线"的链接/截图(建议要求,跟第 3a/5 条"先交付再放款"一致)。
 - 最少预订天数的默认值和上限(建议默认 7 天,上限 90 天,跟第 4a 条交付天数上限 60 天的考虑一致)。
 - 买家能不能在期中提前确认、让剩余 60% 提前放款。
+
+**上面 3 个细节 + 实现中发现的漏洞,2026-09-24 产品负责人确认的答案**(实现以这里为准):
+
+1. **40% 放款前必须先交"已上线"链接/截图**:卖家从开始日期当天(英国时间)起可以提交;不提交就一直不放。提交后照旧有 3 天买家确认期,所以 40% 在"预订期过半"和"提交满 3 天"两者**较晚**的那个时间点放。
+2. **最少预订天数**:按天计价的广告默认 7 天,卖家可设 1–90 天;**单次预订最多 90 天**(按周最多 12 周,按月最多 3 个月)。
+3. **买家不能提前确认放款**(MVP 先做最简单的):剩余 60% 固定在预订期结束 3 天后自动放。
+4. **按周/按月计价**:卖家填的周价/月价就是套餐价(不要求等于日价 × 7/30)。按周的广告买家按整周订,价格 = 周价 × 周数;按月的按 30 天一段订,价格 = 月价 × 段数。按周/按月没有"最少预订天数"设置,最少 1 周/1 个月。
+5. **时区统一用英国时间(Europe/London)**,页面注明 "Dates are in UK time"。(按卖家当地时区要处理一国多时区、买卖双方日期对不上,MVP 不做。)
+6. **开始日期最远在今天之后 60 天**(Stripe 只能在付款后 180 天内退款,60 + 90 天留出纠纷余量)。
+7. **24 小时免费取消的例外在取消那一刻判断**:必须同时满足"付款后不到 24 小时"和"此刻离开始日期(英国时间 00:00)还有 24 小时以上"。例:付款后 10 小时、离开始只剩 20 小时 → 不能免费取消。
+8. **中途被撤下的按比例退款(第 4 条)放到"费用、取消与退款"第 6 条那一批一起做**(依赖 3 天恢复期、Cancellation fee 那套流程)。验算过:撤下发生在过半之前,40% 还没放;发生在过半之后,要退的比例不到 50%,还压着的 60% 够扣,所以日历订单实际用不到"强制扣回"。
+
+### 实现进度
+
+#### 第 1 批(2026-09-24 已写代码,**SQL 要先手动执行,再合并部署**):发布开关 + 选日期下单 + 防重叠 + 24 小时例外
+
+**代码改了什么**
+
+- `src/lib/booking.ts`:日历相关的常量和纯函数(英国时间的"今天"、日期加减、结束日期、重叠判断、某天英国时间 00:00 对应的时刻),服务端和日历组件共用。
+- **发布/编辑表单**(`ListingForm`):计价单位选了按天/周/月才出现 "Let buyers pick dates" 开关;按天计价再出现"最少预订天数"(默认 7,1–90)。一次性交付的广告就算提交了开关,服务端也不存。
+- **详情页日历**(`BookingPicker`,放在购买按钮上方):选开始日期 + 时长(天数/周数/月数下拉),显示结束日期和总价;已被预订的日期划掉,会跟已有预订重叠的开始日期点不了;没选日期不能付款。未登录买家去登录/注册时,选好的日期带在回跳地址里。开了日历的按天广告不再显示"每日档期刷新"倒计时。
+- **下单**(`buyListingAction`):服务端按 listing 设置重新校验开始日期(不早于今天、不晚于 60 天后)和时长,总价 = 单价 × 数量(按最小货币单位整数算);Stripe Checkout 用 `quantity` 表示数量,商品描述写上日期。日历订单通过数据库函数 `create_booking_order` 插入:先锁住这条 listing,再检查日期有没有跟**已付款没取消**或**还在付款占用期内**的订单重叠,重叠就不插入(两个买家同时抢同一段日期,只有一个能下单)。
+- **未付款的占用**:日历订单的 Stripe 付款链接 31 分钟后失效(`expires_at`,Stripe 最少 30 分钟),日期占用 36 分钟(`hold_expires_at`),比链接多几分钟,保证链接失效前日期不会被别人订走;过期后没付款的订单不再占用日期。
+- **24 小时免费取消**:`freeCancelDeadline` 对日历订单取"付款后 24 小时"和"开始前 24 小时"里较早的那个;`cancelWithin24hAction` 服务端再判断一次,开始日期在 24 小时内返回 "Bookings starting within 24 hours can't be cancelled for free."。
+- **Sales/Purchases 页、订单邮件**显示预订日期;卖家在开始日期之前看到的是"开始当天再提交上线链接"的提示,当天起才出现提交表单(服务端也挡)。
+- **放款的过渡处理(第 2 批会改)**:分两次放款(40% / 60%)还没写。这一批里日历订单**整笔压到预订期结束 3 天后**才由 cron 放款,买家的 "Confirm receipt" 对日历订单不显示、服务端也拒绝——不会出现提前放款。
+
+**要手动执行的 SQL**(Supabase SQL Editor,**先执行再部署代码**,否则发布/编辑广告会因为缺列报错):
+
+```sql
+-- 1. listings:日历开关和最少预订天数
+alter table public.listings
+  add column if not exists booking_enabled boolean not null default false,
+  add column if not exists min_booking_days integer;
+
+alter table public.listings
+  drop constraint if exists listings_booking_check,
+  add constraint listings_booking_check check (
+    (not booking_enabled or pricing_unit <> 'one_time')
+    and (min_booking_days is null or min_booking_days between 1 and 90)
+  );
+
+-- 2. listing_orders:预订数量、未付款占用到期时间(start_date/end_date 两列早就有,一直没用)
+alter table public.listing_orders
+  add column if not exists booking_units integer,
+  add column if not exists hold_expires_at timestamptz;
+
+alter table public.listing_orders
+  drop constraint if exists listing_orders_booking_dates_check,
+  add constraint listing_orders_booking_dates_check check (
+    (start_date is null) = (end_date is null)
+    and (end_date is null or end_date >= start_date)
+    and (booking_units is null or booking_units > 0)
+  );
+
+create index if not exists listing_orders_listing_dates_idx
+  on public.listing_orders (listing_id, end_date)
+  where start_date is not null;
+
+-- 3. 下单防重叠:锁住 listing 行,检查日期没被占用,再插入订单;被占用返回 null。
+--    只给 service_role 用(下单的 server action),买家/卖家不能直接调用。
+create or replace function public.create_booking_order(p_order jsonb)
+returns uuid
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_listing_id uuid := (p_order->>'listing_id')::uuid;
+  v_start date := (p_order->>'start_date')::date;
+  v_end date := (p_order->>'end_date')::date;
+  v_id uuid;
+begin
+  if v_start is null or v_end is null or v_end < v_start then
+    raise exception 'create_booking_order: invalid dates';
+  end if;
+
+  -- 同一条 listing 的下单排队执行,直到这个事务结束。
+  perform 1 from public.listings where id = v_listing_id for update;
+  if not found then
+    raise exception 'create_booking_order: listing not found';
+  end if;
+
+  if exists (
+    select 1 from public.listing_orders o
+    where o.listing_id = v_listing_id
+      and o.start_date is not null
+      and o.start_date <= v_end
+      and o.end_date >= v_start
+      and o.status <> 'cancelled'
+      and (o.status <> 'pending_payment' or o.hold_expires_at > now())
+  ) then
+    return null;
+  end if;
+
+  insert into public.listing_orders (
+    listing_id, buyer_id, seller_id, amount, currency, status, buyer_email,
+    terms_accepted_at, immediate_start_consent_at,
+    start_date, end_date, booking_units, hold_expires_at
+  ) values (
+    v_listing_id,
+    (p_order->>'buyer_id')::uuid,
+    (p_order->>'seller_id')::uuid,
+    (p_order->>'amount')::numeric,
+    p_order->>'currency',
+    'pending_payment',
+    p_order->>'buyer_email',
+    (p_order->>'terms_accepted_at')::timestamptz,
+    (p_order->>'immediate_start_consent_at')::timestamptz,
+    v_start,
+    v_end,
+    (p_order->>'booking_units')::integer,
+    (p_order->>'hold_expires_at')::timestamptz
+  )
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+revoke all on function public.create_booking_order(jsonb) from public, anon, authenticated;
+grant execute on function public.create_booking_order(jsonb) to service_role;
+```
+
+执行完可以核对一下,`authenticated`/`anon` 不应该有执行权限(下面这句应该返回 `false, false, true`):
+
+```sql
+select has_function_privilege('anon', 'public.create_booking_order(jsonb)', 'execute'),
+       has_function_privilege('authenticated', 'public.create_booking_order(jsonb)', 'execute'),
+       has_function_privilege('service_role', 'public.create_booking_order(jsonb)', 'execute');
+```
+
+**用测试卡手动走一遍**(执行完 SQL、部署到预览环境之后)
+
+1. 发布一条 GBP 2 / Per day 的广告,打开 "Let buyers pick dates",最少 3 天。改成 One-time 时开关应该消失。
+2. 另一个账号打开这条广告:日历上今天之前、60 天以后的日期点不了;选 10 天 → 总价 20.00 GBP;付款页显示 2.00 × 10 和日期。
+3. 付款后再打开这条广告:这 10 天被划掉;选一个会跟它重叠的开始日期点不了。
+4. 两个浏览器同时选同一段日期点付款:只有一个能进 Stripe 付款页,另一个提示 "Some of those dates were just booked"。
+5. 进了付款页但不付款:36 分钟后这段日期重新可选。
+6. 订一段**明天**开始的日期付款 → Purchases 页没有 "Cancel order" 按钮;订一段 3 天后开始的 → 有。
+7. 卖家 Sales 页:开始日期之前看到 "Put the ad live on … and submit the live link here from that day",当天起才能提交链接;提交后买家那边没有 "Confirm receipt"。
+8. 按周计价的广告:时长下拉是 1–12 weeks,价格 = 周价 × 周数。
+
+#### 第 2 批(待做):分两次放款(过半 40%、结束 3 天后 60%)
+
+#### 以后(跟"费用、取消与退款"第 6 条一起做):中途被撤下,按没展示的天数比例退款
 
 ## 部署(Vercel)
 
@@ -1453,7 +1598,7 @@ Stripe Connect 给卖家打款到银行的成本(英国价目,以 Stripe 官网 
 - **没配自动放款的定时触发器**:`/api/cron/auto-confirm` 端点写了,处理资金冻结期(`ESCROW_HOLD_DAYS`,3 天)到期后的自动放款,但没有实际的 Vercel Cron / Supabase pg_cron 去调用它
 - **退款/纠纷仍是人工**:规则已在 2026-09-23 定下(见"费用、取消与退款规则"一节),代码还没实现,在实现之前出问题仍需要人工去 Stripe 后台处理
 - **没做自动翻译**、**没做可嵌入组件**、**没做中国卖家收款通道**:都是产品方案里明确列的"预留但 MVP 不做"
-- **占用式(daily/weekly/monthly)listing 还没有真正的档期日历**:`pricing_unit` 已经支持这几个值,`listings/[id]` 页对 `daily` 会显示"距离今日档期刷新"倒计时(`DailyCountdown` 组件),但还没有像老流程那样"选日期、按档期占用、冲突检测"的日历 UI——`getBlockingRanges`/`isRangeFree` 这套逻辑在删除前的 commit 里可以直接抄
+- ~~**占用式(daily/weekly/monthly)listing 还没有真正的档期日历**~~ 2026-09-24 起做了卖家可选的日历预订,见"日历按天预订"一节(没开日历的按天/周/月广告仍然按一个单位卖)。
 - **`/dashboard/my-listings` 仍然没有真正的"编辑"入口**,2026-09-18 后期加了一个 "Duplicate" 链接(跳到 `/dashboard/new-listing?from={listingId}`,用另一条 listing 的内容预填发布表单、提交后插入全新一行,不改动原来那条),能部分绕开这个缺口——包括帮老 listing(`social_account_id`/`is_website_placement` 还是空的那些)补上投放平台:复制一遍、在预填表单里选好平台再发布。**但复制出来的是并列的新 listing,不是"修好"了原来那条**,原来那条(卡片仍会显示"未指定平台")没有下架/删除入口,只能联系管理员在 `/admin/listings` 处理,不是卖家自己能操作的;卖家要改 listing 已有字段(标题、价格、封面图等)也仍然没有就地编辑的入口,只能用 Duplicate 曲线救国(发一条新的、把旧的晾着)
 - **`/dashboard` 总览页统计比较粗糙**:"近 30 天成交额"是按 `paid_at` 落在 30 天内的订单金额原样相加(没扣手续费/佣金,多币种是分开显示不是换算合计),没有做历史趋势图
 - **没有邮件通知**:新私信、新订单只能靠登录后看账号头像/侧边栏的红点提示,没有发邮件提醒——用户已经明确说这个先不做,等要做的时候需要去注册 [Resend](https://resend.com)(或类似邮件服务)拿 API key

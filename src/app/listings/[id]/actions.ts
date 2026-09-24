@@ -7,7 +7,21 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { stripe } from "@/lib/stripe/server";
 import { EMAIL_PATTERN, resolveGuestBuyerId } from "@/lib/supabase/guest-checkout";
 import type { Listing } from "@/lib/supabase/types";
-import { isSupportedCurrency, toMinorUnits } from "@/lib/fees";
+import { fromMinorUnits, isSupportedCurrency, toMinorUnits } from "@/lib/fees";
+import {
+  CHECKOUT_EXPIRES_MINUTES,
+  MAX_ADVANCE_DAYS,
+  PENDING_HOLD_MINUTES,
+  addDays,
+  bookingEndDate,
+  bookingToday,
+  describeUnits,
+  formatBookingRange,
+  isBookingUnit,
+  isValidDate,
+  maxBookingUnits,
+  minBookingUnits,
+} from "@/lib/booking";
 
 // 私信图片复用已有的 ad-space-photos bucket,不用新建。
 const MESSAGE_MEDIA_BUCKET = "ad-space-photos";
@@ -101,30 +115,93 @@ async function startCheckout(
     return { error: "This listing's currency isn't supported for checkout yet" };
   }
 
+  // 日历按天预订(README"日历按天预订"):买家选开始日期 + 天数/周数/月数,
+  // 价格 = 单价 × 数量。开始日期、数量都在服务端按 listing 的设置重新校验。
+  const booking = listing.booking_enabled && isBookingUnit(listing.pricing_unit)
+    ? listing.pricing_unit
+    : null;
+  let quantity = 1;
+  let startDate: string | null = null;
+  let endDate: string | null = null;
+  if (booking) {
+    startDate = String(formData.get("start_date") ?? "");
+    quantity = Number(formData.get("booking_units") ?? "");
+    const today = bookingToday();
+    if (!isValidDate(startDate) || startDate < today) {
+      return { error: "Please choose a start date" };
+    }
+    if (startDate > addDays(today, MAX_ADVANCE_DAYS)) {
+      return { error: `Bookings can start at most ${MAX_ADVANCE_DAYS} days ahead` };
+    }
+    const minUnits = minBookingUnits(booking, listing.min_booking_days);
+    const maxUnits = maxBookingUnits(booking);
+    if (!Number.isInteger(quantity) || quantity < minUnits || quantity > maxUnits) {
+      return {
+        error: `Please book between ${describeUnits(booking, minUnits)} and ${describeUnits(booking, maxUnits)}`,
+      };
+    }
+    endDate = bookingEndDate(startDate, booking, quantity);
+  }
+
+  // 按最小货币单位整数算总价,避免 0.1 × 3 这类浮点误差;webhook 核对实付金额时用的
+  // 也是 toMinorUnits(order.amount),两边一致。
+  const unitAmountMinor = toMinorUnits(listing.price_amount, listing.price_currency);
+  const amount = fromMinorUnits(unitAmountMinor * quantity, listing.price_currency);
+
   // 订单一律用 service_role 写(2026-09-23 起 authenticated 角色对 listing_orders
   // 没有 insert/update 权限,见 README"费用、取消与退款规则"第 8 条的 SQL):
   // 金额、币种、状态都只从服务端查到的 listing 取,不信任任何客户端输入。
-  const { data: order, error: orderError } = await createServiceClient()
-    .from("listing_orders")
-    .insert({
-      listing_id: listing.id,
-      buyer_id: buyerId,
-      seller_id: listing.seller_id,
-      amount: listing.price_amount,
-      currency: listing.price_currency,
-      status: "pending_payment",
-      // 下单时就存买家邮箱(guest 和登录买家都有),管理后台/纠纷时能联系到人。
-      buyer_email: buyerEmail ?? null,
-      terms_accepted_at: consentedAt,
-      immediate_start_consent_at: consentedAt,
-    })
-    .select("id")
-    .single();
+  const orderFields = {
+    listing_id: listing.id,
+    buyer_id: buyerId,
+    seller_id: listing.seller_id,
+    amount,
+    currency: listing.price_currency,
+    status: "pending_payment" as const,
+    // 下单时就存买家邮箱(guest 和登录买家都有),管理后台/纠纷时能联系到人。
+    buyer_email: buyerEmail ?? null,
+    terms_accepted_at: consentedAt,
+    immediate_start_consent_at: consentedAt,
+  };
 
-  if (orderError || !order) {
-    console.error("Failed to create listing order:", orderError?.message);
-    return { error: "Couldn't start checkout, please try again" };
+  let orderId: string;
+  if (booking && startDate && endDate) {
+    // 日历订单走数据库函数:锁住这条 listing、检查日期没有跟已付款或还在付款占用期内
+    // 的订单重叠,再插入——两个买家同时抢同一段日期,只有一个能下单成功。
+    const { data: newOrderId, error: bookingError } = await createServiceClient().rpc(
+      "create_booking_order",
+      {
+        p_order: {
+          ...orderFields,
+          start_date: startDate,
+          end_date: endDate,
+          booking_units: quantity,
+          hold_expires_at: new Date(Date.now() + PENDING_HOLD_MINUTES * 60_000).toISOString(),
+        },
+      }
+    );
+    if (bookingError) {
+      console.error("Failed to create booking order:", bookingError.message);
+      return { error: "Couldn't start checkout, please try again" };
+    }
+    if (!newOrderId) {
+      return { error: "Some of those dates were just booked — please choose other dates" };
+    }
+    orderId = newOrderId as string;
+  } else {
+    const { data: order, error: orderError } = await createServiceClient()
+      .from("listing_orders")
+      .insert(orderFields)
+      .select("id")
+      .single();
+
+    if (orderError || !order) {
+      console.error("Failed to create listing order:", orderError?.message);
+      return { error: "Couldn't start checkout, please try again" };
+    }
+    orderId = order.id;
   }
+  const order = { id: orderId };
 
   // Charges & Transfers 模式:钱先收进平台自己的账户,不是 destination charge,
   // 所以这里不带 transfer_data/application_fee_amount —— 真正转给卖家的 Transfer
@@ -147,6 +224,8 @@ async function startCheckout(
     seller_name: sellerName.slice(0, 450),
     seller_stripe_account: sellerProfile?.stripe_connect_account_id ?? "",
     buyer_email: buyerEmail ?? "",
+    booking_start: startDate ?? "",
+    booking_end: endDate ?? "",
   };
   const paymentDescription =
     `Seller: ${sellerName} · ${listing.title} · order ${order.id.slice(0, 8)}`.slice(0, 1000);
@@ -158,12 +237,24 @@ async function startCheckout(
       {
         price_data: {
           currency: listing.price_currency.toLowerCase(),
-          product_data: { name: listing.title },
-          unit_amount: toMinorUnits(listing.price_amount, listing.price_currency),
+          product_data: {
+            name: listing.title,
+            ...(booking && startDate && endDate
+              ? {
+                  description: `${formatBookingRange(startDate, endDate)} (UK time) · ${describeUnits(booking, quantity)}`,
+                }
+              : {}),
+          },
+          unit_amount: unitAmountMinor,
         },
-        quantity: 1,
+        quantity,
       },
     ],
+    // 日历订单:付款链接的有效期比日期占用期短几分钟,链接失效前日期一直留给这个买家,
+    // 失效后没付款的订单不再占用日期。
+    ...(booking
+      ? { expires_at: Math.floor(Date.now() / 1000) + CHECKOUT_EXPIRES_MINUTES * 60 }
+      : {}),
     metadata: stripeMetadata,
     payment_intent_data: {
       description: paymentDescription,

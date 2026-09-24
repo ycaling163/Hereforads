@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
 import { CancelOrderForm } from "@/components/CancelOrderForm";
 import { LISTING_ORDER_STATUS_LABELS, freeCancelDeadline } from "@/lib/supabase/enums";
+import { formatBookingRange } from "@/lib/booking";
 import { releaseNowAction } from "./actions";
 import type { Listing, ListingOrder } from "@/lib/supabase/types";
 
@@ -14,6 +15,7 @@ const ERROR_MESSAGES: Record<string, string> = {
     "Order was confirmed, but releasing the payout to the seller failed — we'll retry automatically.",
   cancel_invalid_state: "This order can't be cancelled right now.",
   cancel_window_passed: "The 24-hour free cancellation window has passed.",
+  cancel_starts_soon: "Bookings starting within 24 hours can't be cancelled for free.",
   cancel_failed: "Couldn't cancel the order, please try again.",
 };
 
@@ -79,7 +81,7 @@ export default async function PurchasesPage({
       ) : (
         <div className="mt-8 flex flex-col gap-4">
           {orders.map((order) => {
-            const cancelDeadline = freeCancelDeadline(order.paid_at);
+            const cancelDeadline = freeCancelDeadline(order);
             const canCancel =
               order.status === "paid_in_escrow" &&
               cancelDeadline !== null &&
@@ -100,6 +102,12 @@ export default async function PurchasesPage({
               <p className="mt-1 text-sm text-zinc-500">
                 {order.amount} {order.currency}
               </p>
+              {order.start_date && order.end_date && (
+                <p className="mt-1 text-sm text-zinc-700">
+                  Booked: {formatBookingRange(order.start_date, order.end_date)}{" "}
+                  <span className="text-zinc-400">(UK time)</span>
+                </p>
+              )}
 
               {order.status === "delivered" && (
                 <div className="mt-3 flex flex-col gap-2">
@@ -113,15 +121,24 @@ export default async function PurchasesPage({
                       Check delivery: {order.proof_url}
                     </a>
                   )}
-                  <ConfirmSubmitForm
-                    action={releaseNowAction.bind(null, order.id)}
-                    confirmMessage="Confirm you received this? This releases payment to the seller."
-                    label="Confirm receipt"
-                    className="self-start rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
-                  />
-                  <p className="text-xs text-zinc-400">
-                    Auto-confirms 3 days after delivery if you don&apos;t respond.
-                  </p>
+                  {order.start_date ? (
+                    <p className="text-xs text-zinc-400">
+                      The seller says your ad is live. If it isn&apos;t, message the seller.
+                      Payment is released to the seller after the booking ends.
+                    </p>
+                  ) : (
+                    <>
+                      <ConfirmSubmitForm
+                        action={releaseNowAction.bind(null, order.id)}
+                        confirmMessage="Confirm you received this? This releases payment to the seller."
+                        label="Confirm receipt"
+                        className="self-start rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+                      />
+                      <p className="text-xs text-zinc-400">
+                        Auto-confirms 3 days after delivery if you don&apos;t respond.
+                      </p>
+                    </>
+                  )}
                 </div>
               )}
 

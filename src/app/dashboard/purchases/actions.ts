@@ -20,11 +20,17 @@ export async function releaseNowAction(orderId: string): Promise<void> {
 
   const { data: order } = await supabase
     .from("listing_orders")
-    .select("id,buyer_id,seller_id,amount,currency,status")
+    .select("id,buyer_id,seller_id,amount,currency,status,start_date")
     .eq("id", orderId)
     .single();
 
-  if (!order || order.buyer_id !== user.id || order.status !== "delivered") {
+  // 日历预订的订单不能提前确认放款(2026-09-24 确认:MVP 不做),按预订期自动放款。
+  if (
+    !order ||
+    order.buyer_id !== user.id ||
+    order.status !== "delivered" ||
+    order.start_date
+  ) {
     redirect("/dashboard/purchases?error=invalid_state");
   }
 
