@@ -1809,6 +1809,125 @@ grant execute on function public.current_user_has_password() to authenticated;
 5. 用另一个 guest 邮箱去注册页注册 → 提示这个邮箱已有账号、用登录链接。
 6. 改动之前建的 guest 账号(比如之前测试用的邮箱):点 "Email me a sign-in link" → 收到的是 "Confirm your email",点开能直接登录;再要一次就是正常的登录邮件。
 
+## 安全核查 · 第 1 批(2026-09-24,切 live 收款前)
+
+切 Stripe live 之前做了一次全站安全核查(报告只发给了产品负责人,没进仓库)。第 1 批修"严重/高"的问题,**SQL 要先手动执行,再合并部署**(代码会读新加的列,没执行 SQL 时订单相关页面会报错)。
+
+### 产品负责人确认的规则
+
+1. **暂停放款(`listing_orders.payout_hold`)**:拒付、在 Stripe 后台退款、卖家被封,都不改订单状态,只给订单加一个"不许动钱"的标记。有标记的订单,买家确认收货、cron 自动放款、重试放款、24 小时免费取消全部跳过;`releaseOrderPayout` 转账前也会再查一次(还会按 Stripe 上这笔付款的实时状态兜底:发现拒付/退款就自动加标记,不转账)。只有管理员能在 **`/admin/holds`(Disputes & holds)** 点 "Remove hold" 解除,解除后按原流程继续(到期的下一次 cron 就放款)。原因取值:`dispute` / `refund` / `seller_banned`;`payout_hold_note` 是管理员内部备注(拒付编号、原因、谁什么时候解除),买卖双方读不到。
+2. **拒付**(`charge.dispute.created`):加标记 + 邮件通知管理员。钱已经转给卖家的,同样标记 + 告警,由管理员在 Stripe 后台手动撤回转账(Connect → Transfers → Reverse),MVP 不自动撤回。**拒付赢了只通知,不自动放款**,管理员解除;**输了**订单记成 `cancelled`(`cancel_reason = 'dispute_lost'`),标记保留。
+3. **Stripe 后台退款**(`charge.refunded`):钱还没转给卖家的全额退款 → 订单记成 `cancelled`(`cancel_reason = 'manual_refund'`),不会再放款;部分退款、或者已经放款之后才退 → 加标记 + 告警,管理员决定。我们自己的 24 小时免费取消不受影响(它先把订单锁成 `cancelled` 再退款)。
+4. **封号**:被封卖家所有托管中的订单(`paid_in_escrow`/`delivered`/`confirmed`)一律加 `seller_banned` 标记,由管理员按情况人工处理;**解封不会自动解除**,逐单处理。被封卖家的广告也不能再下单(`buyListingAction` 拒绝)。
+5. **结账只收卡**(Apple Pay / Google Pay 属于卡,照常显示):`payment_method_types: ["card"]`。Bacs、SEPA 这类几天后才到账的付款方式,付款成功时 `payment_status` 还是 `unpaid`,会被当成金额不符卡住,以后专门支持了再开。
+6. **老表 `orders`/`ad_spaces`**:收回 anon/authenticated 的全部权限,表和数据保留;webhook 里读写 `orders` 的死代码删了。
+
+### 代码改了什么
+
+- **买家联系方式只有服务端能读**:之前 `listing_orders` 的 select 策略只限行不限列,卖家拿自己的 session 调 REST API 就能读到买家的电话、地址、邮箱、姓名和 `view_token`。改成列级权限(见下面 SQL),用户态查订单改用 `PARTY_ORDER_COLUMNS`(`src/lib/supabase/types.ts`),不再 `select("*")`。**以后给 `listing_orders` 加新列,默认 authenticated 读不到,要买卖双方能看的话记得 `grant select (新列)`。**
+- **webhook**(`src/app/api/stripe/webhook/route.ts`):数据库出错返回 500 让 Stripe 重试(以前返回 200,买家付了钱订单可能一直停在待支付);付款处理先写 payments(唯一索引防重复)再用条件更新推进订单,并检查影响行数,重复/并发投递不会插两行 payments、不会发两遍邮件(以前插两行后这单永远放不了款);新增拒付、退款三个事件。
+- **24 小时免费取消**(`src/lib/orders/actions.ts`):退款请求报错时,先用同一个 idempotency key 重试,再查 Stripe 有没有已经成功的退款;只有确认没退成才把订单还原,查不清楚就保持取消并通知管理员——不会再出现"钱退了、订单却回到托管、之后又放款"。
+- **开放重定向**(`src/lib/safeRedirect.ts`):`next=/\evil.com`、`/\t/evil.com` 以前能跳到站外,现在拒绝反斜杠和控制字符,并用 URL 解析再确认是本站。
+- **管理员告警邮件**:`sendAdminAlert`(`src/lib/email/send.ts`),收件人是新环境变量 `ADMIN_ALERT_EMAIL`。
+- `/admin/holds` 页面 + 管理后台导航 "Disputes & holds" + 总览页统计卡片;买卖双方的订单卡片、订单只读页显示 "On hold — under review"。
+
+### 要手动做的
+
+1. **Supabase SQL Editor 执行下面的 SQL**(先执行,再合并部署)。
+2. **Vercel**(Production + Preview)加环境变量 `ADMIN_ALERT_EMAIL`(收拒付/退款告警的邮箱)。
+3. **Stripe 后台 webhook endpoint**(测试 sandbox 和 live 各一个)在原来的 `checkout.session.completed`、`account.updated` 之外,**加勾** `charge.dispute.created`、`charge.dispute.closed`、`charge.refunded`。
+4. Stripe 后台 Payment methods 不用改:代码里已经限定只收卡。
+
+### 要手动执行的 SQL
+
+```sql
+-- 0. 先检查:同一张订单有没有多行托管付款(以前 webhook 并发时可能插了两行)。
+--    有结果的话先别往下执行,把结果发给开发,人工合并掉多余的那行。
+select order_id, count(*) from public.payments
+where status <> 'amount_mismatch'
+group by order_id having count(*) > 1;
+```
+
+```sql
+-- 1. 暂停放款标记
+alter table public.listing_orders
+  add column if not exists payout_hold text,
+  add column if not exists payout_hold_at timestamptz,
+  add column if not exists payout_hold_note text;
+
+alter table public.listing_orders
+  drop constraint if exists listing_orders_payout_hold_check,
+  add constraint listing_orders_payout_hold_check
+    check (payout_hold is null or payout_hold in ('dispute', 'refund', 'seller_banned'));
+
+create index if not exists listing_orders_payout_hold_idx
+  on public.listing_orders (payout_hold_at) where payout_hold is not null;
+
+-- 2. 一张订单最多一行托管付款(webhook 重复/并发投递时靠它去重)
+create unique index if not exists payments_one_escrow_payment_per_order
+  on public.payments (order_id) where status <> 'amount_mismatch';
+
+-- 3. 列级权限。注意 Postgres 的规则:表级权限还在的时候,`revoke update (某列)` 不起作用
+--    (README 前面"管理员系统"一节那几条列级 revoke 很可能一直没生效)。所以这里先收回
+--    整张表的权限,再按"除了敏感列以外的所有列"逐列授权。列清单按库里实际的列生成,
+--    跟 README 记录的表结构对不上也能正确执行。
+do $$
+declare
+  spec record;
+  cols text;
+begin
+  for spec in
+    select * from (values
+      -- 表, 权限, 不给 authenticated 的列
+      ('listing_orders', 'select', array['buyer_email','buyer_phone','buyer_address','buyer_name','view_token','payout_hold_note']),
+      ('profiles',       'insert', array['is_banned','stripe_onboarded','stripe_connect_account_id','country']),
+      ('profiles',       'update', array['is_banned','stripe_onboarded','stripe_connect_account_id','country']),
+      ('listings',       'insert', array['is_featured']),
+      ('listings',       'update', array['status','is_featured','rights_attested_at','terms_accepted_at']),
+      ('seller_profiles','insert', array['is_verified','stripe_account_id','stripe_charges_enabled','stripe_payouts_enabled']),
+      ('seller_profiles','update', array['is_verified','stripe_account_id','stripe_charges_enabled','stripe_payouts_enabled'])
+    ) as t(tbl, priv, excluded)
+  loop
+    select string_agg(quote_ident(column_name), ', ' order by ordinal_position) into cols
+    from information_schema.columns
+    where table_schema = 'public' and table_name = spec.tbl
+      and column_name <> all (spec.excluded);
+
+    execute format('revoke %s on public.%I from anon, authenticated', spec.priv, spec.tbl);
+    execute format('grant %s (%s) on public.%I to authenticated', spec.priv, cols, spec.tbl);
+  end loop;
+end $$;
+
+-- 4. 老流程的表:不删数据,只收回权限(README"页面一览":2026-09-17 起代码不再读写)
+revoke all on public.orders, public.ad_spaces from anon, authenticated;
+```
+
+执行完核对(第一句应该看到 `buyer_phone` 等列**没有** authenticated 的 SELECT;第二句 `is_verified`/`is_featured`/`is_banned` 等**没有** INSERT/UPDATE):
+
+```sql
+select column_name, privilege_type from information_schema.column_privileges
+where table_schema = 'public' and table_name = 'listing_orders' and grantee = 'authenticated'
+order by 1, 2;
+
+select table_name, column_name, privilege_type from information_schema.column_privileges
+where table_schema = 'public' and grantee = 'authenticated'
+  and table_name in ('profiles', 'listings', 'seller_profiles')
+  and column_name in ('is_banned','stripe_onboarded','stripe_connect_account_id','country',
+                      'is_featured','status','is_verified')
+order by 1, 2, 3;   -- 应该只剩 listings.status 的 INSERT(发布广告时写 'active')
+```
+
+### 手动测一遍(执行完 SQL、部署到预览环境之后,用 Stripe 测试卡)
+
+1. 卖家账号登录,浏览器控制台用 Supabase REST 查 `listing_orders?select=buyer_phone` → 报 permission denied;Sales/Purchases 页正常显示。
+2. 同样用 REST 把自己的 `seller_profiles.is_verified` 改成 true、把自己广告的 `is_featured` 改成 true → 都被拒。
+3. 下单付款,Stripe CLI `stripe events resend <evt_id>` 重发同一个 `checkout.session.completed` → payments 只有一行、邮件只发一次。
+4. 用拒付测试卡 `4000 0000 0000 0259` 付款 → 订单出现在 `/admin/holds`(Payment disputed),`ADMIN_ALERT_EMAIL` 收到邮件;卖家交付、买家点 Confirm receipt → 提示 on hold,不放款。
+5. `/admin/holds` 点 Remove hold → 订单回到正常流程。
+6. 另下一单,在 Stripe 后台全额退款 → 订单变 "Cancelled — refunded",出现在 `/admin/holds` 的 "Refunded in Stripe" 列表。
+7. 管理员封一个有托管中订单的卖家 → 这些订单都出现在 `/admin/holds`(Seller account suspended);他的广告点 Buy now 提示不可购买。
+8. `/login?next=/%5Cexample.com` 登录后停在 `/listings`,不会跳到 example.com。
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀

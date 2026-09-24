@@ -113,6 +113,15 @@ async function startCheckout(
   if (listing.seller_id === buyerId) {
     return { error: "You can't buy your own listing" };
   }
+  // 被封卖家的订单会被暂停放款(见 src/lib/orders/holds.ts),不再接新单。
+  const { data: sellerState } = await createServiceClient()
+    .from("profiles")
+    .select("is_banned")
+    .eq("id", listing.seller_id)
+    .maybeSingle();
+  if (sellerState?.is_banned) {
+    return { error: "This listing isn't available for purchase right now" };
+  }
   if (!isSupportedCurrency(listing.price_currency)) {
     return { error: "This listing's currency isn't supported for checkout yet" };
   }
@@ -243,6 +252,10 @@ async function startCheckout(
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
+    // 只收卡(Apple Pay / Google Pay 属于卡,照常显示)。Bacs、SEPA 这类几天后才到账的
+    // 付款方式付款成功时 payment_status 还是 unpaid,webhook 会当成金额不符、订单卡住,
+    // 等专门支持了再开(安全核查第 1 批,产品负责人 2026-09-24 确认)。
+    payment_method_types: ["card"],
     customer_email: buyerEmail,
     line_items: [
       {

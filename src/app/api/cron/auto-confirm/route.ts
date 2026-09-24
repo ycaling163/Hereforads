@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { releaseOrderPayout } from "@/lib/stripe/release";
+import { PayoutHeldError } from "@/lib/orders/holds";
 import { ESCROW_HOLD_DAYS } from "@/lib/supabase/enums";
 import { addDays, bookingDayStart } from "@/lib/booking";
 
@@ -33,11 +34,14 @@ async function handle(request: Request) {
         .from("listing_orders")
         .select("id,seller_id,amount,currency,end_date")
         .eq("status", "delivered")
-        .lte("delivered_at", cutoff),
+        .lte("delivered_at", cutoff)
+        // 暂停放款(拒付/退款/卖家被封)的订单不碰,见 src/lib/orders/holds.ts。
+        .is("payout_hold", null),
       supabase
         .from("listing_orders")
         .select("id,seller_id,amount,currency")
-        .eq("status", "confirmed"),
+        .eq("status", "confirmed")
+        .is("payout_hold", null),
     ]);
 
   if (error || stuckError) {
@@ -47,7 +51,7 @@ async function handle(request: Request) {
     );
   }
 
-  const results = { released: 0, retried: 0, failed: 0 };
+  const results = { released: 0, retried: 0, held: 0, failed: 0 };
 
   // 日历预订的订单(有 end_date):分两次放款(过半 40%、结束 3 天后 60%)在下一批
   // 实现;这一批先整笔压到预订期结束 3 天后再放,不会提前放款。
@@ -69,6 +73,7 @@ async function handle(request: Request) {
       // 卖家修改交付链接会把 delivered_at 重置成当时(确认期重新计 3 天),这里再核对
       // 一次,防止查询之后刚好改了链接的订单被提前放款。
       .lte("delivered_at", cutoff)
+      .is("payout_hold", null)
       .select("id");
 
     if (updateError || !updatedRows || updatedRows.length === 0) {
@@ -80,6 +85,10 @@ async function handle(request: Request) {
       await releaseOrderPayout(order);
       results.released += 1;
     } catch (err) {
+      if (err instanceof PayoutHeldError) {
+        results.held += 1;
+        continue;
+      }
       console.error("Auto-release payout failed for order", order.id, err);
       results.failed += 1;
     }
@@ -90,6 +99,10 @@ async function handle(request: Request) {
       await releaseOrderPayout(order);
       results.retried += 1;
     } catch (err) {
+      if (err instanceof PayoutHeldError) {
+        results.held += 1;
+        continue;
+      }
       console.error("Retrying payout failed for order", order.id, err);
       results.failed += 1;
     }

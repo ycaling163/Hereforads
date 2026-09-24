@@ -6,6 +6,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { stripe } from "@/lib/stripe/server";
 import { FREE_CANCEL_HOURS, freeCancelDeadline } from "@/lib/supabase/enums";
 import { sendOrderCancelledEmails } from "@/lib/email/orders";
+import { sendAdminAlert } from "@/lib/email/send";
 
 /**
  * 付款后 24 小时内免费取消(README"费用、取消与退款规则"第 4 条第一行):买家或卖家
@@ -38,13 +39,17 @@ export async function cancelWithin24hAction(
   const service = createServiceClient();
   const { data: order } = await service
     .from("listing_orders")
-    .select("id,buyer_id,seller_id,status,paid_at,start_date")
+    .select("id,buyer_id,seller_id,status,paid_at,start_date,payout_hold")
     .eq("id", orderId)
     .single();
 
   const isParty = order && (order.buyer_id === user.id || order.seller_id === user.id);
   if (!order || !isParty || order.status !== "paid_in_escrow" || !order.paid_at) {
     redirect(`${back}?error=cancel_invalid_state`);
+  }
+  // 暂停放款(拒付/退款/卖家被封)的订单只能由管理员处理,见 src/lib/orders/holds.ts。
+  if (order.payout_hold) {
+    redirect(`${back}?error=on_hold`);
   }
 
   const windowStart = new Date(
@@ -79,6 +84,7 @@ export async function cancelWithin24hAction(
     .eq("id", orderId)
     .eq("status", "paid_in_escrow")
     .gte("paid_at", windowStart)
+    .is("payout_hold", null)
     .select("id");
 
   if (lockError || !locked || locked.length === 0) {
@@ -86,9 +92,12 @@ export async function cancelWithin24hAction(
     redirect(`${back}?error=cancel_invalid_state`);
   }
 
-  let refundId: string;
-  try {
-    const refund = await stripe.refunds.create(
+  // 退款请求报错不等于没退成(比如超时,Stripe 那边其实已经退了)。安全核查第 1 批:
+  // 先用同一个 idempotency key 重试一次,再按 PaymentIntent 查有没有已经成功的退款;
+  // 只有确认没退成才把订单还原成 paid_in_escrow,否则保持 cancelled 并告警人工核对——
+  // 绝不能出现"钱退了、订单却回到托管、之后又放款给卖家"。
+  const createRefund = () =>
+    stripe.refunds.create(
       {
         payment_intent: payment.stripe_payment_intent_id,
         reason: "requested_by_customer",
@@ -96,14 +105,50 @@ export async function cancelWithin24hAction(
       },
       { idempotencyKey: `order-${orderId}-cancel-refund` }
     );
-    refundId = refund.id;
-  } catch (err) {
-    console.error("Refund failed for cancelled order", orderId, err);
-    await service
-      .from("listing_orders")
-      .update({ status: "paid_in_escrow", cancelled_at: null, cancelled_by: null, cancel_reason: null })
-      .eq("id", orderId)
-      .eq("status", "cancelled");
+
+  let refundId: string | null = null;
+  try {
+    refundId = (await createRefund()).id;
+  } catch (firstErr) {
+    console.error("Refund failed for cancelled order, retrying", orderId, firstErr);
+    try {
+      refundId = (await createRefund()).id;
+    } catch (retryErr) {
+      console.error("Refund retry failed for cancelled order", orderId, retryErr);
+    }
+  }
+
+  if (!refundId) {
+    let refundExists: boolean | null = null;
+    try {
+      const refunds = await stripe.refunds.list({
+        payment_intent: payment.stripe_payment_intent_id,
+        limit: 10,
+      });
+      const existing = refunds.data.find((r) => r.status !== "failed" && r.status !== "canceled");
+      refundExists = !!existing;
+      if (existing) refundId = existing.id;
+    } catch (listErr) {
+      console.error("Couldn't check refunds for order", orderId, listErr);
+    }
+
+    if (refundExists === false) {
+      await service
+        .from("listing_orders")
+        .update({ status: "paid_in_escrow", cancelled_at: null, cancelled_by: null, cancel_reason: null })
+        .eq("id", orderId)
+        .eq("status", "cancelled");
+      redirect(`${back}?error=cancel_failed`);
+    }
+    if (refundExists === null) {
+      // 查不清楚:订单保持 cancelled(不会放款),交给管理员核对 Stripe。
+      await sendAdminAlert("Cancellation refund needs checking", [
+        `Order ${orderId} was cancelled (free 24h), but we couldn't confirm the refund in Stripe. The order stays cancelled so no payout happens — please check the payment in Stripe and refund it if needed.`,
+      ]);
+      redirect(`${back}?error=cancel_pending`);
+    }
+  }
+  if (!refundId) {
     redirect(`${back}?error=cancel_failed`);
   }
 

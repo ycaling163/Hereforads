@@ -2,6 +2,8 @@ import type Stripe from "stripe";
 import { stripe } from "./server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { calculateFees, currencyDecimals, fromMinorUnits } from "@/lib/fees";
+import { HOLD_REMOVED_MARKER, PayoutHeldError, placePayoutHold } from "@/lib/orders/holds";
+import { sendAdminAlert } from "@/lib/email/send";
 
 /**
  * 买家确认收货,或卖家标记交付后 ESCROW_HOLD_DAYS 天超时自动确认,触发的都是这一个
@@ -29,7 +31,7 @@ export async function releaseOrderPayout(order: {
 }) {
   const supabase = createServiceClient();
 
-  const [{ data: payment }, { data: sellerProfile }] = await Promise.all([
+  const [{ data: payment }, { data: sellerProfile }, { data: current }] = await Promise.all([
     supabase
       .from("payments")
       .select("stripe_payment_intent_id")
@@ -38,11 +40,25 @@ export async function releaseOrderPayout(order: {
       .single(),
     supabase
       .from("profiles")
-      .select("stripe_connect_account_id")
+      .select("stripe_connect_account_id,is_banned")
       .eq("id", order.seller_id)
+      .single(),
+    supabase
+      .from("listing_orders")
+      .select("payout_hold,payout_hold_note")
+      .eq("id", order.id)
       .single(),
   ]);
 
+  // 安全核查第 1 批:暂停放款的订单、被封卖家的订单一律不转账(调用方的条件更新已经挡了
+  // 一道,这里是转账前最后一道)。
+  if (current?.payout_hold) {
+    throw new PayoutHeldError(order.id, current.payout_hold);
+  }
+  if (sellerProfile?.is_banned) {
+    await placePayoutHold(order.id, "seller_banned", "Payout blocked: seller is banned.");
+    throw new PayoutHeldError(order.id, "seller_banned");
+  }
   if (!payment?.stripe_payment_intent_id) {
     throw new Error(`No payment record for order ${order.id}`);
   }
@@ -66,6 +82,22 @@ export async function releaseOrderPayout(order: {
       | null;
     if (!charge || !balanceTransaction) {
       throw new Error(`Charge not settled yet for order ${order.id}`);
+    }
+    // 兜底:webhook 没收到/没处理好拒付或退款事件时,转账前按 Stripe 的实时状态再查一次,
+    // 发现退过款或有拒付就暂停,不转账。
+    // 管理员解除过暂停的订单不再自动重新暂停(管理员已经看过、决定放款)。
+    const adminCleared = !!current?.payout_hold_note?.includes(HOLD_REMOVED_MARKER);
+    if (!adminCleared && (charge.disputed || charge.refunded || charge.amount_refunded > 0)) {
+      const why = charge.disputed ? "disputed" : "refunded";
+      await placePayoutHold(
+        order.id,
+        charge.disputed ? "dispute" : "refund",
+        `Payout blocked: the charge ${charge.id} is ${why} in Stripe.`
+      );
+      await sendAdminAlert(`Payout blocked — payment ${why}`, [
+        `The payout for order ${order.id} was about to be sent, but the payment ${charge.id} is ${why} in Stripe. The order is now on hold.`,
+      ]);
+      throw new PayoutHeldError(order.id, why);
     }
 
     // source_transaction 的 Transfer 必须用这笔付款的结算币种(平台账户没开对应

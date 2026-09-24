@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/supabase/admin";
 import { createServiceClient } from "@/lib/supabase/service";
+import { holdSellerOrders } from "@/lib/orders/holds";
 
 // profiles.is_banned 的 UPDATE 权限收回给 authenticated 了(见 README"管理员系统"
 // 一节),封禁/解封只能走这两个 server action。除了打数据库这一列,还调用了 Supabase
@@ -20,6 +21,14 @@ export async function banUserAction(userId: string): Promise<void> {
   const service = createServiceClient();
   await service.from("profiles").update({ is_banned: true }).eq("id", userId);
 
+  // 产品负责人 2026-09-24 确认:被封卖家托管中的订单一律停止放款,由管理员在
+  // /admin/holds 根据情况人工处理(退款或放款)。解封不会自动解除这些暂停。
+  try {
+    await holdSellerOrders(userId);
+  } catch (err) {
+    console.error("Failed to hold banned seller's orders:", err);
+  }
+
   const { error } = await service.auth.admin.updateUserById(userId, {
     ban_duration: BAN_DURATION,
   });
@@ -30,6 +39,7 @@ export async function banUserAction(userId: string): Promise<void> {
   redirect("/admin/users");
 }
 
+// 解封只恢复登录,不会解除封号时暂停的订单(产品负责人 2026-09-24 确认:管理员逐单解除)。
 export async function unbanUserAction(userId: string): Promise<void> {
   await requireAdmin();
 

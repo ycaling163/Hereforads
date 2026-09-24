@@ -1,4 +1,5 @@
 import { bookingDayStart } from "@/lib/booking";
+import type { PayoutHold } from "./types";
 
 /**
  * 数据库真实枚举取值（Database → Enumerated Types 核对过）。
@@ -208,6 +209,13 @@ export const LISTING_ORDER_STATUS_LABELS: Record<ListingOrderStatus, string> = {
   released: "Paid out",
   expired_auto_confirmed: "Paid out", // 历史遗留标签,当前流程放款一律落在 released
   cancelled: "Cancelled — refunded",
+};
+
+// 暂停放款的原因(listing_orders.payout_hold),买卖双方页面和管理员页面共用。
+export const PAYOUT_HOLD_LABELS: Record<PayoutHold, string> = {
+  dispute: "Payment disputed",
+  refund: "Refunded outside the normal flow",
+  seller_banned: "Seller account suspended",
 };
 
 // 最低发布价和费率已挪到 src/lib/fees.ts(2026-09-23 改成固定费率,按币种区分最低价)。

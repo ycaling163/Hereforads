@@ -292,3 +292,12 @@
 - 产品负责人手机测试:顶部导航挤、"Ad spaces"/"Log in" 换成两行。改成手机上导航收进汉堡菜单(Ad spaces / Publishers / Find an order),外面只留 Log in 或头像;桌面端不变。
 - 顺带修:Dashboard 在手机上左侧栏把正文挤成一条 → 手机上改成顶部一排可横向滑动的标签;发布表单的 价格/币种/计价单位 手机上从 3 列改成 2 列。
 - 验证:lint + build;用 Playwright 按 375px 宽截图看了首页、菜单展开、登录页,1280px 看了桌面端。Dashboard 需要登录,这个环境连不上 Supabase,没截到图。
+
+## 2026-09-24 切 live 前安全核查 · 第 1 批(分支 `claude/charming-hawking-xs94gl`)
+
+- 先做了全站只读核查,报告发给了产品负责人(23 项,分 3 批修)。这个会话的 Supabase MCP 连不上 HereForAds 的项目,数据库实际权限状态靠产品负责人跑核对 SQL 回传。
+- 产品负责人确认的规则:拒付/Stripe 后台退款/封号都用"暂停放款"标记(`listing_orders.payout_hold`),不改订单状态;拒付赢了不自动放款、管理员解除;已放款后的拒付由管理员手动撤回转账;解封不自动解除暂停;结账只收卡;老表 `orders`/`ad_spaces` 收回权限不删数据;管理后台新增 "Disputes & holds" 页面。
+- 做了:买家联系方式/view_token 改列级权限(卖家读不到);`is_verified`/`is_featured`/`is_banned` 等敏感列 insert/update 都收回(**发现 README 之前那几条 `revoke update (列)` 在表级权限还在时不生效**,这次按"收回整表 + 逐列授权"重做);webhook 幂等 + 出错返回 500 + 拒付/退款事件;免费取消的退款报错不再盲目还原订单;开放重定向;封号暂停放款并禁止新下单。细节和 SQL 见 README"安全核查 · 第 1 批"。
+- **要人工做**:先执行 README 里的 SQL(第 0 步先查 payments 有没有重复行);Vercel 加 `ADMIN_ALERT_EMAIL`;Stripe webhook 加勾 `charge.dispute.created`、`charge.dispute.closed`、`charge.refunded`。
+- 没实测:连不上 Supabase/Stripe,只跑了 lint + build + npm audit。
+- 下一批:限流 + Cloudflare Turnstile(产品负责人已同意方案和额度)。
