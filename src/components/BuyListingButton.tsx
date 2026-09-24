@@ -24,7 +24,8 @@ export function BuyListingButton({
     {}
   );
   const [showOptions, setShowOptions] = useState(false);
-  const returnTo = encodeURIComponent(`/listings/${listingId}`);
+  // 登录/注册完回到这条广告,并带 resume=buy 让页面提示"接着付款"。
+  const returnTo = encodeURIComponent(`/listings/${listingId}?resume=buy`);
 
   const escrowNote = (
     <p className="text-center text-xs text-zinc-500">

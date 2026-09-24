@@ -635,6 +635,8 @@ Listing 图片复用已有的 `ad-space-photos` public bucket,不用新建。
 
 **2026-09-24 调整入口文案(产品负责人决定)**:广告页上不再写"No account needed to buy"——主动宣传"不用注册"会让更多人不注册,流失客户。现在未登录访客点 Buy now 之后,才出现三个选项:**Log in to buy**、**Create an account**(都带 `next` 参数,登录/注册完回到这条广告)、**Continue as guest**(填邮箱,走原来的 guest 结账)。跟常见网店的结账页一致,优先引导注册/登录,guest 作为兜底。"Ask the seller" 私信继续要求登录(防垃圾消息),未登录时显示"Log in or create an account"。代码在 `src/components/BuyListingButton.tsx`。
 
+**登录/注册后接回购买(2026-09-24,代替购物车)**:每一单都是独立托管,MVP 不做购物车。未登录买家从 Buy now 去登录/注册,`next` 是 `/listings/<id>?resume=buy`;回到广告页时顶部提示 "You're signed in — complete your purchase below",购买框加边框高亮,一键付款。覆盖三条路径:密码登录/注册(不开邮箱验证时直接跳回)、Google/Facebook 登录(`/auth/callback?next=`)、**开了邮箱验证的注册**:`signUp` 带 `emailRedirectTo = {站点}/auth/callback?next=...`,点验证邮件后换 session 再跳回。前提:① Supabase 的 **Confirm signup** 邮件模板用的是默认的 `{{ .ConfirmationURL }}`(如果以后改成 token_hash 格式,要在链接里带上 `{{ .RedirectTo }}`,否则回不到广告页);② Redirect URLs 白名单里有 `{站点}/auth/callback`(OAuth 登录已经在用,应该已经有了)。验证邮件在另一个浏览器打开时换不出 session,会落到登录页并保留 `next`,登录后照样回到广告页。"Ask the seller" 的登录/注册链接回到同一条广告的私信框(`#ask`)。
+
 **实现方式**:选的是"静默建号 + 邮件魔法链接",不是完全匿名订单(那种做法需要新建一套脱离账号体系的 token 订单页,买家没法用站内私信联系卖家,改动量大很多,这次没有做)。具体流程:
 
 1. `src/app/listings/[id]/actions.ts` 的 `buyListingAction` 发现没有登录用户时,读表单里的 `guest_email`;

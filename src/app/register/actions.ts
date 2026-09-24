@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { ensureProfile } from "@/lib/supabase/ensure-profile";
 import { safeRedirectPath } from "@/lib/safeRedirect";
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
 export interface RegisterState {
   error?: string;
   message?: string;
@@ -30,7 +32,16 @@ export async function registerAction(
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  // 开了邮箱验证时,用户点验证邮件后经 /auth/callback 换 session,再回到 next
+  // (比如注册前正要买的那条广告,见 BuyListingButton)。回调地址跟 OAuth 登录
+  // 用的是同一个,已经在 Supabase 的 Redirect URLs 白名单里。
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: `${SITE_URL}/auth/callback?next=${encodeURIComponent(next)}`,
+    },
+  });
 
   if (error) {
     return { error: error.message };
