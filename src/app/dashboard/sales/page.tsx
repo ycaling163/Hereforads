@@ -6,14 +6,46 @@ import { CancelOrderForm } from "@/components/CancelOrderForm";
 import { LISTING_ORDER_STATUS_LABELS, freeCancelDeadline } from "@/lib/supabase/enums";
 import type { Listing, ListingOrder, Payment, Profile } from "@/lib/supabase/types";
 
+// 订单按"钱现在在哪"分成 4 个标签页(2026-09-24 产品负责人要求,避免各种状态
+// 混在一起):托管中(默认,卖家要处理的都在这)/ 待付款 / 已完成 / 已取消。
 // `confirmed` 只是放款前的一瞬间锁定态,`expired_auto_confirmed` 是旧标签(见 README
-// "平台责任边界"一节),这两个都并到"Completed"这一组展示。
-const SECTIONS: { title: string; statuses: ListingOrder["status"][] }[] = [
-  { title: "Awaiting payment", statuses: ["pending_payment"] },
-  { title: "New orders — mark as delivered", statuses: ["paid_in_escrow"] },
-  { title: "Delivered — awaiting buyer confirmation", statuses: ["delivered"] },
-  { title: "Completed", statuses: ["confirmed", "released", "expired_auto_confirmed"] },
-  { title: "Cancelled", statuses: ["cancelled"] },
+// "平台责任边界"一节),这两个都并到 Completed。
+type TabKey = "escrow" | "awaiting" | "completed" | "cancelled";
+const TABS: {
+  key: TabKey;
+  label: string;
+  sections: { title: string; statuses: ListingOrder["status"][] }[];
+  empty: string;
+}[] = [
+  {
+    key: "escrow",
+    label: "In escrow",
+    sections: [
+      { title: "New orders — mark as delivered", statuses: ["paid_in_escrow"] },
+      { title: "Delivered — awaiting buyer confirmation", statuses: ["delivered"] },
+    ],
+    empty: "No paid orders waiting on you right now.",
+  },
+  {
+    key: "awaiting",
+    label: "Awaiting payment",
+    sections: [{ title: "Checkout started, not paid yet", statuses: ["pending_payment"] }],
+    empty: "No unpaid checkouts.",
+  },
+  {
+    key: "completed",
+    label: "Completed",
+    sections: [
+      { title: "Paid out", statuses: ["confirmed", "released", "expired_auto_confirmed"] },
+    ],
+    empty: "No completed orders yet.",
+  },
+  {
+    key: "cancelled",
+    label: "Cancelled",
+    sections: [{ title: "Cancelled and refunded", statuses: ["cancelled"] }],
+    empty: "No cancelled orders.",
+  },
 ];
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -25,9 +57,10 @@ const ERROR_MESSAGES: Record<string, string> = {
 export default async function SalesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; cancelled?: string }>;
+  searchParams: Promise<{ error?: string; cancelled?: string; tab?: string }>;
 }) {
-  const { error: actionError, cancelled } = await searchParams;
+  const { error: actionError, cancelled, tab } = await searchParams;
+  const activeTab = TABS.find((t) => t.key === tab) ?? TABS[0];
   const supabase = await createClient();
   const {
     data: { user },
@@ -103,7 +136,37 @@ export default async function SalesPage({
         <p className="mt-16 text-center text-zinc-500">No orders yet.</p>
       )}
 
-      {SECTIONS.map(({ title, statuses }) => {
+      {!error && orders.length > 0 && (
+        <nav className="mt-8 flex flex-wrap gap-2 border-b border-zinc-200 pb-3">
+          {TABS.map((t) => {
+            const count = orders.filter((o) =>
+              t.sections.some((section) => section.statuses.includes(o.status))
+            ).length;
+            const isActive = t.key === activeTab.key;
+            return (
+              <Link
+                key={t.key}
+                href={`/dashboard/sales?tab=${t.key}`}
+                className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                  isActive
+                    ? "bg-zinc-900 text-white"
+                    : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+                }`}
+              >
+                {t.label} ({count})
+              </Link>
+            );
+          })}
+        </nav>
+      )}
+
+      {!error &&
+        orders.length > 0 &&
+        !orders.some((o) =>
+          activeTab.sections.some((section) => section.statuses.includes(o.status))
+        ) && <p className="mt-10 text-center text-sm text-zinc-500">{activeTab.empty}</p>}
+
+      {activeTab.sections.map(({ title, statuses }) => {
         const sectionOrders = orders.filter((o) => statuses.includes(o.status));
         if (sectionOrders.length === 0) return null;
 
