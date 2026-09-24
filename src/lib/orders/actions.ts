@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { stripe } from "@/lib/stripe/server";
 import { FREE_CANCEL_HOURS } from "@/lib/supabase/enums";
+import { sendOrderCancelledEmails } from "@/lib/email/orders";
 
 /**
  * 付款后 24 小时内免费取消(README"费用、取消与退款规则"第 4 条第一行):买家或卖家
@@ -113,6 +114,8 @@ export async function cancelWithin24hAction(
       paymentUpdateError.message
     );
   }
+
+  await sendOrderCancelledEmails(orderId, user.id);
 
   redirect(`${back}?cancelled=1`);
 }

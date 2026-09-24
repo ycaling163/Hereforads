@@ -5,6 +5,7 @@ import {
   sendListingMessageAction,
   type SendMessageState,
 } from "@/app/listings/[id]/actions";
+import { FileInput } from "@/components/FileInput";
 
 export function ContactSellerForm({ listingId }: { listingId: string }) {
   const [state, formAction, pending] = useActionState<
@@ -29,12 +30,7 @@ export function ContactSellerForm({ listingId }: { listingId: string }) {
         placeholder="Ask the seller a question about this listing…"
         className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
       />
-      <input
-        type="file"
-        name="image"
-        accept="image/*"
-        className="text-xs text-zinc-500"
-      />
+      <FileInput id="contact_image" name="image" accept="image/*" buttonLabel="Attach photo" />
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       <button
         type="submit"

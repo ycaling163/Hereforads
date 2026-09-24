@@ -1328,6 +1328,49 @@ insert into public.site_pages (slug, title, content_html) values
 
 **这次同样没有在真实 Supabase 项目上跑过**(这个开发环境连不上 HereForAds 对应的项目)——上面这段 SQL 需要人工去 Supabase 后台的 SQL Editor 跑一遍,跑完之后 `/admin/pages` 才会列出这两条,`/terms`、`/privacy` 会从写死的默认文案切换成读数据库的内容(内容是一样的,只是变得可编辑了)。`npm run build` + `npx eslint src` 全绿,但没有用真实账号点开过 `/admin/pages/terms` 走一遍"改标题 → 用富文本工具栏加粗/加链接 → 保存 → 刷新 /terms 确认生效"这条关键路径,上线后建议人工测一次。
 
+## 测试反馈修复(2026-09-24):订单邮件、买家邮箱、结账勾选、英文文件按钮
+
+**1. 订单邮件通知**(之前完全没有,付款/取消/交付都不发邮件):`src/lib/email/`,走 Resend HTTP API(跟 Supabase 发验证/登录邮件是同一个 Resend 账号和已验证的 `hereforads.com` 域名)。
+
+| 时机 | 收件人 | 在哪触发 |
+|---|---|---|
+| 付款成功 | 买家("Order confirmed")+ 卖家("New order",含到手金额) | webhook `checkout.session.completed` |
+| 卖家标记交付 | 买家("Delivered",提醒 3 天内确认) | `markDeliveredAction` |
+| 24 小时内取消 | 买家(退款说明)+ 卖家 | `cancelWithin24hAction` |
+
+发信失败只记日志,不影响付款/取消流程。**Vercel 环境变量(Production + Preview)要加**:
+- `RESEND_API_KEY`:Resend 后台 → API Keys 新建一个(权限 Sending access 即可)。没配的话不发邮件,日志里打 "RESEND_API_KEY not set"。
+- `EMAIL_FROM`(可选):默认 `HereForAds <hello@hereforads.com>`,必须是已验证域名下的地址。
+
+**2. 订单存买家邮箱**:`listing_orders.buyer_email`,下单时写入(guest 填的邮箱 / 登录买家的账号邮箱),webhook 再用 Stripe Checkout 的邮箱兜底。`/admin/orders` 的 Buyer contact 列显示邮箱。卖家的 Sales 页仍然看不到买家联系方式。
+
+**3. 结账前两个必勾项**(第 10 条):"I agree to the Terms of Service" 和"要求卖家立即开始、知道交付后失去 14 天取消权、开始后取消按已完成部分付费"。前端 required + 服务端校验,勾选时间写进 `terms_accepted_at` / `immediate_start_consent_at`。**措辞待律师确认**。
+
+**4. 文件上传按钮改成英文**:浏览器原生文件框的文字跟着系统语言走(中文系统显示"选择文件"),换成自己的 `src/components/FileInput.tsx`("Choose file" / "Attach photo")。私信、回复、发布广告、个人资料里的上传都换了。
+
+**5. 结账出错不再整页崩溃**:`buyListingAction` 兜住 Stripe/Supabase 异常,页面提示重试,日志里记具体原因(2026-09-24 线上 `STRIPE_SECRET_KEY` 被误填成 Supabase key,就是靠日志查出来的)。
+
+**要手动执行的 SQL**:
+
+```sql
+alter table public.listing_orders
+  add column if not exists buyer_email text,
+  add column if not exists terms_accepted_at timestamptz,
+  add column if not exists immediate_start_consent_at timestamptz;
+
+-- 补老订单的买家邮箱(从账号邮箱抄)
+update public.listing_orders o
+set buyer_email = u.email
+from auth.users u
+where u.id = o.buyer_id and o.buyer_email is null;
+```
+
+**邮件进垃圾箱怎么办**(配置,不是代码):
+1. Cloudflare DNS 加 DMARC 记录(Resend 只要求 SPF/DKIM,没有 DMARC 时 Gmail/Outlook 更容易判垃圾):类型 TXT,名称 `_dmarc`,值 `v=DMARC1; p=none; rua=mailto:<你的邮箱>`。
+2. Resend 后台 → Domains → hereforads.com,确认所有记录(SPF、DKIM、MX/Return-Path)都是 Verified。
+3. Supabase → Authentication → Emails 的模板(Confirm signup、Magic link)改成正常的品牌文案,别只有一个链接;Sender name 填 "HereForAds"。
+4. 新域名刚开始发信信誉低,前几周进垃圾箱比较常见;测试时把邮件标记"不是垃圾邮件",会逐渐改善。
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀

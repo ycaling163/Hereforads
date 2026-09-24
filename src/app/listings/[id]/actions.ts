@@ -19,15 +19,40 @@ export interface BuyListingState {
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 export async function buyListingAction(
-  _prevState: BuyListingState,
+  prevState: BuyListingState,
   formData: FormData
 ): Promise<BuyListingState> {
+  // 任何未捕获的异常(Stripe/Supabase 报错、环境变量缺失)都会让整页变成
+  // "page couldn't load";这里兜住,记下具体原因,给买家一个能重试的提示。
+  // redirect() 靠抛特殊异常实现,只在 startCheckout 成功返回 URL 之后才调用。
+  let checkoutUrl: string;
+  try {
+    const result = await startCheckout(prevState, formData);
+    if ("error" in result) return result;
+    checkoutUrl = result.url;
+  } catch (err) {
+    console.error("buyListingAction failed:", err);
+    return { error: "Couldn't start checkout, please try again" };
+  }
+  redirect(checkoutUrl);
+}
+
+async function startCheckout(
+  _prevState: BuyListingState,
+  formData: FormData
+): Promise<{ error: string } | { url: string }> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const listingId = String(formData.get("listing_id") ?? "");
+
+  // 结账前的两个必勾项(见 BuyListingButton),前端 required 之外服务端再挡一次。
+  if (formData.get("accept_terms") !== "on" || formData.get("immediate_start") !== "on") {
+    return { error: "Please tick both boxes to continue" };
+  }
+  const consentedAt = new Date().toISOString();
 
   // Guest 结账(不强制先注册/登录):买家只填邮箱,后台静默建号 + 发登录魔法
   // 链接,见 src/lib/supabase/guest-checkout.ts 和 README"Guest 结账"一节。
@@ -49,7 +74,7 @@ export async function buyListingAction(
 
     const resolved = await resolveGuestBuyerId(supabase, guestEmail);
     if (!resolved.buyerId) {
-      return { error: resolved.error };
+      return { error: resolved.error ?? "Couldn't start checkout, please try again" };
     }
     buyerId = resolved.buyerId;
     buyerEmail = guestEmail;
@@ -88,6 +113,10 @@ export async function buyListingAction(
       amount: listing.price_amount,
       currency: listing.price_currency,
       status: "pending_payment",
+      // 下单时就存买家邮箱(guest 和登录买家都有),管理后台/纠纷时能联系到人。
+      buyer_email: buyerEmail ?? null,
+      terms_accepted_at: consentedAt,
+      immediate_start_consent_at: consentedAt,
     })
     .select("id")
     .single();
@@ -137,7 +166,7 @@ export async function buyListingAction(
     return { error: "Couldn't start checkout, please try again" };
   }
 
-  redirect(session.url);
+  return { url: session.url };
 }
 
 export interface SendMessageState {

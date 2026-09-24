@@ -22,6 +22,7 @@ import {
   formatMoney,
   minListingPrice,
 } from "@/lib/fees";
+import { FileInput } from "@/components/FileInput";
 
 export interface ListingFormState {
   error?: string;
@@ -379,14 +380,7 @@ export function ListingForm({
             ? "Add more media (optional, appended after the ones above)"
             : "Media (optional, multiple allowed)"}
         </label>
-        <input
-          id="media"
-          name="media"
-          type="file"
-          accept="image/*,video/*"
-          multiple
-          className={inputClass}
-        />
+        <FileInput id="media" name="media" accept="image/*,video/*" multiple />
       </div>
 
       {/* 只在真正创建新 listing 时问一次(见 README"发布免审核 + KYC 后置"

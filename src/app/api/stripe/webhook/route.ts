@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { calculateFees, fromMinorUnits, toMinorUnits } from "@/lib/fees";
+import { sendOrderPaidEmails } from "@/lib/email/orders";
 
 // 用 service_role key 写库,绕过 RLS —— webhook 请求没有登录用户的 session/cookie,
 // 走不了 src/lib/supabase/server.ts 那条路。
@@ -113,7 +114,7 @@ export async function POST(request: Request) {
       // 不是老流程的订单,按 MVP v2 的 listing_orders 处理。
       const { data: order, error: orderFetchError } = await supabase
         .from("listing_orders")
-        .select("amount,currency,status,buyer_id")
+        .select("amount,currency,status,buyer_id,buyer_email")
         .eq("id", orderId)
         .single();
 
@@ -196,6 +197,8 @@ export async function POST(request: Request) {
           buyer_name: customerDetails?.name ?? null,
           buyer_phone: customerDetails?.phone ?? null,
           buyer_address: buyerAddress,
+          // 下单时已经存了;老订单或者没存上的,用 Stripe Checkout 收到的邮箱补上。
+          ...(order.buyer_email ? {} : { buyer_email: customerDetails?.email ?? null }),
         })
         .eq("id", orderId)
         .eq("status", "pending_payment");
@@ -238,6 +241,9 @@ export async function POST(request: Request) {
       if (paymentError) {
         console.error("Failed to insert payment row:", paymentError.message);
       }
+
+      // 订单确认邮件(买家 + 卖家)。上面的 status 条件更新保证每单只会走到这里一次。
+      await sendOrderPaidEmails(orderId);
       break;
     }
 

@@ -238,3 +238,10 @@
 - **待确认**:CAD/AUD/SGD/HKD/JPY 的固定手续费和最低价是按汇率取的等值整数,产品负责人还没确认具体金额。
 - **需要人工做**:Supabase 执行 README 里的 3 段 SQL;Stripe 平台账户提现改手动;Vercel 加 `CRON_SECRET`。
 - **没验证的**:这个会话没有 `STRIPE_SECRET_KEY`、也连不上 Supabase,Stripe 测试卡流程没有实际跑过,只做了 `npm run lint`、`npm run build` 和费率计算的本地核对(GBP 100 → 到手 83.80)。README 里写了测试卡的手动测试步骤。
+
+## 2026-09-24 测试反馈修复(分支 `claude/ecstatic-bohr-khjqnu`)
+
+- 线上访客结账 500:日志显示 Stripe 报 "Invalid API Key provided: eyJhbGci…",Vercel Production 的 `STRIPE_SECRET_KEY` 被误填成了 Supabase key(配置问题,已告知产品负责人改回 `sk_test_…`)。代码侧加了兜底,结账出错不再整页崩溃。
+- 新增订单邮件通知(Resend API)、订单存买家邮箱、结账前两个必勾项(条款 + 14 天取消权)、英文文件上传按钮。细节、SQL、新环境变量(`RESEND_API_KEY`、`EMAIL_FROM`)见 README"测试反馈修复(2026-09-24)"。
+- 没验证的:这个环境连不上 Supabase/Stripe/Resend,只跑了 lint + build。
+

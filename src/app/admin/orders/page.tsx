@@ -74,10 +74,12 @@ export default async function AdminOrdersPage() {
                 {/* Guest 结账时从 Stripe Checkout 收集来的电话/地址(见 README
                     "Guest 联系方式留底"一节)——只在这个管理后台页面展示,纠纷/
                     支持排查用;/dashboard/sales 卖家看到的订单卡片不带这两列,
-                    卖家不该看到买家的电话/地址。登录买家没走这段收集,这里是空。 */}
+                    卖家不该看到买家的电话/地址。登录买家没走这段收集,电话/地址是空;
+                    邮箱(buyer_email,2026-09-24 起下单时就存)所有买家都有。 */}
                 <td className="py-2 pr-4 text-zinc-500">
-                  {order.buyer_phone || order.buyer_address ? (
+                  {order.buyer_email || order.buyer_phone || order.buyer_address ? (
                     <div className="flex flex-col">
+                      {order.buyer_email && <span>{order.buyer_email}</span>}
                       {order.buyer_phone && <span>{order.buyer_phone}</span>}
                       {order.buyer_address && (
                         <span className="text-xs text-zinc-400">{order.buyer_address}</span>
