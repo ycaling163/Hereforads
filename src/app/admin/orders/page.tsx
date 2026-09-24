@@ -1,30 +1,74 @@
 import Link from "next/link";
 import { createServiceClient } from "@/lib/supabase/service";
 import { LISTING_ORDER_STATUS_LABELS } from "@/lib/supabase/enums";
-import type { Listing, ListingOrder, Profile } from "@/lib/supabase/types";
+import type { Listing, ListingOrder, Payment, Profile } from "@/lib/supabase/types";
 
 const RECENT_LIMIT = 200;
 
-export default async function AdminOrdersPage() {
+// 平台用的是 Charges & Transfers:买家的钱先全部进平台自己的 Stripe 余额,Stripe 后台
+// 的 Payments 列表本身看不出属于哪个卖家(见 README"在 Stripe 里区分卖家")。这个页面
+// 是"这笔钱属于谁"的账本:每行带 Stripe 付款/转账的直达链接,点卖家名按卖家筛选并汇总。
+const STRIPE_DASHBOARD = `https://dashboard.stripe.com${
+  process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_") ? "" : "/test"
+}`;
+
+// 钱现在在哪:托管中(平台余额里、还没给卖家)/ 已转给卖家 / 已退给买家。
+const ESCROW_STATUSES: ListingOrder["status"][] = ["paid_in_escrow", "delivered", "confirmed"];
+const RELEASED_STATUSES: ListingOrder["status"][] = ["released", "expired_auto_confirmed"];
+
+function sumByCurrency(orders: ListingOrder[]): string {
+  const totals = new Map<string, number>();
+  for (const o of orders) {
+    totals.set(o.currency, (totals.get(o.currency) ?? 0) + Number(o.amount));
+  }
+  if (totals.size === 0) return "—";
+  return [...totals].map(([currency, total]) => `${total.toFixed(2)} ${currency}`).join(" · ");
+}
+
+export default async function AdminOrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ seller?: string }>;
+}) {
+  const { seller: sellerFilter } = await searchParams;
   const admin = createServiceClient();
-  const { data: orderRows, error } = await admin
+  let orderQuery = admin
     .from("listing_orders")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(RECENT_LIMIT);
+  if (sellerFilter) {
+    orderQuery = orderQuery.eq("seller_id", sellerFilter);
+  }
+  const { data: orderRows, error } = await orderQuery;
 
   const orders = (orderRows ?? []) as ListingOrder[];
+  const orderIds = orders.map((o) => o.id);
 
   const listingIds = [...new Set(orders.map((o) => o.listing_id))];
   const userIds = [...new Set(orders.flatMap((o) => [o.buyer_id, o.seller_id]))];
-  const [{ data: listingRows }, { data: userRows }] = await Promise.all([
+  const [{ data: listingRows }, { data: userRows }, { data: paymentRows }] = await Promise.all([
     listingIds.length
       ? admin.from("listings").select("id,title").in("id", listingIds)
       : Promise.resolve({ data: [] as Pick<Listing, "id" | "title">[] }),
     userIds.length
       ? admin.from("profiles").select("id,display_name").in("id", userIds)
       : Promise.resolve({ data: [] as Pick<Profile, "id" | "display_name">[] }),
+    orderIds.length
+      ? admin
+          .from("payments")
+          .select("order_id,stripe_payment_intent_id,stripe_transfer_id,status")
+          .in("order_id", orderIds)
+      : Promise.resolve({ data: [] as Payment[] }),
   ]);
+  const paymentByOrderId = new Map(
+    ((paymentRows ?? []) as Pick<
+      Payment,
+      "order_id" | "stripe_payment_intent_id" | "stripe_transfer_id" | "status"
+    >[])
+      .filter((p) => p.status !== "amount_mismatch")
+      .map((p) => [p.order_id, p])
+  );
   const listingTitleById = new Map(
     ((listingRows ?? []) as Pick<Listing, "id" | "title">[]).map((l) => [l.id, l.title])
   );
@@ -45,6 +89,40 @@ export default async function AdminOrdersPage() {
         — for dispute/support lookups, not for editing order state.
       </p>
 
+      {sellerFilter && (
+        <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-zinc-700">
+              Seller: <span className="font-medium">{nameById.get(sellerFilter) ?? sellerFilter}</span>
+            </p>
+            <Link href="/admin/orders" className="text-sm text-zinc-500 underline">
+              Show all sellers
+            </Link>
+          </div>
+          <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-zinc-400">In escrow (held by platform)</dt>
+              <dd className="mt-1 text-zinc-900">
+                {sumByCurrency(orders.filter((o) => ESCROW_STATUSES.includes(o.status)))}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-zinc-400">Released to seller</dt>
+              <dd className="mt-1 text-zinc-900">
+                {sumByCurrency(orders.filter((o) => RELEASED_STATUSES.includes(o.status)))}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-zinc-400">Refunded to buyers</dt>
+              <dd className="mt-1 text-zinc-900">
+                {sumByCurrency(orders.filter((o) => o.status === "cancelled"))}
+              </dd>
+            </div>
+          </dl>
+          <p className="mt-2 text-xs text-zinc-400">Order amounts (what buyers paid), before fees.</p>
+        </div>
+      )}
+
       {error && <p className="mt-8 text-sm text-red-600">{error.message}</p>}
 
       <div className="mt-6 overflow-x-auto">
@@ -58,6 +136,7 @@ export default async function AdminOrdersPage() {
               <th className="py-2 pr-4">Amount</th>
               <th className="py-2 pr-4">Status</th>
               <th className="py-2 pr-4">Created</th>
+              <th className="py-2 pr-4">Stripe</th>
             </tr>
           </thead>
           <tbody>
@@ -90,7 +169,13 @@ export default async function AdminOrdersPage() {
                   )}
                 </td>
                 <td className="py-2 pr-4 text-zinc-600">
-                  {nameById.get(order.seller_id) ?? "Anonymous"}
+                  <Link
+                    href={`/admin/orders?seller=${order.seller_id}`}
+                    className="underline decoration-zinc-300 hover:decoration-zinc-900"
+                    title="Show only this seller's orders"
+                  >
+                    {nameById.get(order.seller_id) ?? "Anonymous"}
+                  </Link>
                 </td>
                 <td className="py-2 pr-4 text-zinc-600">
                   {order.amount} {order.currency}
@@ -102,6 +187,34 @@ export default async function AdminOrdersPage() {
                 </td>
                 <td className="py-2 pr-4 text-zinc-500">
                   {new Date(order.created_at).toLocaleDateString()}
+                </td>
+                <td className="py-2 pr-4 text-xs text-zinc-500">
+                  {(() => {
+                    const payment = paymentByOrderId.get(order.id);
+                    if (!payment?.stripe_payment_intent_id) return "—";
+                    return (
+                      <div className="flex flex-col">
+                        <a
+                          href={`${STRIPE_DASHBOARD}/payments/${payment.stripe_payment_intent_id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline"
+                        >
+                          Payment
+                        </a>
+                        {payment.stripe_transfer_id && (
+                          <a
+                            href={`${STRIPE_DASHBOARD}/connect/transfers/${payment.stripe_transfer_id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="underline"
+                          >
+                            Payout
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </td>
               </tr>
             ))}

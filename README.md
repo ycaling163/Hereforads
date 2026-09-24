@@ -1371,6 +1371,18 @@ where u.id = o.buyer_id and o.buyer_email is null;
 3. Supabase → Authentication → Emails 的模板(Confirm signup、Magic link)改成正常的品牌文案,别只有一个链接;Sender name 填 "HereForAds"。
 4. 新域名刚开始发信信誉低,前几周进垃圾箱比较常见;测试时把邮件标记"不是垃圾邮件",会逐渐改善。
 
+## 在 Stripe 里区分卖家(2026-09-24)
+
+**为什么 Stripe 后台看不出钱是哪个卖家的**:用的是 separate charges & transfers(第 11a 条做法 A),买家付款时钱全部进平台自己的 Stripe 余额,商户是 HereForAds,付款记录上本来没有卖家信息。钱只有在放款(Transfer)时才会进卖家的 Connect 账户。所以"这笔钱属于谁"的账本在我们自己的数据库(`listing_orders` + `payments`),Stripe 那边靠下面这些标记对上。
+
+**2026-09-24 起每笔新付款在 Stripe 里带上**:
+- **Description**:`Seller: <卖家名> · <广告标题> · order <订单号前 8 位>`,Payments 列表里直接能看到。
+- **Metadata**(付款详情页右侧):`order_id`、`listing_id`、`listing_title`、`seller_id`、`seller_name`、`seller_stripe_account`、`buyer_email`。Stripe 后台搜索框可以按 metadata 搜,比如 `metadata['seller_id']:"<卖家 id>"` 列出某个卖家的全部付款。
+- **transfer_group = 订单 id**:付款和之后给卖家的转账共用一个 group,在付款详情页能看到关联的 Transfer。
+- 放款的 Transfer 带 `order_id`/`seller_id` metadata 和 "Payout for order …" 描述;24 小时取消的退款带 `order_id`/`seller_id`。
+
+**2026-09-24 之前的付款**没有这些标记,用 `/admin/orders` 对:每行有 **Payment**(和放款后的 **Payout**)链接直达 Stripe 后台。点卖家名只看这个卖家的订单,顶部汇总"托管中 / 已转给卖家 / 已退给买家"的金额(按订单金额、分币种,最近 200 单)。
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀

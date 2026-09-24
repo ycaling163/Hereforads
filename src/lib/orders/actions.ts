@@ -85,7 +85,7 @@ export async function cancelWithin24hAction(
       {
         payment_intent: payment.stripe_payment_intent_id,
         reason: "requested_by_customer",
-        metadata: { order_id: orderId, cancel_reason: "free_24h" },
+        metadata: { order_id: orderId, seller_id: order.seller_id, cancel_reason: "free_24h" },
       },
       { idempotencyKey: `order-${orderId}-cancel-refund` }
     );

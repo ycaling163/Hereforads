@@ -91,7 +91,8 @@ export async function releaseOrderPayout(order: {
         destination: sellerProfile.stripe_connect_account_id,
         transfer_group: order.id,
         source_transaction: charge.id,
-        metadata: { order_id: order.id },
+        description: `Payout for order ${order.id.slice(0, 8)}`,
+        metadata: { order_id: order.id, seller_id: order.seller_id },
       },
       { idempotencyKey: `order-${order.id}-transfer` }
     );
