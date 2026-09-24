@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
-import { LISTING_ORDER_STATUS_LABELS } from "@/lib/supabase/enums";
+import { CancelOrderForm } from "@/components/CancelOrderForm";
+import { LISTING_ORDER_STATUS_LABELS, freeCancelDeadline } from "@/lib/supabase/enums";
 import { releaseNowAction } from "./actions";
 import type { Listing, ListingOrder } from "@/lib/supabase/types";
 
@@ -10,15 +11,18 @@ const ERROR_MESSAGES: Record<string, string> = {
   invalid_state: "This order can't be confirmed right now.",
   update_failed: "Couldn't update the order, please try again.",
   payout_failed:
-    "Order was confirmed, but releasing the payout to the seller failed — this needs manual follow-up.",
+    "Order was confirmed, but releasing the payout to the seller failed — we'll retry automatically.",
+  cancel_invalid_state: "This order can't be cancelled right now.",
+  cancel_window_passed: "The 24-hour free cancellation window has passed.",
+  cancel_failed: "Couldn't cancel the order, please try again.",
 };
 
 export default async function PurchasesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; checkout?: string }>;
+  searchParams: Promise<{ error?: string; checkout?: string; cancelled?: string }>;
 }) {
-  const { error, checkout } = await searchParams;
+  const { error, checkout, cancelled } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -40,6 +44,9 @@ export default async function PurchasesPage({
   const { data: listingRows } = listingIds.length
     ? await supabase.from("listings").select("id,title").in("id", listingIds)
     : { data: [] };
+  // Server Component, re-rendered fresh on every request (see dashboard/page.tsx).
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
   const listingsById = new Map(
     ((listingRows ?? []) as Pick<Listing, "id" | "title">[]).map((l) => [l.id, l.title])
   );
@@ -56,6 +63,11 @@ export default async function PurchasesPage({
           Payment received — it&apos;s held in escrow until the seller delivers.
         </p>
       )}
+      {cancelled && (
+        <p className="mt-4 rounded-xl bg-green-50 px-4 py-2 text-sm text-green-700">
+          Order cancelled — you&apos;ll be refunded in full to your original payment method.
+        </p>
+      )}
       {error && ERROR_MESSAGES[error] && (
         <p className="mt-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">
           {ERROR_MESSAGES[error]}
@@ -66,7 +78,13 @@ export default async function PurchasesPage({
         <p className="mt-16 text-center text-zinc-500">No purchases yet.</p>
       ) : (
         <div className="mt-8 flex flex-col gap-4">
-          {orders.map((order) => (
+          {orders.map((order) => {
+            const cancelDeadline = freeCancelDeadline(order.paid_at);
+            const canCancel =
+              order.status === "paid_in_escrow" &&
+              cancelDeadline !== null &&
+              cancelDeadline.getTime() > now;
+            return (
             <div key={order.id} className="rounded-xl border border-zinc-200 p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Link
@@ -106,8 +124,17 @@ export default async function PurchasesPage({
                   </p>
                 </div>
               )}
+
+              {canCancel && cancelDeadline && (
+                <CancelOrderForm
+                  orderId={order.id}
+                  returnTo="purchases"
+                  deadline={cancelDeadline}
+                />
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

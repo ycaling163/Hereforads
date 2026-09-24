@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { releaseOrderPayout } from "@/lib/stripe/release";
 
 // 只有卖家已经标记交付(`delivered`)之后,买家才有东西可以核对,才允许提前放款 ——
@@ -28,7 +29,9 @@ export async function releaseNowAction(orderId: string): Promise<void> {
   }
 
   // 条件更新当"锁",防止跟定时任务的自动放款同时跑,同一笔订单被转两次账。
-  const { data: updatedRows, error } = await supabase
+  // 订单写入走 service_role(见 README"费用、取消与退款规则"第 8 条),上面已经
+  // 校验过是这单的买家、状态是 delivered。
+  const { data: updatedRows, error } = await createServiceClient()
     .from("listing_orders")
     .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
     .eq("id", orderId)

@@ -55,7 +55,7 @@ export default async function DashboardIndexPage() {
 
   const revenueByCurrency = new Map<string, number>();
   for (const order of sellerOrders) {
-    if (!order.paid_at || order.paid_at < since) continue;
+    if (!order.paid_at || order.paid_at < since || order.status === "cancelled") continue;
     revenueByCurrency.set(
       order.currency,
       (revenueByCurrency.get(order.currency) ?? 0) + order.amount

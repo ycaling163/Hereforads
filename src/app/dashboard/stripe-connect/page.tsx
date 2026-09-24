@@ -73,7 +73,7 @@ export default async function StripeConnectPage() {
         .from("listing_orders")
         .select("amount,currency")
         .eq("seller_id", user.id)
-        .neq("status", "pending_payment"),
+        .not("status", "in", "(pending_payment,cancelled)"),
       stripe.balance.retrieve({}, { stripeAccount: accountId }).catch((err) => {
         console.error("Failed to retrieve Stripe balance:", err);
         return null;
