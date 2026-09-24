@@ -111,6 +111,9 @@ export async function releaseOrderPayout(order: {
     .from("payments")
     .update({
       stripe_transfer_id: transfer.id,
+      // 实际转给卖家的金额和币种(可能是换汇后的结算币种,跟订单币种不同)。
+      transfer_amount: fromMinorUnits(transfer.amount, transfer.currency),
+      transfer_currency: transfer.currency.toUpperCase(),
       platform_fee_amount: fromMinorUnits(fees.serviceFeeMinor, fees.currency),
       stripe_fee_amount: fromMinorUnits(fees.processingFeeMinor, fees.currency),
       net_amount: fromMinorUnits(fees.sellerNetMinor, fees.currency),

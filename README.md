@@ -937,7 +937,7 @@ alter table public.listing_orders add column if not exists buyer_address text;
 
 - **固定费率**:`src/lib/fees.ts`(服务端和发布表单共用,按最小货币单位整数计算)。Service fee 12%,Payment processing fee 4% + 固定部分。
   - 固定部分按币种(`PROCESSING_FIXED_FEE_MINOR`):GBP 0.20、USD 0.25、EUR 0.25、CAD 0.35、AUD 0.40、SGD 0.35、HKD 2.00、JPY 40。USD/EUR 是第 2 条写明的,**其余 5 种是按 2026-09 汇率取的等值整数,待产品负责人确认**。
-  - 最低发布价改成按 USD 0.99 的等值(`MIN_LISTING_PRICE_MINOR`):USD 0.99、GBP 0.79、EUR 0.89、CAD 1.39、AUD 1.49、SGD 1.29、HKD 7.99、JPY 150,原来是所有币种都 0.99。
+  - 最低发布价改成约 USD 1 的等值(`MIN_LISTING_PRICE_MINOR`,2026-09-24 定):USD 1.00、GBP 0.80、EUR 0.90、CAD 1.40、AUD 1.50、SGD 1.30、HKD 8.00、JPY 150,原来是所有币种都 0.99。
   - JPY 是零小数位货币,之前下单金额一律 ×100 是错的,现在统一走 `toMinorUnits`。
   - 发布/编辑广告表单实时显示 "You'll receive"(卖家挂单时就能看到到手金额);Sales 页明细改名 Service fee / Payment processing fee,付款后就显示(不用等放款)。
   - `payments` 三列的含义变了(列名沿用):`platform_fee_amount` = Service fee,`stripe_fee_amount` = 向卖家收的 Payment processing fee(**不是** Stripe 实际扣的手续费),`net_amount` = 卖家到手,都是订单币种,webhook 收到付款时就写好。
@@ -1382,6 +1382,43 @@ where u.id = o.buyer_id and o.buyer_email is null;
 - 放款的 Transfer 带 `order_id`/`seller_id` metadata 和 "Payout for order …" 描述;24 小时取消的退款带 `order_id`/`seller_id`。
 
 **2026-09-24 之前的付款**没有这些标记,用 `/admin/orders` 对:每行有 **Payment**(和放款后的 **Payout**)链接直达 Stripe 后台。点卖家名只看这个卖家的订单,顶部汇总"托管中 / 已转给卖家 / 已退给买家"的金额(按订单金额、分币种,最近 200 单)。
+
+## 平台记账:`/admin/finance`(2026-09-24)
+
+Stripe 里平台只有一个余额,卖家的钱和平台的钱混在一起。"每单卖家实收多少、平台 12% 是多少、Stripe 实际扣了多少、平台净赚多少"在 `/admin/finance`(管理后台导航 **Finance**)算清楚:
+
+| 列 | 口径 |
+|---|---|
+| Buyer paid | 订单金额(订单币种);外币订单下面小字是 Stripe 换成结算币种(GBP)后的实际入账 |
+| Service fee | 12%,平台收入 |
+| Processing fee | 4% + 固定部分,平台收入(向卖家收的固定费率,不是 Stripe 实际成本) |
+| Seller receives | 卖家实收 = 订单金额 − 两项费用;外币订单下面小字是转给卖家的 GBP(已放款是实际转账金额,未放款按付款汇率估算) |
+| Stripe fee (actual) | Stripe 对这笔付款实际扣的手续费(结算币种,从 balance transaction 读) |
+| Platform net | 平台这单净赚 = 实际入账 − 给卖家的 − Stripe 实际手续费;**取消退款的订单 = −Stripe 手续费**(退款时 Stripe 不退原手续费) |
+
+顶部汇总(结算币种):买家付款总额、欠卖家的(托管中)、已转给卖家、已退给买家、平台费用收入、Stripe 手续费、平台净收入。点卖家名只看这个卖家。
+
+例:£30 订单 → Service fee £3.60、Processing fee £1.40、卖家实收 £25.00、Stripe 实扣 £1.15、平台净赚 £3.85。$100 订单(Stripe 换成 £75.64 入账、实扣 £4.09)→ 卖家实收 $83.80(≈ £63.39)、平台净赚约 £8.16。
+
+**数据来源**:付款成功时 webhook 从 Stripe 读这笔付款的 balance transaction,存进 `payments.settlement_currency / settlement_amount / stripe_actual_fee`;放款时存实际转账 `transfer_amount / transfer_currency`。老订单打开财务页时自动从 Stripe 补(每次最多 25 笔,多的刷新再补)。
+
+**要手动执行的 SQL(必须在合并部署前执行,否则放款时写 payments 会失败)**:
+
+```sql
+alter table public.payments
+  add column if not exists settlement_currency text,
+  add column if not exists settlement_amount numeric,
+  add column if not exists stripe_actual_fee numeric,
+  add column if not exists transfer_amount numeric,
+  add column if not exists transfer_currency text;
+```
+## 给卖家打款:每周一次(2026-09-24)
+
+Stripe Connect 给卖家打款到银行的成本(英国价目,以 Stripe 官网 Connect 定价页为准):**每次打款 0.25% + £0.10**,外加**当月有打款的卖家账户 £2/月**。Etsy 能一个月打 £0.80 是因为它用自己的支付系统、成本自担,我们用 Stripe 做不到。
+
+**决定**:新开户的卖家 Stripe 账户打款计划设成**每周一次(周一)**,一周内放款的钱合并成一笔打到卖家银行(`src/app/dashboard/stripe-connect/actions.ts` 建号时写 `settings.payouts.schedule`)。**已经开户的卖家**不会自动改,要在 Stripe 后台 → Connect → 选中账户 → Payouts 手动改成 Weekly(目前都是测试账户,可以不管)。另外建议在 Stripe 后台 → Connect → Settings 里**关掉 Express 账户自己改打款计划 / Instant Payouts**,不然卖家可以自己改回每天打款。
+
+以后小额订单多了再考虑"满 £20 才打款"(要改成平台手动控制打款,工作量大),最低价暂定约 USD 1。
 
 ## 部署(Vercel)
 
