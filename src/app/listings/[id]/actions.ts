@@ -130,6 +130,27 @@ async function startCheckout(
   // 所以这里不带 transfer_data/application_fee_amount —— 真正转给卖家的 Transfer
   // 要等卖家标记交付、买家确认收货(或超时自动确认)才发起,见 dashboard/sales 的
   // 交付 action 和 dashboard/purchases 的 release action。
+  // 在 Stripe 后台一眼看出这笔钱属于哪个卖家/哪个订单:付款的 Description 写上
+  // 卖家名和广告标题,metadata 带上 order/seller/listing id,Stripe 后台搜索框可以用
+  // metadata 搜(比如 metadata['seller_id']:"...")。见 README"在 Stripe 里区分卖家"。
+  const { data: sellerProfile } = await createServiceClient()
+    .from("profiles")
+    .select("display_name,stripe_connect_account_id")
+    .eq("id", listing.seller_id)
+    .maybeSingle();
+  const sellerName = sellerProfile?.display_name ?? "Unnamed seller";
+  const stripeMetadata = {
+    order_id: order.id,
+    listing_id: listing.id,
+    listing_title: listing.title.slice(0, 450),
+    seller_id: listing.seller_id,
+    seller_name: sellerName.slice(0, 450),
+    seller_stripe_account: sellerProfile?.stripe_connect_account_id ?? "",
+    buyer_email: buyerEmail ?? "",
+  };
+  const paymentDescription =
+    `Seller: ${sellerName} · ${listing.title} · order ${order.id.slice(0, 8)}`.slice(0, 1000);
+
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     customer_email: buyerEmail,
@@ -143,8 +164,12 @@ async function startCheckout(
         quantity: 1,
       },
     ],
-    metadata: { order_id: order.id },
-    payment_intent_data: { metadata: { order_id: order.id }, transfer_group: order.id },
+    metadata: stripeMetadata,
+    payment_intent_data: {
+      description: paymentDescription,
+      metadata: stripeMetadata,
+      transfer_group: order.id,
+    },
     success_url: user
       ? `${SITE_URL}/dashboard/purchases?checkout=success`
       : `${SITE_URL}/checkout/guest-success?email=${encodeURIComponent(buyerEmail ?? "")}`,
