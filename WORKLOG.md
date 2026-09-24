@@ -286,3 +286,9 @@
 - 做了:guest 建号改成 `admin.createUser`(已确认、不发邮件);登录页验证码登录、按钮改名;`/dashboard/password` 设/改密码 + Dashboard 顶部提醒;注册遇到已有账号的提示;`/auth/confirm` 兼容旧 guest 账号的 `code` 链接。
 - **要人工做**:Supabase Site URL 改成正式域名、Redirect URLs、Magic link 模板加验证码、执行 `current_user_has_password()` 的 SQL(见 README"Guest 登录与设置密码")。localhost 问题是配置问题,不是代码。
 - 没实测:这个环境连不上 Supabase,只跑了 lint + build。
+
+## 2026-09-24 手机排版(分支 `claude/mobile-nav`)
+
+- 产品负责人手机测试:顶部导航挤、"Ad spaces"/"Log in" 换成两行。改成手机上导航收进汉堡菜单(Ad spaces / Publishers / Find an order),外面只留 Log in 或头像;桌面端不变。
+- 顺带修:Dashboard 在手机上左侧栏把正文挤成一条 → 手机上改成顶部一排可横向滑动的标签;发布表单的 价格/币种/计价单位 手机上从 3 列改成 2 列。
+- 验证:lint + build;用 Playwright 按 375px 宽截图看了首页、菜单展开、登录页,1280px 看了桌面端。Dashboard 需要登录,这个环境连不上 Supabase,没截到图。
