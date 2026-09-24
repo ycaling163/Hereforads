@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getActionCounts } from "@/lib/supabase/notification-counts";
 import { isAdmin } from "@/lib/supabase/admin";
 import { UserMenu } from "./UserMenu";
+import { MobileNav } from "./MobileNav";
 
 export async function Header() {
   const supabase = await createClient();
@@ -37,23 +38,24 @@ export async function Header() {
   }
 
   return (
-    <header className="border-b border-zinc-200">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
-        <Link href="/" className="flex items-center">
+    <header className="relative border-b border-zinc-200">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
+        <Link href="/" className="flex shrink-0 items-center">
           <Image
             src="/logo.png"
             alt="Here For Ads"
             width={140}
             height={111}
-            className="h-7 w-auto sm:h-10"
+            className="h-6 w-auto sm:h-10"
             priority
           />
         </Link>
-        <nav className="flex items-center gap-4 text-sm font-bold text-zinc-600 sm:gap-6">
-          <Link href="/listings" className="hover:text-zinc-900">
+        <nav className="flex items-center gap-3 whitespace-nowrap text-sm font-bold text-zinc-600 sm:gap-6">
+          {/* 桌面端一排链接;手机上收进 MobileNav 的汉堡菜单,只留登录/头像在外面。 */}
+          <Link href="/listings" className="hidden hover:text-zinc-900 sm:inline">
             Ad spaces
           </Link>
-          <Link href="/publishers" className="hover:text-zinc-900">
+          <Link href="/publishers" className="hidden hover:text-zinc-900 sm:inline">
             Publishers
           </Link>
           {user ? (
@@ -68,6 +70,7 @@ export async function Header() {
               Log in
             </Link>
           )}
+          <MobileNav />
         </nav>
       </div>
     </header>

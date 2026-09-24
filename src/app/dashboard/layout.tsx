@@ -29,7 +29,7 @@ export default async function DashboardLayout({
   ]);
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl gap-10 px-6 py-12">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:flex-row md:gap-10 md:px-6 md:py-12">
       <DashboardSidebar unreadMessages={unreadMessages} newOrders={newOrders} />
       <main className="min-w-0 flex-1">
         {/* 免密码登录进来、还没设密码的账号(主要是 guest 买家),提醒设密码。 */}

@@ -85,8 +85,34 @@ export function DashboardSidebar({
     "/dashboard/sales": newOrders,
   };
 
+  // 手机上(md 以下)侧栏会把正文挤成一条,改成顶部一排可横向滑动的标签;桌面端还是左侧竖排。
+  const mobileLinks = NAV.flatMap((entry) => (entry.type === "link" ? [entry] : entry.items));
+
   return (
-    <nav className="flex w-48 shrink-0 flex-col gap-4">
+    <>
+    <nav className="-mx-4 flex gap-2 overflow-x-auto border-b border-zinc-200 px-4 pb-3 md:hidden">
+      {mobileLinks.map((item) => {
+        const active = isActive(pathname, item.href);
+        const badge = badgeByHref[item.href] ?? 0;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm ${
+              active ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700"
+            }`}
+          >
+            {item.label}
+            {badge > 0 && (
+              <span className="rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-4 text-white">
+                {badge > 9 ? "9+" : badge}
+              </span>
+            )}
+          </Link>
+        );
+      })}
+    </nav>
+    <nav className="hidden w-48 shrink-0 flex-col gap-4 md:flex">
       {NAV.map((entry) =>
         entry.type === "link" ? (
           <NavLink
@@ -114,5 +140,6 @@ export function DashboardSidebar({
         )
       )}
     </nav>
+    </>
   );
 }
