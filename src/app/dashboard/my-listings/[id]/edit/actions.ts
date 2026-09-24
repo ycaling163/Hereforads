@@ -96,6 +96,8 @@ export async function updateListingAction(
       media_urls: mediaUrls,
       social_account_id: fields.socialAccountId,
       is_website_placement: fields.isWebsitePlacement,
+      booking_enabled: fields.bookingEnabled,
+      min_booking_days: fields.minBookingDays,
     })
     .eq("id", listingId)
     .eq("seller_id", user.id)

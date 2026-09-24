@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendOrderDeliveredEmail } from "@/lib/email/orders";
+import { bookingToday, formatBookingDate } from "@/lib/booking";
 
 export interface DeliverOrderState {
   error?: string;
@@ -33,12 +34,24 @@ export async function markDeliveredAction(
   }
 
   const [{ data: order }, { data: profile }] = await Promise.all([
-    supabase.from("listing_orders").select("seller_id,status").eq("id", orderId).single(),
+    supabase
+      .from("listing_orders")
+      .select("seller_id,status,start_date")
+      .eq("id", orderId)
+      .single(),
     supabase.from("profiles").select("stripe_onboarded").eq("id", user.id).single(),
   ]);
 
   if (!order || order.seller_id !== user.id || order.status !== "paid_in_escrow") {
     return { error: "This order can't be marked as delivered right now" };
+  }
+
+  // 日历预订的订单:开始日期当天(英国时间)起才能提交"已上线"链接(README"日历按天
+  // 预订",2026-09-24 确认的实现细节)。
+  if (order.start_date && order.start_date > bookingToday()) {
+    return {
+      error: `You can submit the live link from ${formatBookingDate(order.start_date)} (UK time), when the booking starts.`,
+    };
   }
 
   // 发布免审核 + KYC 后置(2026-09-19 加,见 README 同名一节):卖家发布/接单

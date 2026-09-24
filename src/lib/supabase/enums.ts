@@ -1,3 +1,5 @@
+import { bookingDayStart } from "@/lib/booking";
+
 /**
  * 数据库真实枚举取值（Database → Enumerated Types 核对过）。
  */
@@ -221,8 +223,20 @@ export const ESCROW_HOLD_DAYS = 3;
 // 不收卖家任何费用,不算违约。见 README"费用、取消与退款规则"第 4 条。
 export const FREE_CANCEL_HOURS = 24;
 
-/** 免费取消截止时间;订单没付款时返回 null。 */
-export function freeCancelDeadline(paidAt: string | null): Date | null {
-  if (!paidAt) return null;
-  return new Date(new Date(paidAt).getTime() + FREE_CANCEL_HOURS * 60 * 60 * 1000);
+/**
+ * 免费取消截止时间;订单没付款时返回 null。日历预订的订单(有 start_date)另外要求
+ * 取消那一刻离开始日期(英国时间 00:00)还有 24 小时以上(README"日历按天预订"第 5 条),
+ * 所以截止时间取"付款后 24 小时"和"开始前 24 小时"里较早的那个;付款时就已经在开始前
+ * 24 小时之内的,截止时间早于付款时间,等于不能免费取消。
+ */
+export function freeCancelDeadline(order: {
+  paid_at: string | null;
+  start_date?: string | null;
+}): Date | null {
+  if (!order.paid_at) return null;
+  const windowMs = FREE_CANCEL_HOURS * 60 * 60 * 1000;
+  const afterPayment = new Date(order.paid_at).getTime() + windowMs;
+  if (!order.start_date) return new Date(afterPayment);
+  const beforeStart = bookingDayStart(order.start_date).getTime() - windowMs;
+  return new Date(Math.min(afterPayment, beforeStart));
 }

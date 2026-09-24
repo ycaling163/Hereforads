@@ -121,6 +121,12 @@ export interface Listing {
   // 一次编辑时";这个改动之前发布的老 listing 是 null。
   rights_attested_at: string | null;
   terms_accepted_at: string | null;
+  // 日历按天预订(2026-09-24 加,见 README"日历按天预订"一节):只有按天/周/月计价的
+  // listing 能开。开了之后买家下单要选开始日期 + 天数/周数/月数,已被预订的日期不能选。
+  // min_booking_days 只对按天计价有意义(1–90,默认 7),按周/按月最少就是 1 周/1 个月。
+  // 加之前读出来是 undefined,按没开处理。
+  booking_enabled: boolean;
+  min_booking_days: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -134,9 +140,15 @@ export interface ListingOrder {
   currency: string;
   status: ListingOrderStatus;
   proof_url: string | null;
-  // 仅 pricing_unit 非 one_time 的 listing 才会填,用于判断档期冲突。
+  // 日历预订的订单才有(见 README"日历按天预订"):start_date/end_date 是英国时间的
+  // 日期,end_date 是展示的最后一天(含当天);booking_units 是订了几天/几周/几个月
+  // (单位看 listing 的 pricing_unit),amount = 单价 × booking_units。
+  // hold_expires_at:还没付款时日期占用到什么时候,过了这个时间(Stripe 付款链接也
+  // 已失效)日期自动释放给别人。一次性交付的订单这几列都是 null。
   start_date: string | null;
   end_date: string | null;
+  booking_units: number | null;
+  hold_expires_at: string | null;
   // Guest 结账(不注册)时,买家没有走过任何表单留下联系方式——这三列是
   // webhook 从 Stripe Checkout 的 customer_details 里顺手抄一份存底(2026-09-19
   // 加,见 README"Guest 结账"一节)。登录买家走的是老流程,没开

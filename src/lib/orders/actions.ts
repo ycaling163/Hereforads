@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { stripe } from "@/lib/stripe/server";
-import { FREE_CANCEL_HOURS } from "@/lib/supabase/enums";
+import { FREE_CANCEL_HOURS, freeCancelDeadline } from "@/lib/supabase/enums";
 import { sendOrderCancelledEmails } from "@/lib/email/orders";
 
 /**
@@ -12,6 +12,9 @@ import { sendOrderCancelledEmails } from "@/lib/email/orders";
  * 都能发起,不需要对方同意;前提是卖家还没交付(订单还在 paid_in_escrow)。全额退给
  * 买家,卖家不承担任何费用(Stripe 退款拿不回的原手续费由平台承担),不算进"90 天
  * 3 单"。
+ *
+ * 日历预订的订单另外要求取消那一刻离开始日期还有 24 小时以上(README"日历按天预订"
+ * 第 5 条),开始日期在 24 小时之内的不支持免费取消。
  *
  * 顺序:先用条件更新把订单锁成 cancelled(防止跟卖家同时点"标记交付"撞车,也防止
  * 双击退两次),再发起 Stripe 退款(带 idempotency key);退款失败就把订单还原成
@@ -35,7 +38,7 @@ export async function cancelWithin24hAction(
   const service = createServiceClient();
   const { data: order } = await service
     .from("listing_orders")
-    .select("id,buyer_id,seller_id,status,paid_at")
+    .select("id,buyer_id,seller_id,status,paid_at,start_date")
     .eq("id", orderId)
     .single();
 
@@ -49,6 +52,10 @@ export async function cancelWithin24hAction(
   ).toISOString();
   if (order.paid_at < windowStart) {
     redirect(`${back}?error=cancel_window_passed`);
+  }
+  const deadline = freeCancelDeadline(order);
+  if (!deadline || deadline.getTime() <= Date.now()) {
+    redirect(`${back}?error=cancel_starts_soon`);
   }
 
   const { data: payment } = await service

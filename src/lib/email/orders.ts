@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { calculateFees, formatMoney } from "@/lib/fees";
 import { ESCROW_HOLD_DAYS, FREE_CANCEL_HOURS } from "@/lib/supabase/enums";
 import { getUserEmail, sendEmail } from "./send";
+import { formatBookingRange } from "@/lib/booking";
 
 // 订单各节点的通知邮件。调用方(webhook / server action)在状态已经成功推进之后
 // 才调用,每个节点只调用一次(状态条件更新保证),所以这里不再做去重。
@@ -15,13 +16,15 @@ interface OrderForEmail {
   currency: string;
   buyer_email?: string | null;
   proof_url?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
 }
 
 async function loadOrder(orderId: string): Promise<(OrderForEmail & { title: string }) | null> {
   const service = createServiceClient();
   const { data: order } = await service
     .from("listing_orders")
-    .select("id,listing_id,buyer_id,seller_id,amount,currency,buyer_email,proof_url")
+    .select("id,listing_id,buyer_id,seller_id,amount,currency,buyer_email,proof_url,start_date,end_date")
     .eq("id", orderId)
     .single();
   if (!order) return null;
@@ -33,6 +36,13 @@ async function loadOrder(orderId: string): Promise<(OrderForEmail & { title: str
   return { ...(order as OrderForEmail), title: listing?.title ?? "your ad" };
 }
 
+// 日历预订的订单:"Booked: 12 Oct – 21 Oct 2026 (UK time)"。
+function bookedDates(order: OrderForEmail): string | null {
+  return order.start_date && order.end_date
+    ? `Booked dates: ${formatBookingRange(order.start_date, order.end_date)} (UK time).`
+    : null;
+}
+
 function price(order: OrderForEmail): string {
   const fees = calculateFees(Number(order.amount), order.currency);
   return formatMoney(fees.grossMinor, fees.currency);
@@ -42,6 +52,7 @@ export async function sendOrderPaidEmails(orderId: string) {
   const order = await loadOrder(orderId);
   if (!order) return;
   const fees = calculateFees(Number(order.amount), order.currency);
+  const dates = bookedDates(order);
   const [buyerEmail, sellerEmail] = await Promise.all([
     order.buyer_email ? Promise.resolve(order.buyer_email) : getUserEmail(order.buyer_id),
     getUserEmail(order.seller_id),
@@ -52,8 +63,16 @@ export async function sendOrderPaidEmails(orderId: string) {
       subject: `Order confirmed: ${order.title}`,
       paragraphs: [
         `Thanks for your order. We've received your payment of ${price(order)} for "${order.title}".`,
-        "Your payment is held securely and only released to the seller after they deliver and you confirm (or 3 days after delivery if you don't respond).",
-        `You can cancel for a full refund within ${FREE_CANCEL_HOURS} hours of payment, as long as the seller hasn't delivered yet.`,
+        ...(dates
+          ? [
+              dates,
+              "Your payment is held securely and released to the seller after the ad has run.",
+              `You can cancel for a full refund within ${FREE_CANCEL_HOURS} hours of payment, as long as the booking starts more than ${FREE_CANCEL_HOURS} hours later.`,
+            ]
+          : [
+              "Your payment is held securely and only released to the seller after they deliver and you confirm (or 3 days after delivery if you don't respond).",
+              `You can cancel for a full refund within ${FREE_CANCEL_HOURS} hours of payment, as long as the seller hasn't delivered yet.`,
+            ]),
         "If you checked out as a guest, log in with the link we emailed you to track this order.",
       ],
       cta: { label: "View your order", path: "/dashboard/purchases" },
@@ -62,8 +81,16 @@ export async function sendOrderPaidEmails(orderId: string) {
       subject: `New order: ${order.title}`,
       paragraphs: [
         `You have a new order for "${order.title}" (${price(order)}). You'll receive ${formatMoney(fees.sellerNetMinor, fees.currency)} after fees once it's released.`,
-        "Please deliver within the agreed time and mark the order as delivered with a link the buyer can check.",
-        `The buyer can cancel for a full refund within ${FREE_CANCEL_HOURS} hours of payment if you haven't delivered yet.`,
+        ...(dates
+          ? [
+              dates,
+              "Please put the ad live on the start date and submit the live link on your Sales page from that day.",
+              `The buyer can cancel for a full refund within ${FREE_CANCEL_HOURS} hours of payment, unless the booking starts within ${FREE_CANCEL_HOURS} hours.`,
+            ]
+          : [
+              "Please deliver within the agreed time and mark the order as delivered with a link the buyer can check.",
+              `The buyer can cancel for a full refund within ${FREE_CANCEL_HOURS} hours of payment if you haven't delivered yet.`,
+            ]),
       ],
       cta: { label: "Go to your sales", path: "/dashboard/sales" },
     }),
@@ -79,7 +106,9 @@ export async function sendOrderDeliveredEmail(orderId: string) {
     paragraphs: [
       `The seller has marked "${order.title}" as delivered.`,
       ...(order.proof_url ? [`Check the delivery here: ${order.proof_url}`] : []),
-      `Please check it and confirm. If you don't respond within ${ESCROW_HOLD_DAYS} days, payment is released to the seller automatically. If something's wrong, message the seller before then.`,
+      order.start_date
+        ? "Please check your ad is live. If it isn't, message the seller. Payment is released to the seller after the booking ends."
+        : `Please check it and confirm. If you don't respond within ${ESCROW_HOLD_DAYS} days, payment is released to the seller automatically. If something's wrong, message the seller before then.`,
     ],
     cta: { label: "Review and confirm", path: "/dashboard/purchases" },
   });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { releaseOrderPayout } from "@/lib/stripe/release";
 import { ESCROW_HOLD_DAYS } from "@/lib/supabase/enums";
+import { addDays, bookingDayStart } from "@/lib/booking";
 
 /**
  * 卖家标记交付(ESCROW_HOLD_DAYS 天前)后买家一直没反应,就自动放款,对齐 Fiverr。
@@ -30,7 +31,7 @@ async function handle(request: Request) {
     await Promise.all([
       supabase
         .from("listing_orders")
-        .select("id,seller_id,amount,currency")
+        .select("id,seller_id,amount,currency,end_date")
         .eq("status", "delivered")
         .lte("delivered_at", cutoff),
       supabase
@@ -48,7 +49,16 @@ async function handle(request: Request) {
 
   const results = { released: 0, retried: 0, failed: 0 };
 
-  for (const order of dueOrders ?? []) {
+  // 日历预订的订单(有 end_date):分两次放款(过半 40%、结束 3 天后 60%)在下一批
+  // 实现;这一批先整笔压到预订期结束 3 天后再放,不会提前放款。
+  const now = Date.now();
+  const releasable = (dueOrders ?? []).filter(
+    (order) =>
+      !order.end_date ||
+      bookingDayStart(addDays(order.end_date, 1 + ESCROW_HOLD_DAYS)).getTime() <= now
+  );
+
+  for (const order of releasable) {
     // 用一次条件更新当"锁",防止买家这边同时点了"提前放款"导致同一笔订单被转两次账
     // (谁先把状态从 delivered 抢成 confirmed,谁才有资格继续发起 Stripe transfer)。
     const { data: updatedRows, error: updateError } = await supabase
