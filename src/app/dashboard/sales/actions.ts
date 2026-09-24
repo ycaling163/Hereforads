@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { sendOrderDeliveredEmail } from "@/lib/email/orders";
 
 export interface DeliverOrderState {
   error?: string;
@@ -70,6 +71,8 @@ export async function markDeliveredAction(
     if (error) console.error("Failed to mark order delivered:", error.message);
     return { error: "Couldn't save, please try again" };
   }
+
+  await sendOrderDeliveredEmail(orderId);
 
   redirect("/dashboard/sales");
 }

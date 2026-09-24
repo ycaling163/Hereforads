@@ -48,6 +48,12 @@ async function startCheckout(
 
   const listingId = String(formData.get("listing_id") ?? "");
 
+  // 结账前的两个必勾项(见 BuyListingButton),前端 required 之外服务端再挡一次。
+  if (formData.get("accept_terms") !== "on" || formData.get("immediate_start") !== "on") {
+    return { error: "Please tick both boxes to continue" };
+  }
+  const consentedAt = new Date().toISOString();
+
   // Guest 结账(不强制先注册/登录):买家只填邮箱,后台静默建号 + 发登录魔法
   // 链接,见 src/lib/supabase/guest-checkout.ts 和 README"Guest 结账"一节。
   // 登录用户用当前 session 的 client 读 listing;guest 没有 session,改用
@@ -107,6 +113,10 @@ async function startCheckout(
       amount: listing.price_amount,
       currency: listing.price_currency,
       status: "pending_payment",
+      // 下单时就存买家邮箱(guest 和登录买家都有),管理后台/纠纷时能联系到人。
+      buyer_email: buyerEmail ?? null,
+      terms_accepted_at: consentedAt,
+      immediate_start_consent_at: consentedAt,
     })
     .select("id")
     .single();

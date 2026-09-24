@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { LISTING_CATEGORIES, LISTING_CATEGORY_LABELS } from "@/lib/supabase/enums";
 import type { ListingCategory } from "@/lib/supabase/enums";
 import { updateProfileAction, type ProfileFormState } from "./actions";
+import { FileInput } from "@/components/FileInput";
 
 const initialState: ProfileFormState = {};
 
@@ -53,13 +54,7 @@ export function ProfileForm({
             />
           )}
         </div>
-        <input
-          id="banner"
-          name="banner"
-          type="file"
-          accept="image/*"
-          className={inputClass}
-        />
+        <FileInput id="banner" name="banner" accept="image/*" />
       </div>
 
       <div className="flex items-center gap-4">
@@ -79,13 +74,7 @@ export function ProfileForm({
           <label htmlFor="avatar" className={labelClass}>
             Change avatar (optional)
           </label>
-          <input
-            id="avatar"
-            name="avatar"
-            type="file"
-            accept="image/*"
-            className={inputClass}
-          />
+          <FileInput id="avatar" name="avatar" accept="image/*" />
         </div>
       </div>
 

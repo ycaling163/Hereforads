@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import type { ReplyState } from "@/app/dashboard/messages/actions";
+import { FileInput } from "@/components/FileInput";
 
 export function ReplyForm({
   action,
@@ -18,12 +19,7 @@ export function ReplyForm({
         placeholder="Write a reply…"
         className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
       />
-      <input
-        type="file"
-        name="image"
-        accept="image/*"
-        className="text-xs text-zinc-500"
-      />
+      <FileInput id="reply_image" name="image" accept="image/*" buttonLabel="Attach photo" />
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       <button
         type="submit"

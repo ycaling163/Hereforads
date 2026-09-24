@@ -144,6 +144,11 @@ export interface ListingOrder {
   buyer_name: string | null;
   buyer_phone: string | null;
   buyer_address: string | null;
+  // 2026-09-24 加:下单时存买家邮箱(guest/登录买家都有),以及结账前两个必勾项
+  // 的勾选时间(同意条款、要求立即开始服务并知悉失去 14 天取消权)。
+  buyer_email: string | null;
+  terms_accepted_at: string | null;
+  immediate_start_consent_at: string | null;
   paid_at: string | null;
   delivered_at: string | null;
   confirmed_at: string | null;

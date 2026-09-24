@@ -86,6 +86,39 @@ export function BuyListingButton({
             </p>
           </div>
         )}
+        {/* 结账前必勾(README"费用、取消与退款规则"第 10 条):同意条款 + 英国
+            Consumer Contracts Regulations 下"要求立即开始服务、知道完成后失去
+            14 天取消权"的明确确认。勾选时间由服务端写进订单留痕。措辞待律师确认。 */}
+        <div className="flex flex-col gap-2 rounded-lg bg-white p-3 text-xs text-zinc-600">
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              name="accept_terms"
+              required
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300"
+            />
+            <span>
+              I agree to the{" "}
+              <Link href="/terms" target="_blank" className="underline">
+                Terms of Service
+              </Link>
+              .
+            </span>
+          </label>
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              name="immediate_start"
+              required
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300"
+            />
+            <span>
+              I ask the seller to start straight away. I understand that I lose my
+              14-day right to cancel once the ad is delivered, and that if I cancel
+              after work has started I&apos;ll pay for the work already done.
+            </span>
+          </label>
+        </div>
         {state.error && <p className="text-sm text-red-600">{state.error}</p>}
         <button
           type="submit"
