@@ -4,7 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { DeliverOrderForm, EditProofUrlForm } from "@/components/DeliverOrderForm";
 import { ProofLinkHistory } from "@/components/ProofLinkHistory";
 import { CancelOrderForm } from "@/components/CancelOrderForm";
-import { LISTING_ORDER_STATUS_LABELS, freeCancelDeadline } from "@/lib/supabase/enums";
+import {
+  LISTING_ORDER_STATUS_LABELS,
+  PAYOUT_HOLD_LABELS,
+  freeCancelDeadline,
+} from "@/lib/supabase/enums";
+import { PARTY_ORDER_COLUMNS, type PartyListingOrder } from "@/lib/supabase/types";
 import { bookingToday, formatBookingDate, formatBookingRange } from "@/lib/booking";
 import { formatOrderNumber } from "@/lib/orders/orderNumber";
 import type {
@@ -62,6 +67,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   cancel_window_passed: "The 24-hour free cancellation window has passed.",
   cancel_starts_soon: "Bookings starting within 24 hours can't be cancelled for free.",
   cancel_failed: "Couldn't cancel the order, please try again.",
+  cancel_pending:
+    "The order is cancelled, but we couldn't confirm the refund with our payment provider yet — our team is checking it and will email you.",
+  on_hold: "This order is on hold while we review it — we'll be in touch by email.",
 };
 
 export default async function SalesPage({
@@ -87,11 +95,11 @@ export default async function SalesPage({
 
   const { data: orderRows, error } = await supabase
     .from("listing_orders")
-    .select("*")
+    .select(PARTY_ORDER_COLUMNS)
     .eq("seller_id", user.id)
     .order("created_at", { ascending: false });
 
-  const orders = (orderRows ?? []) as ListingOrder[];
+  const orders = (orderRows ?? []) as unknown as PartyListingOrder[];
 
   const orderIds = orders.map((o) => o.id);
   const listingIds = [...new Set(orders.map((o) => o.listing_id))];
@@ -217,6 +225,7 @@ export default async function SalesPage({
                 const payment = paymentsByOrderId.get(order.id);
                 const cancelDeadline = freeCancelDeadline(order);
                 const canCancel =
+                  !order.payout_hold &&
                   order.status === "paid_in_escrow" &&
                   cancelDeadline !== null &&
                   cancelDeadline.getTime() > now;
@@ -261,9 +270,18 @@ export default async function SalesPage({
                       </p>
                     )}
 
+                    {order.payout_hold && (
+                      <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                        On hold — under review ({PAYOUT_HOLD_LABELS[order.payout_hold]}). The
+                        payout is paused until our team has looked at it; we&apos;ll email you.
+                      </p>
+                    )}
+
                     {payment && order.status === "cancelled" && (
                       <p className="mt-3 text-xs text-zinc-500">
-                        Refunded to the buyer in full — no fees charged to you.
+                        {order.cancel_reason === "free_24h"
+                          ? "Refunded to the buyer in full — no fees charged to you."
+                          : "Refunded to the buyer."}
                       </p>
                     )}
 

@@ -71,6 +71,7 @@ export default async function OrderViewPage({
   const now = Date.now();
   const cancelDeadline = freeCancelDeadline(order);
   const canCancel =
+    !order.payout_hold &&
     order.status === "paid_in_escrow" && cancelDeadline !== null && cancelDeadline.getTime() > now;
 
   const rows: [string, React.ReactNode][] = [
@@ -114,6 +115,12 @@ export default async function OrderViewPage({
       <p className="mt-4 rounded-xl bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
         {nextStep(order)}
       </p>
+      {order.payout_hold && (
+        <p className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          This order is on hold while our team reviews it. No money will move until then —
+          we&apos;ll be in touch by email.
+        </p>
+      )}
 
       <dl className="mt-6 divide-y divide-zinc-100 rounded-xl border border-zinc-200 text-sm">
         {rows.map(([label, value]) => (

@@ -174,8 +174,36 @@ export interface ListingOrder {
   cancelled_at: string | null;
   cancelled_by: string | null;
   cancel_reason: string | null;
+  // 暂停放款(2026-09-24 安全核查第 1 批,见 README"安全核查 → 第 1 批"):非空时所有动钱
+  // 的操作(确认收货、cron 自动放款、重试放款、24 小时免费取消)都跳过这张订单,只有
+  // 管理员在 /admin/holds 解除。订单 status 不变,保留"走到哪一步"的信息。
+  // payout_hold_note 是给管理员看的内部备注(拒付编号/原因等),买卖双方读不到。
+  payout_hold: PayoutHold | null;
+  payout_hold_at: string | null;
+  payout_hold_note: string | null;
   created_at: string;
 }
+
+export type PayoutHold = "dispute" | "refund" | "seller_banned";
+
+// 买卖双方(authenticated)能读的订单列。买家联系方式、view_token、管理员备注只有
+// service_role 能读(列级权限,见 README"安全核查 → 第 1 批"的 SQL),所以用户态
+// client 查订单不能 select("*"),要用这份列表。
+export const PARTY_ORDER_COLUMNS =
+  "id,order_number,listing_id,buyer_id,seller_id,amount,currency,status,proof_url," +
+  "start_date,end_date,booking_units,hold_expires_at,terms_accepted_at," +
+  "immediate_start_consent_at,paid_at,delivered_at,confirmed_at,cancelled_at," +
+  "cancelled_by,cancel_reason,payout_hold,payout_hold_at,created_at";
+
+export type PartyListingOrder = Omit<
+  ListingOrder,
+  | "view_token"
+  | "buyer_name"
+  | "buyer_phone"
+  | "buyer_address"
+  | "buyer_email"
+  | "payout_hold_note"
+>;
 
 // 卖家交付后修改交付链接的记录(2026-09-24 加,见 README"卖家修改交付链接")。只由数据库
 // 函数 update_order_proof_url 写入,买卖双方能读自己订单的记录。

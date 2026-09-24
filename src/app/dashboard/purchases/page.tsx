@@ -4,11 +4,20 @@ import { createClient } from "@/lib/supabase/server";
 import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
 import { CancelOrderForm } from "@/components/CancelOrderForm";
 import { ProofLinkHistory } from "@/components/ProofLinkHistory";
-import { LISTING_ORDER_STATUS_LABELS, freeCancelDeadline } from "@/lib/supabase/enums";
+import {
+  LISTING_ORDER_STATUS_LABELS,
+  PAYOUT_HOLD_LABELS,
+  freeCancelDeadline,
+} from "@/lib/supabase/enums";
 import { formatBookingRange } from "@/lib/booking";
 import { formatOrderNumber } from "@/lib/orders/orderNumber";
 import { releaseNowAction } from "./actions";
-import type { Listing, ListingOrder, ListingOrderProofChange } from "@/lib/supabase/types";
+import {
+  PARTY_ORDER_COLUMNS,
+  type Listing,
+  type ListingOrderProofChange,
+  type PartyListingOrder,
+} from "@/lib/supabase/types";
 
 const ERROR_MESSAGES: Record<string, string> = {
   invalid_state: "This order can't be confirmed right now.",
@@ -19,6 +28,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   cancel_window_passed: "The 24-hour free cancellation window has passed.",
   cancel_starts_soon: "Bookings starting within 24 hours can't be cancelled for free.",
   cancel_failed: "Couldn't cancel the order, please try again.",
+  cancel_pending:
+    "The order is cancelled, but we couldn't confirm the refund with our payment provider yet — our team is checking it and will email you.",
+  on_hold: "This order is on hold while we review it — we'll be in touch by email.",
 };
 
 export default async function PurchasesPage({
@@ -38,11 +50,11 @@ export default async function PurchasesPage({
 
   const { data: orderRows } = await supabase
     .from("listing_orders")
-    .select("*")
+    .select(PARTY_ORDER_COLUMNS)
     .eq("buyer_id", user.id)
     .order("created_at", { ascending: false });
 
-  const orders = (orderRows ?? []) as ListingOrder[];
+  const orders = (orderRows ?? []) as unknown as PartyListingOrder[];
 
   const listingIds = [...new Set(orders.map((o) => o.listing_id))];
   const orderIds = orders.map((o) => o.id);
@@ -102,6 +114,7 @@ export default async function PurchasesPage({
           {orders.map((order) => {
             const cancelDeadline = freeCancelDeadline(order);
             const canCancel =
+              !order.payout_hold &&
               order.status === "paid_in_escrow" &&
               cancelDeadline !== null &&
               cancelDeadline.getTime() > now;
@@ -131,6 +144,13 @@ export default async function PurchasesPage({
                 </p>
               )}
 
+              {order.payout_hold && (
+                <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  On hold — under review ({PAYOUT_HOLD_LABELS[order.payout_hold]}). No money will
+                  move on this order until our team has looked at it.
+                </p>
+              )}
+
               {order.status === "delivered" && (
                 <div className="mt-3 flex flex-col gap-2">
                   {order.proof_url && (
@@ -148,7 +168,7 @@ export default async function PurchasesPage({
                       The seller says your ad is live. If it isn&apos;t, message the seller.
                       Payment is released to the seller after the booking ends.
                     </p>
-                  ) : (
+                  ) : order.payout_hold ? null : (
                     <>
                       <ConfirmSubmitForm
                         action={releaseNowAction.bind(null, order.id)}

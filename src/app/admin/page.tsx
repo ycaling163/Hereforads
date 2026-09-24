@@ -9,6 +9,7 @@ export default async function AdminOverviewPage() {
     { count: userCount },
     { count: bannedCount },
     { count: contactMessageCount },
+    { count: heldCount },
   ] = await Promise.all([
     admin
       .from("listings")
@@ -20,6 +21,10 @@ export default async function AdminOverviewPage() {
       .select("id", { count: "exact", head: true })
       .eq("is_banned", true),
     admin.from("contact_messages").select("id", { count: "exact", head: true }),
+    admin
+      .from("listing_orders")
+      .select("id", { count: "exact", head: true })
+      .not("payout_hold", "is", null),
   ]);
 
   return (
@@ -52,6 +57,11 @@ export default async function AdminOverviewPage() {
           label="Contact messages"
           value={String(contactMessageCount ?? 0)}
           href="/admin/contact"
+        />
+        <StatCard
+          label="Orders on hold (disputes/refunds)"
+          value={String(heldCount ?? 0)}
+          href="/admin/holds"
         />
       </div>
     </div>

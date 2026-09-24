@@ -93,3 +93,25 @@ export async function getUserEmail(userId: string): Promise<string | null> {
   }
   return data.user?.email ?? null;
 }
+
+/**
+ * 给管理员发告警(拒付、Stripe 后台退款、放款被挡下等需要人工处理的事)。收件人是
+ * 环境变量 ADMIN_ALERT_EMAIL;没配的话只打日志。按钮默认指向 /admin/holds。
+ */
+export async function sendAdminAlert(
+  subject: string,
+  paragraphs: string[],
+  details?: [string, string][]
+) {
+  const to = process.env.ADMIN_ALERT_EMAIL;
+  if (!to) {
+    console.warn("ADMIN_ALERT_EMAIL not set, admin alert not emailed:", subject, paragraphs);
+    return;
+  }
+  await sendEmail(to, {
+    subject: `[HereForAds admin] ${subject}`,
+    paragraphs,
+    details,
+    cta: { label: "Open disputes & holds", path: "/admin/holds" },
+  });
+}
