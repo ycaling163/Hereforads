@@ -19,9 +19,28 @@ export interface BuyListingState {
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 export async function buyListingAction(
-  _prevState: BuyListingState,
+  prevState: BuyListingState,
   formData: FormData
 ): Promise<BuyListingState> {
+  // 任何未捕获的异常(Stripe/Supabase 报错、环境变量缺失)都会让整页变成
+  // "page couldn't load";这里兜住,记下具体原因,给买家一个能重试的提示。
+  // redirect() 靠抛特殊异常实现,只在 startCheckout 成功返回 URL 之后才调用。
+  let checkoutUrl: string;
+  try {
+    const result = await startCheckout(prevState, formData);
+    if ("error" in result) return result;
+    checkoutUrl = result.url;
+  } catch (err) {
+    console.error("buyListingAction failed:", err);
+    return { error: "Couldn't start checkout, please try again" };
+  }
+  redirect(checkoutUrl);
+}
+
+async function startCheckout(
+  _prevState: BuyListingState,
+  formData: FormData
+): Promise<{ error: string } | { url: string }> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -49,7 +68,7 @@ export async function buyListingAction(
 
     const resolved = await resolveGuestBuyerId(supabase, guestEmail);
     if (!resolved.buyerId) {
-      return { error: resolved.error };
+      return { error: resolved.error ?? "Couldn't start checkout, please try again" };
     }
     buyerId = resolved.buyerId;
     buyerEmail = guestEmail;
@@ -137,7 +156,7 @@ export async function buyListingAction(
     return { error: "Couldn't start checkout, please try again" };
   }
 
-  redirect(session.url);
+  return { url: session.url };
 }
 
 export interface SendMessageState {

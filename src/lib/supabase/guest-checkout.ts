@@ -39,6 +39,7 @@ export async function resolveGuestBuyerId(
   });
 
   if (otpError) {
+    console.error("Guest checkout: signInWithOtp failed:", otpError.message);
     return { error: "Couldn't send you a login link, please try again" };
   }
 
@@ -49,6 +50,7 @@ export async function resolveGuestBuyerId(
   );
 
   if (lookupError || !buyerId) {
+    console.error("Guest checkout: get_user_id_by_email failed:", lookupError?.message ?? "no user id");
     return { error: "Couldn't set up your order, please try again" };
   }
 
