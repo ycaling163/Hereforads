@@ -42,8 +42,10 @@ export async function generateMetadata({
 
 export default async function ListingDetailPage({
   params,
+  searchParams,
 }: PageProps<"/listings/[id]">) {
   const { id } = await params;
+  const { resume } = await searchParams;
   const supabase = await createClient();
 
   const { data: listingRow } = await supabase
@@ -97,8 +99,20 @@ export default async function ListingDetailPage({
     notFound();
   }
 
+  // 未登录买家点 Buy now → 去登录/注册 → 带 ?resume=buy 回到这里(见
+  // BuyListingButton),提示他接着完成付款,不用重新找这条广告。
+  const resumingPurchase = resume === "buy" && !!user && !isOwnListing;
+
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-12">
+      {resumingPurchase && (
+        <p className="mb-6 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-800">
+          You&apos;re signed in — complete your purchase below.{" "}
+          <a href="#buy" className="font-medium underline">
+            Go to checkout
+          </a>
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -220,7 +234,12 @@ export default async function ListingDetailPage({
         </div>
 
         <div className="flex flex-col gap-6">
-          <div className="rounded-2xl border border-transparent bg-zinc-50 p-6">
+          <div
+            id="buy"
+            className={`scroll-mt-24 rounded-2xl border bg-zinc-50 p-6 ${
+              resumingPurchase ? "border-zinc-900 ring-2 ring-zinc-900/10" : "border-transparent"
+            }`}
+          >
             <div className="flex items-baseline gap-1">
               <span className="text-5xl font-semibold text-zinc-900">
                 {listing.price_amount}
@@ -252,16 +271,27 @@ export default async function ListingDetailPage({
           </div>
 
           {!isOwnListing && (
-            <div className="rounded-2xl border border-transparent bg-zinc-50 p-6">
+            <div id="ask" className="scroll-mt-24 rounded-2xl border border-transparent bg-zinc-50 p-6">
               <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-zinc-500">
                 Ask the seller
               </h2>
               {user ? (
                 <ContactSellerForm listingId={listing.id} />
               ) : (
+                // 私信要求登录(防垃圾消息、出了问题能找到人),不开放 guest。
                 <p className="text-sm text-zinc-500">
-                  <Link href="/login" className="underline">
+                  <Link
+                    href={`/login?next=${encodeURIComponent(`/listings/${listing.id}#ask`)}`}
+                    className="underline"
+                  >
                     Log in
+                  </Link>{" "}
+                  or{" "}
+                  <Link
+                    href={`/register?next=${encodeURIComponent(`/listings/${listing.id}#ask`)}`}
+                    className="underline"
+                  >
+                    create an account
                   </Link>{" "}
                   to message the seller.
                 </p>
