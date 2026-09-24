@@ -268,3 +268,8 @@
 - **需要人工做**:先在 Supabase 执行 README"日历按天预订 → 实现进度 → 第 1 批"的 SQL,再合并部署。
 - **没验证的**:这个环境连不上 Supabase/Stripe,只跑了 lint + build 和日期函数的本地核对(英国夏令时/冬令时切换日的 00:00 换算正确)。
 - 下一步:第 2 批分两次放款(40% / 60%)。
+
+## 2026-09-24 交付链接自动补 https://(PR #45 合并之后)
+
+- 产品负责人测试反馈:交付时填 `youtube.com/shorts/…` 报错。改成服务端自动补 `https://`(`src/lib/url.ts`),交付链接、社交账号链接、个人网站三处共用;交付链接只接受 http/https。无 SQL。
+- 同一个 PR 追加:卖家交付后、放款前可以修改交付链接;每次修改买家 3 天确认期重新计并邮件通知买家,旧链接记进 `listing_order_proof_changes`(产品负责人确认的 3 条规则见 README"卖家修改交付链接")。**要先执行 README 里的 SQL 再合并。** cron 自动放款时加了 `delivered_at` 二次核对。没连 Supabase 实测,只跑了 lint + build。

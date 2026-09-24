@@ -68,7 +68,7 @@ export function SocialAccountsManager({
             Profile link (optional — for platforms without shareable links
             like Xiaohongshu, just fill in the handle)
           </label>
-          <input id="url" name="url" type="url" className={inputClass} />
+          <input id="url" name="url" type="text" inputMode="url" placeholder="e.g. instagram.com/yourname" className={inputClass} />
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="follower_count" className={labelClass}>

@@ -91,7 +91,8 @@ export function SocialAccountRow({ account }: { account: SocialAccount }) {
           <input
             id={`url-${account.id}`}
             name="url"
-            type="url"
+            type="text"
+            inputMode="url"
             defaultValue={account.url ?? ""}
             className={inputClass}
           />

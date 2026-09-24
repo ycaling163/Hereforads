@@ -66,6 +66,9 @@ async function handle(request: Request) {
       .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
       .eq("id", order.id)
       .eq("status", "delivered")
+      // 卖家修改交付链接会把 delivered_at 重置成当时(确认期重新计 3 天),这里再核对
+      // 一次,防止查询之后刚好改了链接的订单被提前放款。
+      .lte("delivered_at", cutoff)
       .select("id");
 
     if (updateError || !updatedRows || updatedRows.length === 0) {

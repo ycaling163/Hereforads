@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { parseFollowerCount } from "@/lib/format";
 import { storagePathFromPublicUrl } from "@/lib/storage";
 import { normalizeUsername } from "@/lib/username";
+import { normalizeWebUrl } from "@/lib/url";
 import {
   AD_TYPES,
   CURRENCIES,
@@ -24,17 +25,12 @@ export interface ProfileFormState {
 }
 
 // Sellers usually type "example.com" rather than "https://example.com" —
-// add the scheme before validating instead of rejecting the common case.
+// normalizeWebUrl adds the scheme before validating instead of rejecting the
+// common case (shared with social account links and delivery links).
 function normalizeWebsiteUrl(raw: string): { value: string | null } | { error: string } {
-  const trimmed = raw.trim();
-  if (!trimmed) return { value: null };
-
-  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-  try {
-    return { value: new URL(withScheme).toString() };
-  } catch {
-    return { error: "Please enter a valid website, e.g. example.com" };
-  }
+  if (!raw.trim()) return { value: null };
+  const result = normalizeWebUrl(raw);
+  return "error" in result ? { error: "Please enter a valid website, e.g. example.com" } : result;
 }
 
 export async function updateProfileAction(
@@ -193,6 +189,10 @@ export async function addSocialAccountAction(
   if (!url && !handle) {
     return { error: "Fill in either a handle or a profile link" };
   }
+  const normalizedUrl = url ? normalizeWebUrl(url) : { value: "" };
+  if ("error" in normalizedUrl) {
+    return { error: normalizedUrl.error };
+  }
 
   let followerCount: number | null = null;
   if (followerCountRaw) {
@@ -208,7 +208,7 @@ export async function addSocialAccountAction(
     user_id: user.id,
     platform,
     handle: handle || null,
-    url: url || "",
+    url: normalizedUrl.value,
     follower_count: followerCount,
   });
 
@@ -244,6 +244,10 @@ export async function updateSocialAccountAction(
   if (!url && !handle) {
     return { error: "Fill in either a handle or a profile link" };
   }
+  const normalizedUrl = url ? normalizeWebUrl(url) : { value: "" };
+  if ("error" in normalizedUrl) {
+    return { error: normalizedUrl.error };
+  }
 
   let followerCount: number | null = null;
   if (followerCountRaw) {
@@ -261,7 +265,7 @@ export async function updateSocialAccountAction(
     .update({
       platform,
       handle: handle || null,
-      url: url || "",
+      url: normalizedUrl.value,
       follower_count: followerCount,
     })
     .eq("id", accountId)

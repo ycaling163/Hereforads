@@ -3,8 +3,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { sendOrderDeliveredEmail } from "@/lib/email/orders";
+import { sendOrderDeliveredEmail, sendOrderProofUpdatedEmail } from "@/lib/email/orders";
 import { bookingToday, formatBookingDate } from "@/lib/booking";
+import { normalizeWebUrl } from "@/lib/url";
 
 export interface DeliverOrderState {
   error?: string;
@@ -27,11 +28,17 @@ export async function markDeliveredAction(
   }
 
   const orderId = String(formData.get("order_id") ?? "");
-  const proofUrl = String(formData.get("proof_url") ?? "").trim();
+  const proofUrlRaw = String(formData.get("proof_url") ?? "").trim();
 
-  if (!proofUrl) {
+  if (!proofUrlRaw) {
     return { error: "Please provide a link the buyer can use to verify delivery" };
   }
+  // 卖家常只填 "youtube.com/shorts/…",自动补 https://;只接受 http/https 链接。
+  const normalizedProof = normalizeWebUrl(proofUrlRaw);
+  if ("error" in normalizedProof) {
+    return { error: normalizedProof.error };
+  }
+  const proofUrl = normalizedProof.value;
 
   const [{ data: order }, { data: profile }] = await Promise.all([
     supabase
@@ -88,4 +95,63 @@ export async function markDeliveredAction(
   await sendOrderDeliveredEmail(orderId);
 
   redirect("/dashboard/sales");
+}
+
+/**
+ * 卖家交付后修改交付链接(2026-09-24 产品负责人确认):放款之前(订单还在 delivered)
+ * 都能改;每次修改买家的 3 天确认期从修改那一刻重新计(跟 README 第 5 条"改好重新提交后
+ * 确认期重新计 3 天"一致,防止卖家在确认期快结束时换链接),旧链接记进
+ * listing_order_proof_changes 留底,并邮件通知买家。改链接、重置计时、写修改记录在数据库
+ * 函数 update_order_proof_url 里一次完成(见 README"卖家修改交付链接"的 SQL)。
+ */
+export async function updateProofUrlAction(
+  _prevState: DeliverOrderState,
+  formData: FormData
+): Promise<DeliverOrderState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const orderId = String(formData.get("order_id") ?? "");
+  const normalizedProof = normalizeWebUrl(String(formData.get("proof_url") ?? ""));
+  if ("error" in normalizedProof) {
+    return { error: normalizedProof.error };
+  }
+
+  const service = createServiceClient();
+  const { data: order } = await service
+    .from("listing_orders")
+    .select("seller_id,status,proof_url")
+    .eq("id", orderId)
+    .single();
+
+  if (!order || order.seller_id !== user.id || order.status !== "delivered") {
+    return { error: "This link can't be changed any more — the payment has already been released." };
+  }
+  if (order.proof_url === normalizedProof.value) {
+    return { error: "That's the same link as before" };
+  }
+
+  const { data: updated, error } = await service.rpc("update_order_proof_url", {
+    p_order_id: orderId,
+    p_seller_id: user.id,
+    p_new_url: normalizedProof.value,
+  });
+
+  if (error) {
+    console.error("Failed to update proof url:", error.message);
+    return { error: "Couldn't save, please try again" };
+  }
+  if (!updated) {
+    return { error: "This link can't be changed any more — the payment has already been released." };
+  }
+
+  await sendOrderProofUpdatedEmail(orderId);
+
+  redirect("/dashboard/sales?tab=escrow&link_updated=1");
 }
