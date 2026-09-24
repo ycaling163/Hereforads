@@ -133,6 +133,11 @@ export interface Listing {
 
 export interface ListingOrder {
   id: string;
+  // 订单号(2026-09-24 加,见 README"订单号与订单查询"):序列自增,从 118 开始,
+  // 展示成 HFA-000118(formatOrderNumber)。
+  order_number: number;
+  // 订单专属只读链接 /orders/<view_token> 用的随机值,只放在买家邮件里,不登录也能看订单。
+  view_token: string;
   listing_id: string;
   buyer_id: string;
   seller_id: string;

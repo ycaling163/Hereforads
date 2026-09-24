@@ -1673,6 +1673,86 @@ grant execute on function public.update_order_proof_url(uuid, uuid, text) to ser
 
 **手动测一遍**:下单 → 卖家标记交付 → Sales 页点 "Change link" 填新链接(不带 https:// 也行)→ 页面提示已更新、买家收到邮件;买卖双方订单页都能展开看到旧链接;买家 "Confirm receipt" 放款后,卖家那边不再出现 "Change link"。
 
+## 订单号与订单查询(2026-09-24)
+
+**为什么要做**:guest 买家测试时发现,确认邮件只写了收到多少钱,没有订单号、卖家和订单详情;邮件里的 "View your order" 打开的是登录页,而 guest 的账号没有密码,下单时那封登录链接大约 1 小时就过期——过期后 guest 就再也进不了自己的订单。
+
+**产品负责人确认的做法**:
+
+1. **订单号连续编号,从 `HFA-000118` 开始**(`listing_orders.order_number`,数据库序列自增,展示时加 `HFA-` 前缀补到 6 位)。已有的测试订单按下单时间补上 118、119……,新订单接着往后编。
+2. **查订单要订单号 + 下单邮箱两个都对上**(`/orders/find`)。订单号是连续的,只凭订单号或只凭邮箱都能被人猜/试出来;对不上时统一报同一句,不提示是哪个错。
+3. **不单独发 invoice**,确认邮件就是订单凭证。
+
+**代码改了什么**
+
+- **订单只读页 `/orders/<view_token>`**:每张订单一个随机、猜不到的 `view_token`,买家邮件的 "View my order" 按钮指向这里,不用登录就能看:订单号、广告、广告类型、投放平台、卖家、预订日期、金额、付款时间、状态、交付链接(和改过的旧链接)、下一步会怎样。页面不被搜索引擎收录,不发 Referer。取消、确认收货、私信仍然要登录做;页面上有 "Email me a sign-in link",只会发到这张订单的买家邮箱。
+- **`/orders/find`**:订单号 + 邮箱,对上了跳到上面的只读页。入口:登录页("Bought as a guest? Find your order")、guest 付款成功页、网站底部 "Find an order"。
+- **登录页加 "Email me a sign-in link (no password)"**:给已有账号发免密码登录链接(Supabase magic link,`shouldCreateUser: false`,跳转地址还是 `/auth/confirm`,不用改 Supabase 设置)。不管邮箱有没有注册都显示"已发送",不让人借此探测谁注册过。
+- **订单邮件**:标题和正文都带订单号,正文后面加一张订单详情表(订单号、广告、广告类型、投放平台、卖家、预订日期、金额、付款时间);买家邮件按钮都指向订单只读页,卖家邮件带买家名字。
+- **订单号显示**:买家 Purchases 页、卖家 Sales 页、管理员订单页(新加 "Order" 列,点开是订单只读页;顶部可以按订单号或买家邮箱搜索)。Stripe 付款的描述以订单号开头、metadata 加 `order_number`,Stripe 后台能按订单号搜。
+
+**要手动执行的 SQL**(Supabase SQL Editor,**先执行再合并部署**,否则下单后读不到订单号、订单页和邮件会出错):
+
+```sql
+-- 1. 订单号:序列 + 列,已有订单按下单时间从 118 开始补号
+create sequence if not exists public.listing_order_number_seq;
+
+alter table public.listing_orders add column if not exists order_number bigint;
+
+update public.listing_orders o
+set order_number = coalesce((select max(order_number) from public.listing_orders), 117) + n.rn
+from (
+  select id, row_number() over (order by created_at, id) as rn
+  from public.listing_orders
+  where order_number is null
+) n
+where o.id = n.id;
+
+-- 下一张订单接着最大的号往后编(表里没有订单时从 118 开始)。
+select setval(
+  'public.listing_order_number_seq',
+  greatest(coalesce((select max(order_number) from public.listing_orders), 117), 117)
+);
+
+alter sequence public.listing_order_number_seq owned by public.listing_orders.order_number;
+grant usage, select on sequence public.listing_order_number_seq to service_role;
+
+alter table public.listing_orders
+  alter column order_number set default nextval('public.listing_order_number_seq'),
+  alter column order_number set not null;
+
+create unique index if not exists listing_orders_order_number_key
+  on public.listing_orders (order_number);
+
+-- 2. 订单专属只读链接用的随机 token(已有订单每行自动生成一个不同的值)
+alter table public.listing_orders
+  add column if not exists view_token uuid not null default gen_random_uuid();
+
+create unique index if not exists listing_orders_view_token_key
+  on public.listing_orders (view_token);
+```
+
+执行完核对一下(应该看到每张订单都有编号,最小的是 118,`view_token` 都不一样):
+
+```sql
+select order_number, view_token, created_at from public.listing_orders order by order_number;
+```
+
+**上线前想让第一张真实订单正好是 HFA-000118**:先把测试订单清掉(连同 `payments`、`listing_order_proof_changes` 里对应的行,这一步请人工确认后再做),确认 `listing_orders` 已经没有行,再执行:
+
+```sql
+select setval('public.listing_order_number_seq', 117);
+```
+
+**手动测一遍**(执行完 SQL、部署之后)
+
+1. 用 guest 身份买一单 → 确认邮件标题带 `HFA-000xxx`,正文有订单详情表;点 "View my order" 不用登录就能打开订单页。
+2. 订单页点 "Email me a sign-in link" → 收到登录邮件,点开进入 Purchases 页,能看到这张订单和订单号。
+3. 退出登录,打开 `/orders/find`:填对订单号 + 邮箱能打开订单页;订单号对、邮箱错(或反过来)都提示找不到。
+4. 登录页点 "Email me a sign-in link (no password)",填 guest 的邮箱 → 收到登录邮件。
+5. 管理员订单页:有 "Order" 列;搜 `118`、`HFA-000118`、买家邮箱片段都能搜到。
+6. Stripe 后台这笔付款的描述以订单号开头。
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀

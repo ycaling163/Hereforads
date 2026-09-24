@@ -25,6 +25,8 @@ export interface EmailContent {
   subject: string;
   // 纯文本段落;每段会转义后包进 <p>,同时拼成纯文本版本(纯文本版本能降低进垃圾箱的概率)。
   paragraphs: string[];
+  // 订单详情(订单号、广告、卖家……),渲染成两列表格,放在正文段落后面。
+  details?: [string, string][];
   cta?: { label: string; path: string };
 }
 
@@ -40,6 +42,16 @@ export async function sendEmail(to: string | null | undefined, content: EmailCon
   const html = `<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#18181b;max-width:560px">
 ${content.paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join("\n")}
 ${
+  content.details && content.details.length > 0
+    ? `<table style="border-collapse:collapse;width:100%;margin:16px 0;font-size:14px">${content.details
+        .map(
+          ([label, value]) =>
+            `<tr><td style="padding:6px 12px 6px 0;color:#71717a;vertical-align:top;white-space:nowrap">${escapeHtml(label)}</td><td style="padding:6px 0;color:#18181b">${escapeHtml(value)}</td></tr>`
+        )
+        .join("")}</table>`
+    : ""
+}
+${
   content.cta && ctaUrl
     ? `<p><a href="${escapeHtml(ctaUrl)}" style="display:inline-block;background:#18181b;color:#fff;padding:10px 20px;border-radius:999px;text-decoration:none">${escapeHtml(content.cta.label)}</a></p>`
     : ""
@@ -48,6 +60,9 @@ ${
 </div>`;
   const text = [
     ...content.paragraphs,
+    ...(content.details && content.details.length > 0
+      ? [content.details.map(([label, value]) => `${label}: ${value}`).join("\n")]
+      : []),
     ...(content.cta && ctaUrl ? [`${content.cta.label}: ${ctaUrl}`] : []),
     "HereForAds",
   ].join("\n\n");

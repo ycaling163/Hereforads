@@ -20,12 +20,20 @@ export default async function GuestCheckoutSuccessPage({
         {email ? (
           <>
             {" "}
-            We&apos;ve sent a login link to <span className="font-medium">{email}</span> —
-            open it to track this order and confirm delivery.
+            We&apos;ll email your order confirmation to{" "}
+            <span className="font-medium">{email}</span> — it has your order number and a
+            link to view your order, no login needed.
           </>
         ) : (
-          " We've emailed you a login link to track this order and confirm delivery."
+          " We'll email your order confirmation with your order number and a link to view your order."
         )}
+      </p>
+      <p className="mt-3 text-sm text-zinc-500">
+        Can&apos;t find the email?{" "}
+        <Link href="/orders/find" className="underline">
+          Find your order
+        </Link>{" "}
+        with your order number and email.
       </p>
       <Link
         href="/listings"
