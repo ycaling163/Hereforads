@@ -1902,18 +1902,19 @@ end $$;
 revoke all on public.orders, public.ad_spaces from anon, authenticated;
 ```
 
-执行完核对(第一句应该看到 `buyer_phone` 等列**没有** authenticated 的 SELECT;第二句 `is_verified`/`is_featured`/`is_banned` 等**没有** INSERT/UPDATE):
+执行完核对(第一句应该**没有结果**:买家联系方式、view_token、管理员备注这几列 authenticated 读不到;第二句只查 INSERT/UPDATE,SELECT/REFERENCES 是正常的读权限,不用管):
 
 ```sql
 select column_name, privilege_type from information_schema.column_privileges
 where table_schema = 'public' and table_name = 'listing_orders' and grantee = 'authenticated'
-order by 1, 2;
+  and column_name in ('buyer_email','buyer_phone','buyer_address','buyer_name','view_token','payout_hold_note');
 
 select table_name, column_name, privilege_type from information_schema.column_privileges
 where table_schema = 'public' and grantee = 'authenticated'
   and table_name in ('profiles', 'listings', 'seller_profiles')
   and column_name in ('is_banned','stripe_onboarded','stripe_connect_account_id','country',
                       'is_featured','status','is_verified')
+  and privilege_type in ('INSERT', 'UPDATE')
 order by 1, 2, 3;   -- 应该只剩 listings.status 的 INSERT(发布广告时写 'active')
 ```
 
