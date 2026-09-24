@@ -3,9 +3,9 @@ import { LoginForm } from "./LoginForm";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; error?: string; code?: string }>;
 }) {
-  const { next, error } = await searchParams;
+  const { next, error, code } = await searchParams;
 
   return (
     <div className="flex flex-1 items-center justify-center px-6 py-16">
@@ -23,7 +23,7 @@ export default async function LoginPage({
             That sign-in didn&apos;t go through — please try again below.
           </p>
         )}
-        <LoginForm next={next} />
+        <LoginForm next={next} startWithCode={code === "1"} />
       </div>
     </div>
   );

@@ -1753,6 +1753,62 @@ select setval('public.listing_order_number_seq', 117);
 5. 管理员订单页:有 "Order" 列;搜 `118`、`HFA-000118`、买家邮箱片段都能搜到。
 6. Stripe 后台这笔付款的描述以订单号开头。
 
+## Guest 登录与设置密码(2026-09-24)
+
+**问题**(产品负责人测试发现):guest 下单时我们用 `signInWithOtp` 给他的邮箱建号,Supabase 会发一封 "Confirm your email",买家同时收到它和订单确认邮件;这种没确认的账号在订单页点 "Email me a sign-in link" 也只会再收到 "Confirm your email";邮件里的链接打开是 localhost(Supabase 后台 Site URL 没改);而且 guest 从没设过密码,确认了也不知道怎么登录。
+
+**做法**(产品负责人确认):guest 用免密码登录(登录链接 + 6 位验证码),**登录后提醒设密码**,方便以后用密码登录。
+
+**代码改了什么**
+
+- **下单不再发 "Confirm your email"**:`resolveGuestBuyerId`(`src/lib/supabase/guest-checkout.ts`)改用 service_role 的 `auth.admin.createUser({ email, email_confirm: true })` 建号(不设密码、不发邮件)。guest 下单后只收到我们的订单确认邮件。账号标记成已确认不会被冒用:没有密码,要登录只能点发到这个邮箱的链接。
+- **登录页**:按钮改成 "Forgot password or bought as a guest? Email me a sign-in link";发完邮件直接显示验证码输入框,填邮件里的 6 位验证码也能登录(电脑下单、手机看邮件的情况);订单页发完登录邮件也有"去登录页填验证码"的链接(`/login?code=1`)。用密码登录失败时提示可以用登录链接。
+- **设密码**:Dashboard 新增 "Password" 页(`/dashboard/password`),没密码时显示 "Set a password",有密码时是修改密码。没设过密码的账号(Google/Facebook 登录的除外)在 Dashboard 顶部看到提醒 "Set a password so you can log in faster next time",点 "Not now" 7 天内不再提醒。有没有密码靠数据库函数 `current_user_has_password()` 判断(见下面 SQL)。
+- **注册页**:用 guest 下过单的邮箱注册时,不再报看不懂的错,提示"这个邮箱已经有账号(可能是访客下单时建的),用登录链接登录后在 Dashboard → Password 设密码"。
+- **`/auth/confirm` 也接受 `code`**:改动之前建的 guest 账号还没确认过邮箱,要登录链接时 Supabase 仍然发 "Confirm sign up"(`{{ .ConfirmationURL }}` 格式,跳回 `/auth/confirm?code=…`),现在点开也能直接登录,之后再要链接就是正常的登录邮件了。
+
+**要手动做的**
+
+1. **Supabase → Authentication → URL Configuration**:Site URL 改成正式域名(比如 `https://hereforads.com`,**不是 localhost**);Redirect URLs 里要有 `https://hereforads.com/auth/callback` 和 `https://hereforads.com/auth/confirm`。Vercel 的 `NEXT_PUBLIC_SITE_URL` 也要是正式域名。
+2. **Supabase → Authentication → Emails → "Magic link or OTP" 模板**,正文换成(加了 6 位验证码 `{{ .Token }}`,链接格式不变):
+
+```html
+<h2>Your HereForAds sign-in link</h2>
+<p><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/dashboard/purchases">Log in to HereForAds</a></p>
+<p>Or enter this code on the login page: <strong>{{ .Token }}</strong></p>
+<p>The link and code expire in 1 hour. If you didn't ask for this, you can ignore this email.</p>
+```
+
+   "Confirm sign up"、"Invite user"、"Change email address"、"Reset password" 这几个模板**保持 `{{ .ConfirmationURL }}` 不动**(注册确认走 `/auth/callback`,依赖这个格式)。
+3. **SQL**(Supabase SQL Editor,先执行再合并;没执行的话只是不显示"设密码"提醒,不会报错):
+
+```sql
+-- 当前登录的账号有没有设过密码(只能查自己)。Guest 下单时建的账号没有密码。
+create or replace function public.current_user_has_password()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce(u.encrypted_password is not null and u.encrypted_password <> '', false)
+  from auth.users u
+  where u.id = auth.uid();
+$$;
+
+revoke all on function public.current_user_has_password() from public, anon;
+grant execute on function public.current_user_has_password() to authenticated;
+```
+
+**手动测一遍**(改完上面 3 项、部署之后)
+
+1. 用一个**从没用过的邮箱**以 guest 身份下单 → 只收到订单确认邮件,**没有** "Confirm your email"。
+2. 订单页点 "Email me a sign-in link" → 收到 "Your HereForAds sign-in link",有链接和 6 位验证码;点链接打开的是正式域名,直接进入 Purchases 页,顶部有"设密码"提醒。
+3. 再要一封,在另一个浏览器的登录页填邮箱 + 验证码 → 也能登录。
+4. Dashboard → Password 设密码 → 退出,用邮箱 + 密码能登录;提醒不再出现。
+5. 用另一个 guest 邮箱去注册页注册 → 提示这个邮箱已有账号、用登录链接。
+6. 改动之前建的 guest 账号(比如之前测试用的邮箱):点 "Email me a sign-in link" → 收到的是 "Confirm your email",点开能直接登录;再要一次就是正常的登录邮件。
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀

@@ -69,8 +69,9 @@ async function startCheckout(
   }
   const consentedAt = new Date().toISOString();
 
-  // Guest 结账(不强制先注册/登录):买家只填邮箱,后台静默建号 + 发登录魔法
-  // 链接,见 src/lib/supabase/guest-checkout.ts 和 README"Guest 结账"一节。
+  // Guest 结账(不强制先注册/登录):买家只填邮箱,后台静默建号(不发邮件,之后
+  // 靠免密码登录链接进来),见 src/lib/supabase/guest-checkout.ts 和 README"Guest 结账"、
+  // "Guest 登录与设置密码"两节。
   // 登录用户用当前 session 的 client 读 listing;guest 没有 session,改用
   // service_role client 读。建 order 两边都走 service_role(见下面),所以这里
   // 自己校验一遍权限(listing 存不存在、状态是不是 active、买家是不是卖家本人)。
@@ -87,7 +88,7 @@ async function startCheckout(
       return { error: "Please enter a valid email address" };
     }
 
-    const resolved = await resolveGuestBuyerId(supabase, guestEmail);
+    const resolved = await resolveGuestBuyerId(guestEmail);
     if (!resolved.buyerId) {
       return { error: resolved.error ?? "Couldn't start checkout, please try again" };
     }

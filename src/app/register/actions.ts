@@ -43,6 +43,19 @@ export async function registerAction(
     },
   });
 
+  // 这个邮箱已经有账号(常见情况:之前用这个邮箱以访客身份下过单,系统自动建了一个没有
+  // 密码的账号)。开了邮箱验证时 Supabase 不报错,而是返回一个 identities 为空的 user;
+  // 没开时报 user_already_exists。两种都引导去用登录链接登录、再设密码。
+  const alreadyRegistered =
+    error?.code === "user_already_exists" ||
+    (!error && data.user && (data.user.identities?.length ?? 0) === 0);
+  if (alreadyRegistered) {
+    return {
+      error:
+        "This email already has an account — maybe from an order you placed as a guest. On the login page, choose \"Email me a sign-in link\", then set a password under Dashboard → Password.",
+    };
+  }
+
   if (error) {
     return { error: error.message };
   }

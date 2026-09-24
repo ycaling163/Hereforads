@@ -27,5 +27,19 @@ export async function GET(request: Request) {
     }
   }
 
+  // 2026-09-24 之前用 signInWithOtp 建的 guest 账号没确认过邮箱,他们要登录链接时 Supabase
+  // 发的是 "Confirm sign up" 邮件({{ .ConfirmationURL }} 格式),点开后 Supabase 带着 PKCE
+  // 的 code 跳回这里(emailRedirectTo 是 /auth/confirm)。按 code 换 session,跟
+  // /auth/callback 一样;换不出来(比如在另一个浏览器打开)就去登录页重新要链接。
+  const code = searchParams.get("code");
+  if (code) {
+    const supabase = await createClient();
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error && data.user) {
+      await ensureProfile(supabase, data.user);
+      redirect(next);
+    }
+  }
+
   redirect("/login?error=invalid_link");
 }

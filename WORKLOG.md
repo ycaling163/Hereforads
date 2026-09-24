@@ -279,3 +279,10 @@
 - 产品负责人测试反馈:guest 确认邮件没有订单号/卖家/订单详情,"View your order" 打开的是登录页,guest 没有密码进不去。确认的做法:订单号连续编号从 HFA-000118 开始;查订单要订单号 + 邮箱都对上;不单独发 invoice。
 - 做了:订单只读页 `/orders/<view_token>`(邮件按钮指向这里,免登录)、`/orders/find`、登录页免密码登录链接、所有订单邮件带订单号和详情表、Sales/Purchases/管理员订单页显示订单号(管理员可搜索)、Stripe 描述带订单号。细节和 SQL 见 README"订单号与订单查询"。
 - **要先执行 README 里的 SQL 再合并。** 没连 Supabase/Resend 实测,只跑了 lint + build 和订单号解析的本地核对。
+
+## 2026-09-24 Guest 登录与设置密码(分支 `claude/guest-login`)
+
+- 产品负责人测试反馈:guest 下单同时收到 "Confirm your email";订单页要登录链接也是确认邮件;链接打开是 localhost;guest 没密码不知道怎么登录。确认的做法:免密码登录(链接 + 6 位验证码),登录后提醒设密码。
+- 做了:guest 建号改成 `admin.createUser`(已确认、不发邮件);登录页验证码登录、按钮改名;`/dashboard/password` 设/改密码 + Dashboard 顶部提醒;注册遇到已有账号的提示;`/auth/confirm` 兼容旧 guest 账号的 `code` 链接。
+- **要人工做**:Supabase Site URL 改成正式域名、Redirect URLs、Magic link 模板加验证码、执行 `current_user_has_password()` 的 SQL(见 README"Guest 登录与设置密码")。localhost 问题是配置问题,不是代码。
+- 没实测:这个环境连不上 Supabase,只跑了 lint + build。

@@ -28,6 +28,7 @@ const NAV: NavEntry[] = [
   { type: "link", href: "/dashboard/stripe-connect", label: "Payment Management" },
   { type: "link", href: "/dashboard/messages", label: "Messages" },
   { type: "link", href: "/dashboard/profile", label: "Profile" },
+  { type: "link", href: "/dashboard/password", label: "Password" },
 ];
 
 const EXACT_MATCH_HREFS = new Set(["/dashboard"]);
