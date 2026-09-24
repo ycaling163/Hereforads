@@ -1383,6 +1383,36 @@ where u.id = o.buyer_id and o.buyer_email is null;
 
 **2026-09-24 之前的付款**没有这些标记,用 `/admin/orders` 对:每行有 **Payment**(和放款后的 **Payout**)链接直达 Stripe 后台。点卖家名只看这个卖家的订单,顶部汇总"托管中 / 已转给卖家 / 已退给买家"的金额(按订单金额、分币种,最近 200 单)。
 
+## 平台记账:`/admin/finance`(2026-09-24)
+
+Stripe 里平台只有一个余额,卖家的钱和平台的钱混在一起。"每单卖家实收多少、平台 12% 是多少、Stripe 实际扣了多少、平台净赚多少"在 `/admin/finance`(管理后台导航 **Finance**)算清楚:
+
+| 列 | 口径 |
+|---|---|
+| Buyer paid | 订单金额(订单币种);外币订单下面小字是 Stripe 换成结算币种(GBP)后的实际入账 |
+| Service fee | 12%,平台收入 |
+| Processing fee | 4% + 固定部分,平台收入(向卖家收的固定费率,不是 Stripe 实际成本) |
+| Seller receives | 卖家实收 = 订单金额 − 两项费用;外币订单下面小字是转给卖家的 GBP(已放款是实际转账金额,未放款按付款汇率估算) |
+| Stripe fee (actual) | Stripe 对这笔付款实际扣的手续费(结算币种,从 balance transaction 读) |
+| Platform net | 平台这单净赚 = 实际入账 − 给卖家的 − Stripe 实际手续费;**取消退款的订单 = −Stripe 手续费**(退款时 Stripe 不退原手续费) |
+
+顶部汇总(结算币种):买家付款总额、欠卖家的(托管中)、已转给卖家、已退给买家、平台费用收入、Stripe 手续费、平台净收入。点卖家名只看这个卖家。
+
+例:£30 订单 → Service fee £3.60、Processing fee £1.40、卖家实收 £25.00、Stripe 实扣 £1.15、平台净赚 £3.85。$100 订单(Stripe 换成 £75.64 入账、实扣 £4.09)→ 卖家实收 $83.80(≈ £63.39)、平台净赚约 £8.16。
+
+**数据来源**:付款成功时 webhook 从 Stripe 读这笔付款的 balance transaction,存进 `payments.settlement_currency / settlement_amount / stripe_actual_fee`;放款时存实际转账 `transfer_amount / transfer_currency`。老订单打开财务页时自动从 Stripe 补(每次最多 25 笔,多的刷新再补)。
+
+**要手动执行的 SQL(必须在合并部署前执行,否则放款时写 payments 会失败)**:
+
+```sql
+alter table public.payments
+  add column if not exists settlement_currency text,
+  add column if not exists settlement_amount numeric,
+  add column if not exists stripe_actual_fee numeric,
+  add column if not exists transfer_amount numeric,
+  add column if not exists transfer_currency text;
+```
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀

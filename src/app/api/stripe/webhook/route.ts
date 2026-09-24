@@ -4,6 +4,7 @@ import { stripe } from "@/lib/stripe/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { calculateFees, fromMinorUnits, toMinorUnits } from "@/lib/fees";
 import { sendOrderPaidEmails } from "@/lib/email/orders";
+import { recordSettlement } from "@/lib/stripe/settlement";
 
 // 用 service_role key 写库,绕过 RLS —— webhook 请求没有登录用户的 session/cookie,
 // 走不了 src/lib/supabase/server.ts 那条路。
@@ -240,6 +241,11 @@ export async function POST(request: Request) {
 
       if (paymentError) {
         console.error("Failed to insert payment row:", paymentError.message);
+      }
+
+      // 记下平台实际入账和 Stripe 实际手续费,给 /admin/finance 算平台净收入用。
+      if (paymentIntentId) {
+        await recordSettlement(orderId, paymentIntentId);
       }
 
       // 订单确认邮件(买家 + 卖家)。上面的 status 条件更新保证每单只会走到这里一次。

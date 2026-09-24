@@ -175,6 +175,13 @@ export interface Payment {
   stripe_fee_amount: number | null;
   net_amount: number | null;
   stripe_refund_id: string | null;
+  // 2026-09-24 加,平台记账用(见 /admin/finance):平台 Stripe 余额的实际入账
+  // (结算币种,一般 GBP)、Stripe 实际扣的手续费,以及放款时实际转给卖家的金额。
+  settlement_currency: string | null;
+  settlement_amount: number | null;
+  stripe_actual_fee: number | null;
+  transfer_amount: number | null;
+  transfer_currency: string | null;
   status: string;
   created_at: string;
 }

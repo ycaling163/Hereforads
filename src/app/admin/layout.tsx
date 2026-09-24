@@ -6,6 +6,7 @@ const ADMIN_NAV: { href: string; label: string }[] = [
   { href: "/admin/listings", label: "Listings" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/orders", label: "Orders" },
+  { href: "/admin/finance", label: "Finance" },
   { href: "/admin/contact", label: "Contact" },
   { href: "/admin/pages", label: "Pages" },
 ];
