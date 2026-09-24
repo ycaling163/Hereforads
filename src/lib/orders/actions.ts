@@ -117,5 +117,5 @@ export async function cancelWithin24hAction(
 
   await sendOrderCancelledEmails(orderId, user.id);
 
-  redirect(`${back}?cancelled=1`);
+  redirect(`${back}?cancelled=1&tab=cancelled`);
 }
