@@ -149,7 +149,11 @@ export default async function OrderViewPage({
         </p>
         {link === "sent" && (
           <p className="text-sm text-green-700">
-            Sign-in link sent — check your inbox (and spam folder).
+            Sign-in email sent — check your inbox (and spam folder). Click the link, or{" "}
+            <Link href="/login?code=1" className="underline">
+              enter the 6-digit code
+            </Link>{" "}
+            on the login page.
           </p>
         )}
         {link === "wait" && (

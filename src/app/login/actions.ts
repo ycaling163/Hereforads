@@ -30,7 +30,11 @@ export async function loginAction(
   });
 
   if (error) {
-    return { error: "Incorrect email or password" };
+    // Guest 下单时建的账号没有密码,用密码登录一定失败——提示他们用登录链接。
+    return {
+      error:
+        "Incorrect email or password. Bought as a guest or never set a password? Use \"Email me a sign-in link\" above.",
+    };
   }
 
   if (data.user) {
@@ -62,4 +66,32 @@ export async function sendSignInLinkAction(
     return { error: "We just sent a link — please wait a minute before asking for another." };
   }
   return { sent: true };
+}
+
+export interface VerifyCodeState {
+  error?: string;
+}
+
+// 登录邮件里的 6 位验证码(见 README"Guest 登录与设置密码"):在电脑上下单、在手机上看
+// 邮件时,点手机里的链接登录的是手机浏览器;在电脑登录页填验证码就能在电脑上登录。
+export async function verifySignInCodeAction(
+  _prevState: VerifyCodeState,
+  formData: FormData
+): Promise<VerifyCodeState> {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const token = String(formData.get("code") ?? "").replace(/\s/g, "");
+  const next = safeRedirectPath(formData.get("next") as string | null, "/dashboard/purchases");
+
+  if (!EMAIL_PATTERN.test(email) || !/^\d{6,10}$/.test(token)) {
+    return { error: "Please enter your email and the code from the email" };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
+  if (error || !data.user) {
+    return { error: "That code is wrong or has expired — ask for a new sign-in email" };
+  }
+
+  await ensureProfile(supabase, data.user);
+  redirect(next);
 }
