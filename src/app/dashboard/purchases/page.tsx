@@ -3,10 +3,11 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
 import { CancelOrderForm } from "@/components/CancelOrderForm";
+import { ProofLinkHistory } from "@/components/ProofLinkHistory";
 import { LISTING_ORDER_STATUS_LABELS, freeCancelDeadline } from "@/lib/supabase/enums";
 import { formatBookingRange } from "@/lib/booking";
 import { releaseNowAction } from "./actions";
-import type { Listing, ListingOrder } from "@/lib/supabase/types";
+import type { Listing, ListingOrder, ListingOrderProofChange } from "@/lib/supabase/types";
 
 const ERROR_MESSAGES: Record<string, string> = {
   invalid_state: "This order can't be confirmed right now.",
@@ -43,6 +44,23 @@ export default async function PurchasesPage({
   const orders = (orderRows ?? []) as ListingOrder[];
 
   const listingIds = [...new Set(orders.map((o) => o.listing_id))];
+  const orderIds = orders.map((o) => o.id);
+  // 卖家改过交付链接的记录(RLS 只返回自己订单的)。
+  const { data: proofChangeRows } = orderIds.length
+    ? await supabase
+        .from("listing_order_proof_changes")
+        .select("*")
+        .in("order_id", orderIds)
+        .order("changed_at", { ascending: true })
+    : { data: [] };
+  const proofChangesByOrderId = new Map<string, ListingOrderProofChange[]>();
+  for (const change of (proofChangeRows ?? []) as ListingOrderProofChange[]) {
+    proofChangesByOrderId.set(change.order_id, [
+      ...(proofChangesByOrderId.get(change.order_id) ?? []),
+      change,
+    ]);
+  }
+
   const { data: listingRows } = listingIds.length
     ? await supabase.from("listings").select("id,title").in("id", listingIds)
     : { data: [] };
@@ -141,6 +159,8 @@ export default async function PurchasesPage({
                   )}
                 </div>
               )}
+
+              <ProofLinkHistory changes={proofChangesByOrderId.get(order.id) ?? []} />
 
               {canCancel && cancelDeadline && (
                 <CancelOrderForm

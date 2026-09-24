@@ -1,11 +1,18 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { DeliverOrderForm } from "@/components/DeliverOrderForm";
+import { DeliverOrderForm, EditProofUrlForm } from "@/components/DeliverOrderForm";
+import { ProofLinkHistory } from "@/components/ProofLinkHistory";
 import { CancelOrderForm } from "@/components/CancelOrderForm";
 import { LISTING_ORDER_STATUS_LABELS, freeCancelDeadline } from "@/lib/supabase/enums";
 import { bookingToday, formatBookingDate, formatBookingRange } from "@/lib/booking";
-import type { Listing, ListingOrder, Payment, Profile } from "@/lib/supabase/types";
+import type {
+  Listing,
+  ListingOrder,
+  ListingOrderProofChange,
+  Payment,
+  Profile,
+} from "@/lib/supabase/types";
 
 // 订单按"钱现在在哪"分成 4 个标签页(2026-09-24 产品负责人要求,避免各种状态
 // 混在一起):托管中(默认,卖家要处理的都在这)/ 待付款 / 已完成 / 已取消。
@@ -59,9 +66,14 @@ const ERROR_MESSAGES: Record<string, string> = {
 export default async function SalesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; cancelled?: string; tab?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    cancelled?: string;
+    tab?: string;
+    link_updated?: string;
+  }>;
 }) {
-  const { error: actionError, cancelled, tab } = await searchParams;
+  const { error: actionError, cancelled, tab, link_updated: linkUpdated } = await searchParams;
   const activeTab = TABS.find((t) => t.key === tab) ?? TABS[0];
   const supabase = await createClient();
   const {
@@ -98,6 +110,22 @@ export default async function SalesPage({
   const listingsById = new Map(
     ((listingRows ?? []) as Pick<Listing, "id" | "title">[]).map((l) => [l.id, l.title])
   );
+  // 卖家改过交付链接的记录(RLS 只返回自己订单的)。
+  const { data: proofChangeRows } = orderIds.length
+    ? await supabase
+        .from("listing_order_proof_changes")
+        .select("*")
+        .in("order_id", orderIds)
+        .order("changed_at", { ascending: true })
+    : { data: [] };
+  const proofChangesByOrderId = new Map<string, ListingOrderProofChange[]>();
+  for (const change of (proofChangeRows ?? []) as ListingOrderProofChange[]) {
+    proofChangesByOrderId.set(change.order_id, [
+      ...(proofChangesByOrderId.get(change.order_id) ?? []),
+      change,
+    ]);
+  }
+
   // amount_mismatch 行(webhook 核对金额没通过时留的记录)不是真正的托管付款,不展示。
   const paymentsByOrderId = new Map(
     ((paymentRows ?? []) as Payment[])
@@ -122,6 +150,11 @@ export default async function SalesPage({
       </h1>
       <p className="mt-2 text-zinc-600">Orders buyers placed on your listings</p>
 
+      {linkUpdated && (
+        <p className="mt-4 rounded-xl bg-green-50 px-4 py-2 text-sm text-green-700">
+          Delivery link updated — we&apos;ve emailed the buyer, and their 3-day check has restarted.
+        </p>
+      )}
       {cancelled && (
         <p className="mt-4 rounded-xl bg-green-50 px-4 py-2 text-sm text-green-700">
           Order cancelled — the buyer has been refunded in full.
@@ -298,6 +331,10 @@ export default async function SalesPage({
                         </a>
                       </p>
                     )}
+                    {order.proof_url && order.status === "delivered" && (
+                      <EditProofUrlForm orderId={order.id} currentUrl={order.proof_url} />
+                    )}
+                    <ProofLinkHistory changes={proofChangesByOrderId.get(order.id) ?? []} />
                   </div>
                 );
               })}

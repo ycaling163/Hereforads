@@ -1588,6 +1588,91 @@ select has_function_privilege('anon', 'public.create_booking_order(jsonb)', 'exe
 
 目前交付方式只有链接一种;第 3a 条的初稿图片、日历订单的"上线截图"以后再加上传。
 
+## 卖家修改交付链接(2026-09-24)
+
+卖家标记交付后可能填错链接,或者需要先改好再正式发布,所以交付后可以改链接。产品负责人确认的规则:
+
+1. **放款之前都能改**:订单还在 `delivered`(已交付、等买家确认)时,Sales 页交付链接下面有 "Change link";钱放给卖家之后锁定,不能再改。
+2. **每次修改,买家的 3 天确认期从修改那一刻重新计**(跟第 5 条"改好重新提交后确认期重新计 3 天"一致,防止卖家在确认期快结束时换链接),并邮件通知买家新链接。日历订单按预订期放款,改链接不影响放款时间。
+3. **保留修改记录**:旧链接和修改时间记进 `listing_order_proof_changes`,买卖双方的订单页都能展开看到 "Link changed N times";管理员在 Supabase 里查这张表。
+
+实现:`updateProofUrlAction`(`src/app/dashboard/sales/actions.ts`)校验后调用数据库函数 `update_order_proof_url`,改链接、重置 `delivered_at`、写修改记录在一个事务里完成(会锁住订单行,跟买家确认、cron 自动放款不会撞车)。cron 自动放款时也会再核对一次 `delivered_at`,查询之后刚好被改过链接的订单不会被提前放款。
+
+**要手动执行的 SQL**(Supabase SQL Editor,**先执行再合并部署**):
+
+```sql
+-- 1. 交付链接修改记录
+create table if not exists public.listing_order_proof_changes (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references public.listing_orders(id) on delete cascade,
+  old_proof_url text,
+  new_proof_url text not null,
+  changed_by uuid not null references public.profiles(id),
+  changed_at timestamptz not null default now()
+);
+
+create index if not exists listing_order_proof_changes_order_idx
+  on public.listing_order_proof_changes (order_id, changed_at);
+
+alter table public.listing_order_proof_changes enable row level security;
+
+drop policy if exists "buyers and sellers can view proof changes of their orders"
+  on public.listing_order_proof_changes;
+create policy "buyers and sellers can view proof changes of their orders"
+on public.listing_order_proof_changes for select
+to authenticated
+using (
+  exists (
+    select 1 from public.listing_orders o
+    where o.id = order_id
+      and (o.buyer_id = auth.uid() or o.seller_id = auth.uid())
+  )
+);
+
+-- 只能由下面的函数(service_role)写入。
+revoke insert, update, delete, truncate, references, trigger
+  on public.listing_order_proof_changes from authenticated, anon;
+
+-- 2. 改链接 + 重置确认期 + 写记录,一个事务完成;订单不是这个卖家的、或者已经不在
+--    delivered(已放款/已取消)时返回 false。
+create or replace function public.update_order_proof_url(
+  p_order_id uuid,
+  p_seller_id uuid,
+  p_new_url text
+)
+returns boolean
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_old text;
+begin
+  select proof_url into v_old
+  from public.listing_orders
+  where id = p_order_id and seller_id = p_seller_id and status = 'delivered'
+  for update;
+
+  if not found then
+    return false;
+  end if;
+
+  update public.listing_orders
+  set proof_url = p_new_url, delivered_at = now()
+  where id = p_order_id;
+
+  insert into public.listing_order_proof_changes (order_id, old_proof_url, new_proof_url, changed_by)
+  values (p_order_id, v_old, p_new_url, p_seller_id);
+
+  return true;
+end;
+$$;
+
+revoke all on function public.update_order_proof_url(uuid, uuid, text) from public, anon, authenticated;
+grant execute on function public.update_order_proof_url(uuid, uuid, text) to service_role;
+```
+
+**手动测一遍**:下单 → 卖家标记交付 → Sales 页点 "Change link" 填新链接(不带 https:// 也行)→ 页面提示已更新、买家收到邮件;买卖双方订单页都能展开看到旧链接;买家 "Confirm receipt" 放款后,卖家那边不再出现 "Change link"。
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀

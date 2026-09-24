@@ -114,6 +114,23 @@ export async function sendOrderDeliveredEmail(orderId: string) {
   });
 }
 
+export async function sendOrderProofUpdatedEmail(orderId: string) {
+  const order = await loadOrder(orderId);
+  if (!order) return;
+  const buyerEmail = order.buyer_email ?? (await getUserEmail(order.buyer_id));
+  await sendEmail(buyerEmail, {
+    subject: `Delivery link updated: ${order.title}`,
+    paragraphs: [
+      `The seller has changed the delivery link for "${order.title}".`,
+      ...(order.proof_url ? [`New link: ${order.proof_url}`] : []),
+      order.start_date
+        ? "Please check your ad is live. If it isn't, message the seller. Payment is released to the seller after the booking ends."
+        : `Your ${ESCROW_HOLD_DAYS}-day check starts again from now. If you don't respond within ${ESCROW_HOLD_DAYS} days, payment is released to the seller automatically. If something's wrong, message the seller before then.`,
+    ],
+    cta: { label: "Review and confirm", path: "/dashboard/purchases" },
+  });
+}
+
 export async function sendOrderCancelledEmails(orderId: string, cancelledBy: string) {
   const order = await loadOrder(orderId);
   if (!order) return;

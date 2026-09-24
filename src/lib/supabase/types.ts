@@ -172,6 +172,17 @@ export interface ListingOrder {
   created_at: string;
 }
 
+// 卖家交付后修改交付链接的记录(2026-09-24 加,见 README"卖家修改交付链接")。只由数据库
+// 函数 update_order_proof_url 写入,买卖双方能读自己订单的记录。
+export interface ListingOrderProofChange {
+  id: string;
+  order_id: string;
+  old_proof_url: string | null;
+  new_proof_url: string;
+  changed_by: string;
+  changed_at: string;
+}
+
 export interface Payment {
   id: string;
   order_id: string;
