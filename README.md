@@ -1582,6 +1582,12 @@ select has_function_privilege('anon', 'public.create_booking_order(jsonb)', 'exe
 
 #### 以后(跟"费用、取消与退款"第 6 条一起做):中途被撤下,按没展示的天数比例退款
 
+## 链接自动补 https://(2026-09-24)
+
+卖家交付时填 `youtube.com/shorts/…` 或 `www.youtube.com/…` 会被浏览器自带的网址校验拒绝,必须写完整的 `https://…` 才行。现在交付链接、社交账号链接、个人网站三处都改成普通文本框,由服务端 `src/lib/url.ts` 的 `normalizeWebUrl` 自动补 `https://` 再校验:只接受 http/https 链接,域名里必须有点。这也补上了一个漏洞:之前交付链接服务端只检查"非空",绕过前端可以存进 `javascript:` 之类的链接。
+
+目前交付方式只有链接一种;第 3a 条的初稿图片、日历订单的"上线截图"以后再加上传。
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀

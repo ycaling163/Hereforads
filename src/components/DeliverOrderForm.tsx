@@ -13,10 +13,11 @@ export function DeliverOrderForm({ orderId }: { orderId: string }) {
     <form action={formAction} className="mt-3 flex flex-col gap-2">
       <input type="hidden" name="order_id" value={orderId} />
       <input
-        type="url"
+        type="text"
+        inputMode="url"
         name="proof_url"
         required
-        placeholder="Link the buyer can check (e.g. your live post URL)"
+        placeholder="Link the buyer can check, e.g. youtube.com/shorts/…"
         className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
       />
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendOrderDeliveredEmail } from "@/lib/email/orders";
 import { bookingToday, formatBookingDate } from "@/lib/booking";
+import { normalizeWebUrl } from "@/lib/url";
 
 export interface DeliverOrderState {
   error?: string;
@@ -27,11 +28,17 @@ export async function markDeliveredAction(
   }
 
   const orderId = String(formData.get("order_id") ?? "");
-  const proofUrl = String(formData.get("proof_url") ?? "").trim();
+  const proofUrlRaw = String(formData.get("proof_url") ?? "").trim();
 
-  if (!proofUrl) {
+  if (!proofUrlRaw) {
     return { error: "Please provide a link the buyer can use to verify delivery" };
   }
+  // 卖家常只填 "youtube.com/shorts/…",自动补 https://;只接受 http/https 链接。
+  const normalizedProof = normalizeWebUrl(proofUrlRaw);
+  if ("error" in normalizedProof) {
+    return { error: normalizedProof.error };
+  }
+  const proofUrl = normalizedProof.value;
 
   const [{ data: order }, { data: profile }] = await Promise.all([
     supabase
