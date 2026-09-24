@@ -245,3 +245,18 @@
 - 新增订单邮件通知(Resend API)、订单存买家邮箱、结账前两个必勾项(条款 + 14 天取消权)、英文文件上传按钮。细节、SQL、新环境变量(`RESEND_API_KEY`、`EMAIL_FROM`)见 README"测试反馈修复(2026-09-24)"。
 - 没验证的:这个环境连不上 Supabase/Stripe/Resend,只跑了 lint + build。
 
+
+## 2026-09-24 当天后续(交接给下一个对话)
+
+已合并进 main:PR #40(My listings 封面图/Upload new ad、购买入口 登录/注册/访客 三选一、登录后接回购买)、#41(订单邮件、买家邮箱、结账勾选条款、英文上传按钮、结账出错兜底)、#42(Stripe 付款带卖家信息、admin 订单页按卖家筛选)、#43(`/admin/finance` 平台账本、新卖家每周打款、最低价约 USD 1)。本条对应的 PR:Sales 页分标签 + 日历预订规则。
+
+**线上配置状态 / 待人工确认**:
+- Production 的 `STRIPE_SECRET_KEY` 曾被误填成 Supabase key(导致结账 500),产品负责人已知悉要改回 `sk_test_…`。
+- 需要执行的 SQL:README"测试反馈修复(2026-09-24)"(buyer_email 等)、"平台记账"(payments 的 settlement 列)。
+- `RESEND_API_KEY` 要加到 Vercel;邮件进垃圾箱要加 DMARC(见 README 同一节)。
+- 第 1 批测试清单(README"实现进度 → 第 1 批")里测试 5(交付→确认→放款)、7(cron)、8(平台手动提现)还没反馈结果。
+
+**下一步(产品负责人已定)**:
+1. 写代码实现 README"日历按天预订"一节(规则已定,3 个实现细节写代码前再问)。
+2. 继续"费用、取消与退款"的后续批次(第 4 条其余几行、第 4a/5/6/7 条)。
+3. 待确认:CAD/AUD/SGD/HKD/JPY 的固定手续费金额;Terms 加 "All fees are exclusive of VAT"。
