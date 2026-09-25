@@ -356,3 +356,46 @@
 - **要人工做**:执行 README 里的两段 SQL;Supabase 密码规则 + Secure password change;Stripe webhook 加勾 `checkout.session.expired`。
 - 验证:lint + build + npm audit;SQL 在本地 Postgres 16(简化表结构)跑过两遍,测了触发器冲突/不冲突、私信策略四种情况、read_at 列权限、URL 约束。连不上 Supabase/Stripe,上传、私信、guest 成功页没实测。
 - 执行第 3 批 SQL 后核对:`social_accounts` 有一行 `url = ''`(只填账号名时代码存空字符串)。原约束不允许空字符串,会让卖家新增/修改只有账号名的社交账号报错——约束改成允许 `''`,产品负责人已按修正后的 SQL 重新执行。
+
+## 2026-09-25 第 3 批测试反馈:封面小图、Stripe 后台新标签页
+
+- 产品负责人测试第 3 批:1–6 项正常(第 7 项响应头待查)。反馈两点,已改:
+  - Sales、Purchases、Messages 列表和会话页的广告标题旁加小封面图(`ListingThumb`,封面是视频时显示第一帧),卖家/买家一眼认出是哪条广告。
+  - Payment Management 的 "View Stripe dashboard" 改成新标签页打开:普通链接指向新的 `/api/stripe/dashboard`(生成 Stripe 登录链接再跳转),删掉原来的 server action。无 SQL。
+
+## 2026-09-25 第 3 批验证完成
+
+- 产品负责人实测第 3 批 1–7 项正常;securityheaders.com 评分 A(CSP 显示缺失是因为现在是 Report-Only,预期内)。三批安全核查全部完成。
+- 待办:① 一两周后看 Vercel 日志 "CSP violation",没问题就把 CSP 改成强制(nonce);② 产品负责人提出以后要复用这套代码做"活动预订"等站点,建议第 3 批之后做一次"模板化整理"(数据库迁移文件 `supabase/migrations/`、站点配置集中、新站点上线清单),**还没排期,等产品负责人确认**;③ 切 live 前的手动清单见 README"切 live 前产品负责人要手动做的"。
+
+## 2026-09-25 当天小结(交接给下一个对话)
+
+今天一天把"切 live 前安全核查"的第 2、3 批做完并验证,加上测试中产品负责人提的几项改进。合并进 main 的 PR:
+
+| PR | 内容 | 状态 |
+|---|---|---|
+| #52 | 第 2 批:Postgres 限流表 + Cloudflare Turnstile | 已合并,已验证 |
+| #53 | 测试反馈:登录邮件额度 3→5 次/小时、显示剩余次数和重置时间、验证码文案 | 已合并,已验证 |
+| #54 | 后台新留言邮件 + Contact 未读红点 + 总览页 "N new"/"+N today";登录邮件链接改成点按钮才登录(防 Outlook 安全扫描) | 已合并 |
+| #55 | 联系页提交后只留感谢语 | 已合并 |
+| #56 | 后台留言删除按钮 | 已合并 |
+| #57 | 改日期:Stripe"返回"或重新下单时立刻释放自己未付款的日历占用 | 已合并 |
+| #58 | 文档:第 2 批验证完成 | 已合并 |
+| #59 | 第 3 批:付款时日期冲突自动退款、上传校验、安全响应头、私信规则、密码规则等 | 已合并,已验证(securityheaders.com A) |
+| #60 | 订单/消息加广告小封面图;Stripe 后台新标签页;第 3 批验证记录;本小结和模板化整理交接 | **待合并** |
+
+**线上配置(产品负责人今天都做了)**:Cloudflare Turnstile widget `hereforads`(hostnames:hereforads.com、vercel.app;Managed;secret 已轮换过一次);Vercel 加了 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`、`TURNSTILE_SECRET_KEY`、`RATE_LIMIT_SALT`;Supabase 开了 CAPTCHA(Turnstile)、密码规则(8 位 + 数字/大小写)和 Secure password change;执行了第 2 批、#54(`contact_messages.read_at`)、#57(`listing_orders.checkout_session_id`)、第 3 批的 SQL(含 `social_accounts.url` 允许空字符串的修正);Stripe webhook 勾了 `charge.dispute.closed`、`charge.refunded`、`checkout.session.expired`;`ADMIN_ALERT_EMAIL` 已配。
+
+**产品负责人今天的决定**(已写进 README 对应章节):
+- 限流额度按交接表,登录邮件每邮箱 5 次/小时;固定时间窗按整点重置。
+- 打开 `/admin/contact` 即全部已读;"今日"按英国时间 0 点;每条留言立刻邮件通知。
+- 不做订单查询加手机号、不做"把名下订单发到邮箱"。
+- 币种(8 种)和开户国家(44 个)暂不缩减,等有用户再看(风险:非美/英/EEA/加/瑞卖家放款会失败,需人工处理)。
+- 发布广告默认用收款国家币种 + 换汇提示;"Paid out" 改成 "Released to seller"。
+
+**还没做 / 待跟进**:
+1. 合并 PR #60 并看一眼封面图、Stripe 新标签页。
+2. 一两周后在 Vercel Logs 搜 "CSP violation",没有误伤就把 CSP 从 Report-Only 改成强制(script-src 换 nonce)。
+3. **模板化整理**:产品负责人要在新对话里做,范围和边界见 README"模板化整理(交接给新对话)"。
+4. 切 Stripe live 前的手动清单:README"切 live 前产品负责人要手动做的"。
+5. 更早留下的:日历订单分两次放款(40%/60%)、"费用、取消与退款"后续批次、Terms/隐私政策给律师看。

@@ -1931,7 +1931,7 @@ order by 1, 2, 3;   -- 应该只剩 listings.status 的 INSERT(发布广告时�
 
 ## 安全核查 · 第 1 批上线后的验证结果 + 第 2、3 批交接(2026-09-25)
 
-**给接手的 session**:这一节是切 Stripe live 前安全核查的交接文档。第 1 批(PR #50)已合并、SQL 已执行、测试卡验证通过;**第 2 批已上线并验证通过(2026-09-25,PR #52–#57,见"安全核查 · 第 2 批"和"第 2 批测试反馈");Supabase CAPTCHA 已开启;第 3 批已写代码,见"安全核查 · 第 3 批"**,下面的规则都已经跟产品负责人确认过,按这里实现即可。工作方式(产品负责人定的,不要改):每批一个 PR;提交前跑 `npm run lint`、`npm run build`、`npm audit`;需要的 SQL 写进 README、由产品负责人手动执行(Supabase MCP 连不上 HereForAds 的项目,只能给他 SQL 让他跑、把结果截图回来);密钥不进代码;拿不准的或会改产品规则的先问;推送 + 开 PR 后停下等确认。
+**给接手的 session**:这一节是切 Stripe live 前安全核查的交接文档。第 1 批(PR #50)已合并、SQL 已执行、测试卡验证通过;**第 2 批已上线并验证通过(2026-09-25,PR #52–#57,见"安全核查 · 第 2 批"和"第 2 批测试反馈");Supabase CAPTCHA 已开启;第 3 批已上线并验证通过(2026-09-25,PR #59/#60,见"安全核查 · 第 3 批")**,下面的规则都已经跟产品负责人确认过,按这里实现即可。工作方式(产品负责人定的,不要改):每批一个 PR;提交前跑 `npm run lint`、`npm run build`、`npm audit`;需要的 SQL 写进 README、由产品负责人手动执行(Supabase MCP 连不上 HereForAds 的项目,只能给他 SQL 让他跑、把结果截图回来);密钥不进代码;拿不准的或会改产品规则的先问;推送 + 开 PR 后停下等确认。
 
 ### 第 1 批上线后已经验证过的(2026-09-25,Stripe 测试 sandbox)
 
@@ -2436,6 +2436,12 @@ select 'social_accounts', id::text, url from public.social_accounts
 where url is not null and url <> '' and url !~* '^https?://';
 ```
 
+### 验证结果(2026-09-25,产品负责人实测)
+
+- 第 1–6 项(上传校验、私信、密码规则、guest 成功页、状态名、默认币种)正常;SQL、Supabase 密码规则、Stripe `checkout.session.expired` 都已配置。
+- 第 7 项:securityheaders.com 评分 **A**。HSTS、X-Frame-Options、X-Content-Type-Options、Referrer-Policy、Permissions-Policy 都有;"Content-Security-Policy" 显示缺失是**预期的**——现在发的是 `Content-Security-Policy-Report-Only`(只报告不拦截)。观察一两周 Vercel 日志里的 "CSP violation",没有误伤再改成强制(script-src 换成 nonce)。
+- 测试反馈后加了:订单/消息列表的广告小封面图、"View Stripe dashboard" 新标签页打开(PR #60)。
+
 ### 手动测一遍
 
 1. **上传**:发布广告时传一个 `.html` 或 `.svg` 文件(改名成 `.jpg` 也一样)→ 提示 "isn't a supported file";传一张正常 JPG、一段 MP4 → 正常;传一个超过 10MB 的文件 → 提示 "larger than 10 MB"。头像上传 MP4 → 提示只能是图片。
@@ -2446,6 +2452,21 @@ where url is not null and url <> '' and url !~* '^https?://';
 6. **默认币种**:收款国家是英国的卖家打开 "Publish a listing" → 币种默认 GBP,下面有换汇提示。
 7. **响应头**:浏览器 F12 → Network → 点任意页面请求 → Response Headers 里有 `strict-transport-security`、`x-frame-options: DENY`、`content-security-policy-report-only`。之后一周在 Vercel Logs 搜 "CSP violation",有结果截图给开发。
 8. **付款时日期冲突**(不好手动造,可以不测):触发器已在本地 Postgres 上测过;真遇到时买家和 `ADMIN_ALERT_EMAIL` 会收到邮件。
+
+## 模板化整理(交接给新对话,2026-09-25 立项,还没开始)
+
+**给接手的 session**:产品负责人打算以后把这套代码复用成别的站点(最可能是"虚拟活动预订",也提过户外用品)。已经跟产品负责人确认的方向和边界写在这里,按这里做;实现前先读 AGENTS.md、本 README 的"安全核查"三节和 WORKLOG 最后几条。工作方式跟安全核查一样:一个 PR;提交前 `npm run lint`、`npm run build`、`npm audit`;需要的 SQL/命令写清楚由产品负责人手动执行(Supabase MCP 连不上 HereForAds 的项目);拿不准的先问;推送 + 开 PR 后停下等确认。
+
+**目标**:以后复制出一个新站点时,不用翻 README 几十段 SQL,也不用满代码找品牌字样。**对现在的 hereforads.com 不能有任何功能变化。**
+
+**要做的(按优先级)**:
+1. **数据库迁移文件**(最重要):把线上真实的数据库结构(public schema 的表、列、约束、索引、函数、触发器、RLS 策略、列级权限,以及 storage bucket 设置和 storage 策略)整理成按顺序排好的 `supabase/migrations/*.sql`,在一个空的 Supabase 项目里按顺序执行就能得到一样的库。**以线上导出的结构为准**,README 里的 SQL 可能跟线上有差别(比如 2026-09-25 发现 `social_accounts.url` 会存空字符串)。需要产品负责人配合导出线上结构(新对话里给他最简单的导出步骤,比如 Supabase CLI `supabase db dump`,或在 SQL Editor 跑查询导出),拿到后在本地 Postgres 上验证能从零建起来(这个沙箱有 Postgres 16,可以 `initdb` 起一个临时实例)。不导出数据,只要结构;种子数据只放必要的(比如 `site_pages` 的默认条款如果需要)。
+2. **站点配置集中**:网站名称、logo 路径、主色、客服/发信邮箱、平台佣金和手续费、托管天数、免费取消时限、日历规则(占用分钟数、最远可订天数)等,集中到一个配置文件(比如 `src/config/site.ts`),代码里引用它;现在散落的 "HereForAds" 字样改成读配置。
+3. **新站点上线清单**:一份文档(比如 `docs/NEW_SITE_CHECKLIST.md`),按顺序列出 GitHub(新建私有仓库导入,不要 Fork)、Supabase(建项目、跑迁移、Auth 设置:Site URL/Redirect URLs、邮件模板、SMTP、CAPTCHA、密码规则)、Stripe(Connect 平台、webhook 事件列表、Branding)、Vercel(环境变量全表、域名、Cron)、Cloudflare Turnstile(hostname)、Resend(发信域名 DNS)每一步要做什么。
+
+**不做的**:不把"广告/活动/商品"抽象成可切换的多业务系统(现在只有一种业务,提前抽象会让代码变复杂);不改任何业务规则和页面行为。
+
+**以后做"活动预订"时的差异**(供参考,不是这次的任务):按场次(具体时间)而不是按天订、一场多个名额、活动所在地时区、活动结束后放款、开始前自动发参加链接和提醒、按活动定退款规则(英国"指定日期的休闲活动"不适用 14 天取消权)。账号、Stripe Connect 托管放款、拒付/退款、订单号、邮件、后台、安全防护都能直接复用。
 
 ## 部署(Vercel)
 

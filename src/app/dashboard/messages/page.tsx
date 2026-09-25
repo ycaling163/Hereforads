@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Listing, ListingMessage, Profile } from "@/lib/supabase/types";
+import { ListingThumb, coverOf } from "@/components/ListingThumb";
 
 export default async function MessagesPage() {
   const supabase = await createClient();
@@ -53,14 +54,15 @@ export default async function MessagesPage() {
 
   const [{ data: listingRows }, { data: profileRows }] = await Promise.all([
     listingIds.length
-      ? supabase.from("listings").select("id,title").in("id", listingIds)
-      : Promise.resolve({ data: [] as Pick<Listing, "id" | "title">[] }),
+      ? supabase.from("listings").select("id,title,media_urls").in("id", listingIds)
+      : Promise.resolve({ data: [] as Pick<Listing, "id" | "title" | "media_urls">[] }),
     otherUserIds.length
       ? supabase.from("profiles").select("id,display_name").in("id", otherUserIds)
       : Promise.resolve({ data: [] as Pick<Profile, "id" | "display_name">[] }),
   ]);
 
   const listingsById = new Map((listingRows ?? []).map((l) => [l.id, l.title]));
+  const coversById = new Map((listingRows ?? []).map((l) => [l.id, coverOf(l.media_urls)]));
   const namesById = new Map(
     (profileRows ?? []).map((p) => [p.id, p.display_name ?? "Anonymous"])
   );
@@ -82,30 +84,33 @@ export default async function MessagesPage() {
           <Link
             key={`${thread.listingId}:${thread.otherUserId}`}
             href={`/dashboard/messages/${thread.listingId}/${thread.otherUserId}`}
-            className={`rounded-xl border p-4 transition-colors hover:bg-zinc-50 ${
+            className={`flex items-center gap-3 rounded-xl border p-4 transition-colors hover:bg-zinc-50 ${
               thread.hasUnread ? "border-zinc-300 bg-zinc-50" : "border-zinc-200"
             }`}
           >
-            <div className="flex items-center justify-between gap-2">
-              <p className="flex items-center gap-2 font-medium text-zinc-900">
-                {namesById.get(thread.otherUserId) ?? "Anonymous"}
-                {thread.hasUnread && (
-                  <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-                    New
-                  </span>
-                )}
+            <ListingThumb url={coversById.get(thread.listingId)} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <p className="flex items-center gap-2 font-medium text-zinc-900">
+                  {namesById.get(thread.otherUserId) ?? "Anonymous"}
+                  {thread.hasUnread && (
+                    <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                      New
+                    </span>
+                  )}
+                </p>
+                <span className="text-xs text-zinc-400">
+                  {listingsById.get(thread.listingId) ?? "Listing"}
+                </span>
+              </div>
+              <p
+                className={`mt-1 line-clamp-1 text-sm ${
+                  thread.hasUnread ? "font-semibold text-zinc-800" : "text-zinc-500"
+                }`}
+              >
+                {thread.lastMessage.body || (thread.lastMessage.image_url ? "📷 Photo" : "")}
               </p>
-              <span className="text-xs text-zinc-400">
-                {listingsById.get(thread.listingId) ?? "Listing"}
-              </span>
             </div>
-            <p
-              className={`mt-1 line-clamp-1 text-sm ${
-                thread.hasUnread ? "font-semibold text-zinc-800" : "text-zinc-500"
-              }`}
-            >
-              {thread.lastMessage.body || (thread.lastMessage.image_url ? "📷 Photo" : "")}
-            </p>
           </Link>
         ))}
       </div>

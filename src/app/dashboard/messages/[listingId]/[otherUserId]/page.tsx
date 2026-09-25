@@ -5,6 +5,7 @@ import { ReplyForm } from "@/components/ReplyForm";
 import { replyToThreadAction } from "../../actions";
 import type { ListingMessage } from "@/lib/supabase/types";
 import { UUID_PATTERN } from "@/lib/messages";
+import { ListingThumb, coverOf } from "@/components/ListingThumb";
 
 export default async function MessageThreadPage({
   params,
@@ -25,7 +26,7 @@ export default async function MessageThreadPage({
 
   const [{ data: listing }, { data: otherProfile }, { data: messageRows }] =
     await Promise.all([
-      supabase.from("listings").select("id,title").eq("id", listingId).maybeSingle(),
+      supabase.from("listings").select("id,title,media_urls").eq("id", listingId).maybeSingle(),
       supabase
         .from("profiles")
         .select("id,display_name")
@@ -66,8 +67,9 @@ export default async function MessageThreadPage({
       {listing && (
         <Link
           href={`/listings/${listing.id}`}
-          className="text-sm text-zinc-500 hover:underline"
+          className="mt-1 flex items-center gap-2 text-sm text-zinc-500 hover:underline"
         >
+          <ListingThumb url={coverOf(listing.media_urls)} size={40} />
           Re: {listing.title}
         </Link>
       )}
