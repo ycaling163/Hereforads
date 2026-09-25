@@ -91,7 +91,7 @@ export function LoginForm({ next, startWithCode }: { next?: string; startWithCod
   );
 }
 
-// 免密码登录(没设过密码的 guest 买家,或者忘了密码的人):发一封带登录链接和 6 位验证码的
+// 免密码登录(没设过密码的 guest 买家,或者忘了密码的人):发一封带登录链接和验证码(位数按 Supabase 设置,目前是 8 位)的
 // 邮件;点链接,或者回到这里填验证码都能登录。默认收起。
 function SignInLinkForm({ next, startWithCode }: { next?: string; startWithCode?: boolean }) {
   const [open, setOpen] = useState(!!startWithCode);
@@ -164,7 +164,11 @@ function SignInLinkForm({ next, startWithCode }: { next?: string; startWithCode?
           {linkState.sent && (
             <p className="text-sm text-green-700">
               If there&apos;s an account for that email, we&apos;ve sent a sign-in link and a
-              6-digit code. Click the link, or enter the code here. (Check your spam folder too.)
+              code. Click the link, or enter the code here — either one works, once. (Check
+              your spam folder too.)
+              {linkState.quotaNote && (
+                <span className="mt-1 block text-xs text-zinc-500">{linkState.quotaNote}</span>
+              )}
             </p>
           )}
           {next && <input type="hidden" name="next" value={next} />}
@@ -182,7 +186,7 @@ function SignInLinkForm({ next, startWithCode }: { next?: string; startWithCode?
             className={inputClass}
           />
           <label htmlFor="code" className="text-sm font-medium text-zinc-700">
-            6-digit code
+            Code from the email
           </label>
           <input
             id="code"

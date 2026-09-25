@@ -15,7 +15,9 @@ export default async function LoginPage({
         </h1>
         {error === "invalid_link" && (
           <p className="mb-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">
-            That link is invalid or has expired — log in below, or ask for a new sign-in link.
+            That link has already been used or has expired. Each sign-in email&apos;s link and
+            code work once — if you already entered the code, you&apos;re signed in on that
+            device. Otherwise ask for a new sign-in email below.
           </p>
         )}
         {error === "oauth_failed" && (

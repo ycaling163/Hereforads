@@ -46,15 +46,49 @@ export interface RateLimitRule {
   windowSeconds: number;
 }
 
-/** 每条规则各加一次计数;任何一条超额就返回 false。出错的规则当成没超额。 */
-export async function checkRateLimits(rules: RateLimitRule[]): Promise<boolean> {
+export interface RateLimitResult {
+  allowed: boolean;
+  /** 所有规则里最少的剩余次数(这次已经算进去);查不到计数(出错、没配盐)时为 null。 */
+  remaining: number | null;
+  /** 计数重新开始的时间(当前时间窗结束)。 */
+  resetAt: Date;
+  /** 超额时给用户看的提示,带上可以再试的时间。 */
+  message: string;
+}
+
+/** 当前固定时间窗的开始时间,跟数据库函数 rate_limit_hit 的算法一致。 */
+function windowStart(windowSeconds: number, now = Date.now()): Date {
+  const size = windowSeconds * 1000;
+  return new Date(Math.floor(now / size) * size);
+}
+
+const UK_TIME = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Europe/London",
+});
+
+/** "18:00 UK time" */
+export function formatUkTime(date: Date): string {
+  return `${UK_TIME.format(date)} UK time`;
+}
+
+/**
+ * 每条规则各加一次计数;任何一条超额就不允许。出错的规则当成没超额。
+ * 顺带查出剩余次数和重新计数的时间,给页面提示"还能再试几次 / 几点以后再试"。
+ */
+export async function checkRateLimits(rules: RateLimitRule[]): Promise<RateLimitResult> {
   const results = await Promise.all(
     rules.map(async (rule) => {
-      if (!rule.value) return true;
+      const start = windowStart(rule.windowSeconds);
+      const resetAt = new Date(start.getTime() + rule.windowSeconds * 1000);
+      const unknown = { allowed: true, remaining: null as number | null, resetAt };
+      if (!rule.value) return unknown;
       const key = hashIdentifier(rule.kind, rule.value);
-      if (!key) return true;
+      if (!key) return unknown;
       try {
-        const { data, error } = await createServiceClient().rpc("rate_limit_hit", {
+        const service = createServiceClient();
+        const { data, error } = await service.rpc("rate_limit_hit", {
           p_bucket: rule.bucket,
           p_key: key,
           p_limit: rule.limit,
@@ -62,20 +96,41 @@ export async function checkRateLimits(rules: RateLimitRule[]): Promise<boolean> 
         });
         if (error) {
           console.error(`Rate limit check failed (${rule.bucket}), allowing:`, error.message);
-          return true;
+          return unknown;
         }
         if (data === false) {
           console.warn(`Rate limit exceeded: ${rule.bucket}`);
-          return false;
+          return { allowed: false, remaining: 0, resetAt };
         }
-        return true;
+        // 只用来显示"还剩几次",查不到不影响放行。
+        const { data: row } = await service
+          .from("rate_limits")
+          .select("hits")
+          .eq("bucket", rule.bucket)
+          .eq("key_hash", key)
+          .eq("window_start", start.toISOString())
+          .maybeSingle();
+        const remaining = row ? Math.max(0, rule.limit - row.hits) : null;
+        return { allowed: true, remaining, resetAt };
       } catch (err) {
         console.error(`Rate limit check failed (${rule.bucket}), allowing:`, err);
-        return true;
+        return unknown;
       }
     })
   );
-  return results.every(Boolean);
+
+  const allowed = results.every((r) => r.allowed);
+  const blocking = allowed ? results : results.filter((r) => !r.allowed);
+  const resetAt = new Date(
+    Math.max(Date.now(), ...blocking.map((r) => r.resetAt.getTime()))
+  );
+  const known = results.map((r) => r.remaining).filter((r): r is number => r !== null);
+  return {
+    allowed,
+    remaining: known.length ? Math.min(...known) : null,
+    resetAt,
+    message: `Too many attempts — please try again after ${formatUkTime(resetAt)}.`,
+  };
 }
 
 const HOUR = 60 * 60;
@@ -85,7 +140,8 @@ const QUARTER_HOUR = 15 * 60;
 export const LIMITS = {
   signInLink: (ip: string | null, email: string) => [
     { bucket: "signin_link:ip", kind: "ip", value: ip, limit: 5, windowSeconds: HOUR },
-    { bucket: "signin_link:email", kind: "email", value: email, limit: 3, windowSeconds: HOUR },
+    // 2026-09-25 产品负责人测试后从 3 次调到 5 次。
+    { bucket: "signin_link:email", kind: "email", value: email, limit: 5, windowSeconds: HOUR },
   ],
   verifyCode: (ip: string | null, email: string) => [
     { bucket: "verify_code:ip", kind: "ip", value: ip, limit: 10, windowSeconds: QUARTER_HOUR },
@@ -102,5 +158,3 @@ export const LIMITS = {
     { bucket: "contact:ip", kind: "ip", value: ip, limit: 5, windowSeconds: HOUR },
   ],
 } satisfies Record<string, (...args: never[]) => RateLimitRule[]>;
-
-export const RATE_LIMITED_MESSAGE = "Too many attempts — please wait a while and try again.";

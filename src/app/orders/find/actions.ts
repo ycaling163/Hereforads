@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase/service";
 import { parseOrderNumber } from "@/lib/orders/orderNumber";
-import { LIMITS, RATE_LIMITED_MESSAGE, checkRateLimits, clientIp } from "@/lib/security/rateLimit";
+import { LIMITS, checkRateLimits, clientIp } from "@/lib/security/rateLimit";
 import {
   TURNSTILE_FAILED_MESSAGE,
   turnstileToken,
@@ -33,8 +33,9 @@ export async function findOrderAction(
 
   // 订单号是连续的,知道某人邮箱就能挨个试:按 IP 限流 + Turnstile(我们自己校验)。
   const ip = await clientIp();
-  if (!(await checkRateLimits(LIMITS.findOrder(ip)))) {
-    return { error: RATE_LIMITED_MESSAGE };
+  const limit = await checkRateLimits(LIMITS.findOrder(ip));
+  if (!limit.allowed) {
+    return { error: limit.message };
   }
   if (!(await verifyTurnstile(turnstileToken(formData), ip))) {
     return { error: TURNSTILE_FAILED_MESSAGE };

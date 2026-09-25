@@ -6,7 +6,7 @@ import { ensureProfile } from "@/lib/supabase/ensure-profile";
 import { safeRedirectPath } from "@/lib/safeRedirect";
 import { sendSignInLink } from "@/lib/orders/signInLink";
 import { EMAIL_PATTERN } from "@/lib/supabase/guest-checkout";
-import { LIMITS, RATE_LIMITED_MESSAGE, checkRateLimits, clientIp } from "@/lib/security/rateLimit";
+import { LIMITS, checkRateLimits, clientIp, formatUkTime } from "@/lib/security/rateLimit";
 import {
   TURNSTILE_FAILED_MESSAGE,
   missingSupabaseCaptcha,
@@ -64,6 +64,8 @@ export async function loginAction(
 export interface SignInLinkState {
   error?: string;
   sent?: boolean;
+  /** 发送成功后提示"这个小时还能再要几封"(产品负责人 2026-09-25 测试后要求)。 */
+  quotaNote?: string;
 }
 
 // 免密码登录:给已有账号发一封登录链接。主要给 guest 买家用——他们下单时建的账号没有
@@ -81,8 +83,9 @@ export async function sendSignInLinkAction(
   if (missingSupabaseCaptcha(captchaToken)) {
     return { error: TURNSTILE_FAILED_MESSAGE };
   }
-  if (!(await checkRateLimits(LIMITS.signInLink(await clientIp(), email)))) {
-    return { error: RATE_LIMITED_MESSAGE };
+  const limit = await checkRateLimits(LIMITS.signInLink(await clientIp(), email));
+  if (!limit.allowed) {
+    return { error: limit.message };
   }
   const result = await sendSignInLink(email, captchaToken);
   if (result === "rate_limited") {
@@ -91,7 +94,13 @@ export async function sendSignInLinkAction(
   if (result === "captcha_failed") {
     return { error: TURNSTILE_FAILED_MESSAGE };
   }
-  return { sent: true };
+  const quotaNote =
+    limit.remaining === null
+      ? undefined
+      : limit.remaining === 0
+        ? `That was the last sign-in email you can ask for until ${formatUkTime(limit.resetAt)}.`
+        : `You can ask for ${limit.remaining} more sign-in email${limit.remaining === 1 ? "" : "s"} before ${formatUkTime(limit.resetAt)}.`;
+  return { sent: true, quotaNote };
 }
 
 export interface VerifyCodeState {
@@ -115,8 +124,9 @@ export async function verifySignInCodeAction(
   // Supabase 的 /verify 接口不校验 CAPTCHA,这个入口由我们自己校验 Turnstile。
   // 先限流再校验,刷接口的请求不用每次都去问 Cloudflare。
   const ip = await clientIp();
-  if (!(await checkRateLimits(LIMITS.verifyCode(ip, email)))) {
-    return { error: RATE_LIMITED_MESSAGE };
+  const limit = await checkRateLimits(LIMITS.verifyCode(ip, email));
+  if (!limit.allowed) {
+    return { error: limit.message };
   }
   if (!(await verifyTurnstile(turnstileToken(formData), ip))) {
     return { error: TURNSTILE_FAILED_MESSAGE };
@@ -125,7 +135,15 @@ export async function verifySignInCodeAction(
   const supabase = await createClient();
   const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
   if (error || !data.user) {
-    return { error: "That code is wrong or has expired — ask for a new sign-in email" };
+    const attemptsLeft =
+      limit.remaining === null
+        ? ""
+        : limit.remaining === 0
+          ? ` No attempts left until ${formatUkTime(limit.resetAt)}.`
+          : ` ${limit.remaining} attempt${limit.remaining === 1 ? "" : "s"} left.`;
+    return {
+      error: `That code is wrong, has expired, or was already used (each email's link and code work once, and asking for a new email cancels the old one).${attemptsLeft}`,
+    };
   }
 
   await ensureProfile(supabase, data.user);

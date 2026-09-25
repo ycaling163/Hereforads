@@ -315,3 +315,9 @@
 - 跟交接文档不同的一处:Supabase 的 `/verify`(`verifyOtp`)不校验 CAPTCHA(查了 supabase/auth 源码 `internal/api/api.go`),所以验证码登录改成我们服务端校验 Turnstile。
 - **要人工做**(顺序不能乱):Cloudflare 建 Turnstile widget → Vercel 加 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`、`TURNSTILE_SECRET_KEY`、`RATE_LIMIT_SALT` → 合并部署 → 执行 SQL → 手动测 → **最后**才开 Supabase CAPTCHA。
 - 验证:lint + build + npm audit;SQL 在本地 Postgres 16(简化表结构)跑过两遍,核对了限流计数、权限、占用上限、日期重叠;本地 dev 验证了没有 token 时服务端拒绝、限流表连不上时放行。这个沙箱连不上 Cloudflare 和 Supabase,Turnstile 组件的真实渲染和 Supabase CAPTCHA 没有实测。
+
+## 2026-09-25 第 2 批测试反馈(同分支,PR #52 合并之后的跟进)
+
+- 产品负责人实测:联系表单第 6 条被拦(第一次 8 条没拦是跨整点)、登录链接/验证码、订单页登录链接、guest 下单、密码登录都正常。日历(B8)、找订单(B3)还没测;Supabase CAPTCHA 还没开。
+- 按反馈改:登录链接每邮箱 3→5 次/小时 + 显示剩余次数和重置时间;限流提示带"几点以后再试";验证码输错显示剩余次数;"6-digit code" 文案改掉(实际 8 位);`/auth/confirm` 链接失效但已登录时直接进 Purchases。无 SQL。见 README"第 2 批测试反馈"。
+- 待产品负责人回答:后台新留言邮件通知 / Contact 未读红点 / 总览页未读数和今日新增用户(已读怎么算、"今日"按英国时间、邮件频率);是否把 `/auth/confirm` 改成"点按钮才登录"防邮箱安全扫描预先点开链接。
