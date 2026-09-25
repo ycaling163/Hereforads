@@ -399,3 +399,12 @@
 3. **模板化整理**:产品负责人要在新对话里做,范围和边界见 README"模板化整理(交接给新对话)"。
 4. 切 Stripe live 前的手动清单:README"切 live 前产品负责人要手动做的"。
 5. 更早留下的:日历订单分两次放款(40%/60%)、"费用、取消与退款"后续批次、Terms/隐私政策给律师看。
+
+## 2026-09-25 模板化整理(分支 `claude/confident-knuth-8uaa9b`)
+
+- 按 README"模板化整理"交接做了三件事:① `supabase/migrations/` 6 个迁移文件,以线上导出为准(产品负责人在 SQL Editor 跑 `supabase/scripts/export_schema.sql` 导出);② `src/config/site.ts` 集中品牌和业务参数,代码里的 "HereForAds"/"HFA-"/bucket 名/费率/天数都改成读配置,数值不变;③ `docs/NEW_SITE_CHECKLIST.md` 新站点上线清单。
+- 导出工具第一版在线上报 `must be owner of table buckets`(storage 表不归 SQL Editor 的角色所有),改成每类单独执行、出错只写在那一行,第二次导出成功。
+- 产品负责人决定:老流程 5 张表不进迁移,存档到 `supabase/legacy/`,线上不动;下面两处线上问题迁移用修正版、线上补执行 SQL。
+- **线上发现两处跟记录不一致**:`social_accounts_url_http` 约束缺 `url = ''`(只填账号名的社交账号现在会保存失败,WORKLOG 之前记"已修正"但线上不是);`get_user_id_by_email` 还能被 anon/authenticated 调用(按邮箱查用户 ID)。**要人工执行** README"模板化整理"里的那段 SQL。
+- 产品负责人把导出的 CSV 直接传到了 `main`(`src/lib/supabase/scripts/`,没被代码引用,不影响网站);这个 PR 里删掉了。
+- 验证:本地 Postgres 16 模拟 Supabase,跑迁移后导出跟线上逐条对比一致(除两处修正和老表);权限实测;改动前后各 build + start,9 个公开页面 HTML 和两个图标一致;lint、build、npm audit。迁移还没在真正的 Supabase 新项目跑过。
