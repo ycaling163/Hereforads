@@ -2497,6 +2497,8 @@ select
 
 执行后测:① `/dashboard/profile` 只填账号名(不填链接)添加一个社交账号,能保存;② 不登录用一个**已注册过的邮箱**走 guest 下单到 Stripe 付款页(用到这个函数),正常跳转。
 
+**已完成(2026-09-25)**:产品负责人已在线上执行,核对结果正确(`url = ''`、false、false、true),上面两项测试都通过。
+
 ### 怎么验证的
 
 - **迁移 = 线上**:本地 Postgres 16 模拟 Supabase 环境(anon/authenticated/service_role 角色、auth/storage schema、Supabase 的默认权限),空库按顺序跑 6 个迁移,再用导出工具导出,跟线上导出逐段逐条对比:类型、序列、表、约束、外键、索引、函数、触发器、RLS、策略、storage 策略、表/列/函数权限、bucket 全部一致,差别只有上面两处修正和老流程的表。另外用 SQL 实测了权限:匿名能看上架广告、看不到联系留言;登录用户能发布广告、改不了 status/is_banned、读不到订单的买家邮箱列、调不了 `get_user_id_by_email`;service_role 调 `create_booking_order` 能下单,订单号 HFA-000001。
