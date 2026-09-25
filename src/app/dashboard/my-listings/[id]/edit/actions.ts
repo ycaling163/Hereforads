@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { checkUpload, isOwnStorageUrl } from "@/lib/uploads";
 import { parseListingFormFields } from "@/lib/listingFormValidation";
 import { storagePathFromPublicUrl } from "@/lib/storage";
 import type { ListingFormState } from "@/components/ListingForm";
@@ -53,20 +54,22 @@ export async function updateListingAction(
   const mediaFiles = formData
     .getAll("media")
     .filter((entry): entry is File => entry instanceof File && entry.size > 0);
-  const ownedMediaMarker = `/object/public/${MEDIA_BUCKET}/${user.id}/`;
   const keptMediaUrls = formData
     .getAll("existing_media")
     .map(String)
-    .filter((url) => url.includes(ownedMediaMarker));
+    .filter((url) => isOwnStorageUrl(url, MEDIA_BUCKET, user.id));
 
   const mediaUrls: string[] = [...keptMediaUrls];
   try {
     for (const file of mediaFiles) {
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `${user.id}/listings/${randomUUID()}.${ext}`;
+      const checked = await checkUpload(file, "listing_media");
+      if (!checked.ok) {
+        return { error: checked.error };
+      }
+      const path = `${user.id}/listings/${randomUUID()}.${checked.ext}`;
       const { error: uploadError } = await supabase.storage
         .from(MEDIA_BUCKET)
-        .upload(path, file, { contentType: file.type || undefined });
+        .upload(path, file, { contentType: checked.contentType });
 
       if (uploadError) {
         return { error: `Media upload failed: ${uploadError.message}` };

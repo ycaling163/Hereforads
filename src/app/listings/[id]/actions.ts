@@ -10,6 +10,8 @@ import type { Listing } from "@/lib/supabase/types";
 import { fromMinorUnits, isSupportedCurrency, toMinorUnits } from "@/lib/fees";
 import { formatOrderNumber } from "@/lib/orders/orderNumber";
 import { releaseBuyerHoldsOnListing } from "@/lib/orders/releaseHold";
+import { checkUpload } from "@/lib/uploads";
+import { UUID_PATTERN } from "@/lib/messages";
 import {
   LIMITS,
   checkRateLimits,
@@ -324,7 +326,9 @@ async function startCheckout(
     },
     success_url: user
       ? `${SITE_URL}/dashboard/purchases?checkout=success`
-      : `${SITE_URL}/checkout/guest-success?email=${encodeURIComponent(buyerEmail ?? "")}`,
+      : // 不把邮箱放进 URL(会进浏览器历史和日志),页面按 session_id 去 Stripe 查,只显示
+        // 打码后的邮箱(安全核查第 3 批第 21 条)。{CHECKOUT_SESSION_ID} 由 Stripe 替换。
+        `${SITE_URL}/checkout/guest-success?session_id={CHECKOUT_SESSION_ID}`,
     // 日历订单:点 Stripe 页面上的"返回"先经过 /api/checkout/cancelled,立刻释放这段日期
     // 并把选过的日期带回广告页,买家可以直接改。
     cancel_url: booking
@@ -388,6 +392,9 @@ export async function sendListingMessageAction(
     return { error: "Write a message or attach a photo" };
   }
 
+  if (!UUID_PATTERN.test(listingId)) {
+    return { error: "Listing not found" };
+  }
   const { data: listing, error: listingError } = await supabase
     .from("listings")
     .select("seller_id")
@@ -403,11 +410,14 @@ export async function sendListingMessageAction(
 
   let imageUrl: string | null = null;
   if (hasImage && imageFile instanceof File) {
-    const ext = imageFile.name.split(".").pop() || "jpg";
-    const path = `${user.id}/messages/${randomUUID()}.${ext}`;
+    const checked = await checkUpload(imageFile, "image");
+    if (!checked.ok) {
+      return { error: checked.error };
+    }
+    const path = `${user.id}/messages/${randomUUID()}.${checked.ext}`;
     const { error: uploadError } = await supabase.storage
       .from(MESSAGE_MEDIA_BUCKET)
-      .upload(path, imageFile, { contentType: imageFile.type || undefined });
+      .upload(path, imageFile, { contentType: checked.contentType });
 
     if (uploadError) {
       return { error: `Photo upload failed: ${uploadError.message}` };

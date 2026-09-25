@@ -50,7 +50,7 @@ const TABS: {
     key: "completed",
     label: "Completed",
     sections: [
-      { title: "Paid out", statuses: ["confirmed", "released", "expired_auto_confirmed"] },
+      { title: "Released to your Stripe account", statuses: ["confirmed", "released", "expired_auto_confirmed"] },
     ],
     empty: "No completed orders yet.",
   },

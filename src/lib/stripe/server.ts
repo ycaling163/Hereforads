@@ -1,3 +1,4 @@
+import "server-only";
 import Stripe from "stripe";
 
 // 单例,避免每次 import 都重新解析 API 版本/建连接。这个 key 是 secret key,

@@ -4,7 +4,7 @@ import { stripe } from "@/lib/stripe/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { calculateFees, formatMoney, fromMinorUnits, toMinorUnits } from "@/lib/fees";
 import { sendOrderPaidEmails } from "@/lib/email/orders";
-import { sendAdminAlert } from "@/lib/email/send";
+import { getUserEmail, sendAdminAlert, sendEmail } from "@/lib/email/send";
 import { recordSettlement } from "@/lib/stripe/settlement";
 import { formatOrderNumber } from "@/lib/orders/orderNumber";
 import {
@@ -21,6 +21,7 @@ import {
 // - account.updated(经典 v1 事件):卖家 Connect 账户状态
 // - charge.dispute.created / charge.dispute.closed:拒付 → 暂停放款、通知管理员
 // - charge.refunded:Stripe 后台手动退款 → 同步订单,保证这笔钱不会再转给卖家
+// - checkout.session.expired:付款链接过期 → 立刻释放日历订单占用的日期(安全核查第 3 批)
 //
 // 重试语义(安全核查第 1 批):数据库读写失败时抛异常 → 返回 500,让 Stripe 自动重试;
 // 每个分支都是幂等的(条件更新 + payments 唯一索引),重复投递、并发投递都安全。以前
@@ -61,6 +62,9 @@ export async function POST(request: Request) {
         break;
       case "charge.refunded":
         await handleChargeRefunded(event.data.object);
+        break;
+      case "checkout.session.expired":
+        await handleCheckoutExpired(event.data.object);
         break;
       default:
         break;
@@ -116,7 +120,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   const { data: order, error: orderFetchError } = await supabase
     .from("listing_orders")
-    .select("amount,currency,status,buyer_id,buyer_email")
+    .select("amount,currency,status,buyer_id,buyer_email,start_date,cancel_reason,order_number")
     .eq("id", orderId)
     .maybeSingle();
   if (orderFetchError) {
@@ -124,6 +128,16 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   }
   if (!order) {
     console.error("Order not found for checkout session:", orderId, session.id);
+    return;
+  }
+  // 日历订单付款时发现日期已被别人订走、已经取消了,但上次退款没成功:重试退款(幂等)。
+  if (order.status === "cancelled" && order.cancel_reason === BOOKING_CONFLICT) {
+    // 同一事件重复投递、退款其实已经成功的,不再退、不再发邮件。
+    if (paymentIntentId) {
+      const refunds = await stripe.refunds.list({ payment_intent: paymentIntentId, limit: 10 });
+      if (refunds.data.some((r) => r.status !== "failed" && r.status !== "canceled")) return;
+    }
+    await refundBookingConflict(orderId, paymentIntentId, order);
     return;
   }
   // 重复投递:订单已经推进过了。
@@ -222,6 +236,25 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     .eq("id", orderId)
     .eq("status", "pending_payment")
     .select("id");
+  // 日历订单:数据库触发器在推进到 paid_in_escrow 时锁住这条广告、再查一次日期重叠
+  // (安全核查第 3 批第 10 条)。付款链接快过期时付款、webhook 又延迟,占用期可能已经过了,
+  // 别人订了同一段日期并先付了款——这时这一单不进托管,全额退款并通知买家和管理员。
+  if (updateError?.message.includes(BOOKING_CONFLICT)) {
+    const { error: cancelError } = await supabase
+      .from("listing_orders")
+      .update({
+        status: "cancelled",
+        cancelled_at: new Date().toISOString(),
+        cancel_reason: BOOKING_CONFLICT,
+      })
+      .eq("id", orderId)
+      .eq("status", "pending_payment");
+    if (cancelError) {
+      throw new Error(`Failed to cancel conflicting booking: ${cancelError.message}`);
+    }
+    await refundBookingConflict(orderId, paymentIntentId, order);
+    return;
+  }
   if (updateError) {
     throw new Error(`Failed to mark order paid_in_escrow: ${updateError.message}`);
   }
@@ -250,6 +283,65 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   // 订单确认邮件(买家 + 卖家)。上面的条件更新 + 影响行数检查保证每单只会走到这里一次。
   await sendOrderPaidEmails(orderId);
+}
+
+const BOOKING_CONFLICT = "booking_conflict";
+
+// 日历订单付款时日期已被别人订走:全额退款(幂等 key,webhook 重试不会退两次),再通知
+// 买家和管理员。退款失败抛异常 → 500 → Stripe 重试这个事件,走上面"已取消但要重试退款"的分支。
+// 退款成功后 Stripe 会发 charge.refunded,handleChargeRefunded 看到订单已取消,把 payments
+// 那一行标成 refunded。
+async function refundBookingConflict(
+  orderId: string,
+  paymentIntentId: string | null,
+  order: { buyer_id: string; buyer_email: string | null; order_number: number | null }
+) {
+  if (!paymentIntentId) {
+    await sendAdminAlert("Booking conflict — refund needed", [
+      `Order ${orderId} was paid but its dates had already been booked. There's no payment intent on the checkout session, so it could not be refunded automatically — please refund it in Stripe.`,
+    ]);
+    return;
+  }
+  const refund = await stripe.refunds.create(
+    {
+      payment_intent: paymentIntentId,
+      reason: "duplicate",
+      metadata: { order_id: orderId, cancel_reason: BOOKING_CONFLICT },
+    },
+    { idempotencyKey: `order-${orderId}-booking-conflict-refund` }
+  );
+
+  const orderNumber = formatOrderNumber(order.order_number) || orderId.slice(0, 8);
+  const buyerEmail = order.buyer_email ?? (await getUserEmail(order.buyer_id));
+  await sendEmail(buyerEmail, {
+    subject: `Your booking ${orderNumber} couldn't be confirmed — full refund issued`,
+    paragraphs: [
+      "Sorry — the dates you paid for were booked by someone else just before your payment went through, so we couldn't confirm your booking.",
+      "We've refunded the full amount to your card. Refunds usually appear within 5–10 business days. You're welcome to pick other dates on the listing.",
+    ],
+    details: [["Order", orderNumber]],
+    cta: { label: "Browse ad spaces", path: "/listings" },
+  });
+  await sendAdminAlert(`Booking conflict on order ${orderNumber} — refunded`, [
+    `Order ${orderNumber} was paid after its dates had already been booked by another paid order. It was cancelled and fully refunded automatically (refund ${refund.id}). No action needed unless the buyer gets in touch.`,
+  ]);
+}
+
+// 付款链接过期(买家没付款):立刻释放日历订单占用的日期,不用等 hold_expires_at。
+// 需要在 Stripe 后台 webhook endpoint 勾上 checkout.session.expired(见 README 第 3 批)。
+async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
+  const orderId = session.metadata?.order_id ?? session.client_reference_id;
+  if (!orderId) return;
+  const { error } = await createServiceClient()
+    .from("listing_orders")
+    .update({ hold_expires_at: new Date().toISOString() })
+    .eq("id", orderId)
+    .eq("status", "pending_payment")
+    .not("start_date", "is", null)
+    .gt("hold_expires_at", new Date().toISOString());
+  if (error) {
+    throw new Error(`Failed to release hold for expired checkout: ${error.message}`);
+  }
 }
 
 function paymentIntentIdOf(

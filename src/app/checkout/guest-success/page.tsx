@@ -1,4 +1,32 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { stripe } from "@/lib/stripe/server";
+
+export const metadata: Metadata = {
+  title: "Payment received",
+  robots: { index: false, follow: false },
+  referrer: "no-referrer",
+};
+
+const SESSION_ID_PATTERN = /^cs_(test|live)_[A-Za-z0-9]+$/;
+
+/** "kc•••@hotmail.co.uk":只露出前两个字符和域名。 */
+function maskEmail(email: string): string {
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return "your email";
+  return `${local.slice(0, 2)}•••@${domain}`;
+}
+
+async function checkoutEmail(sessionId: string | undefined): Promise<string | null> {
+  if (!sessionId || !SESSION_ID_PATTERN.test(sessionId)) return null;
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const email = session.customer_details?.email ?? session.customer_email;
+    return email ? maskEmail(email) : null;
+  } catch {
+    return null;
+  }
+}
 
 // Guest(没登录)下单付款成功后的落地页 —— 不能像登录用户那样跳
 // /dashboard/purchases(guest 这个浏览器里没有 session,会被弹去 /login),
@@ -6,9 +34,10 @@ import Link from "next/link";
 export default async function GuestCheckoutSuccessPage({
   searchParams,
 }: {
-  searchParams: Promise<{ email?: string }>;
+  searchParams: Promise<{ session_id?: string }>;
 }) {
-  const { email } = await searchParams;
+  const { session_id } = await searchParams;
+  const email = await checkoutEmail(session_id);
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center px-6 py-16 text-center">

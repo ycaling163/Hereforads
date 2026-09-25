@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ListingForm } from "@/components/ListingForm";
 import type { Listing, SocialAccount } from "@/lib/supabase/types";
 import { createListingAction } from "./actions";
+import { defaultCurrencyForCountry } from "@/lib/stripe/countries";
 
 export default async function NewListingPage({
   searchParams,
@@ -24,7 +25,7 @@ export default async function NewListingPage({
     await Promise.all([
       supabase
         .from("profiles")
-        .select("stripe_onboarded")
+        .select("stripe_onboarded,country")
         .eq("id", user.id)
         .single(),
       supabase
@@ -79,6 +80,7 @@ export default async function NewListingPage({
           duplicatedFromTitle={sourceListing?.title}
           socialAccounts={(socialAccounts ?? []) as SocialAccount[]}
           websiteUrl={sellerProfile?.website_url ?? null}
+          defaultCurrency={defaultCurrencyForCountry(profile?.country)}
           submitLabel="Publish"
           pendingLabel="Publishing…"
         />

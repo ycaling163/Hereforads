@@ -210,7 +210,7 @@ export default async function AdminFinancePage({
   const cards: { label: string; value: string; hint: string }[] = [
     { label: "Buyers paid", value: formatTotals(totals.received), hint: "What landed in the platform's Stripe balance" },
     { label: "Owed to sellers (in escrow)", value: formatTotals(totals.escrowOwed), hint: "Not the platform's money — pay out on release" },
-    { label: "Paid out to sellers", value: formatTotals(totals.paidOut), hint: "Transfers already sent" },
+    { label: "Released to sellers", value: formatTotals(totals.paidOut), hint: "Transfers already sent to sellers' Stripe accounts" },
     { label: "Refunded to buyers", value: formatTotals(totals.refunded), hint: "Cancelled orders" },
     { label: "Platform fees earned", value: formatTotals(totals.platformFees), hint: `${SERVICE_FEE_RATE * 100}% service fee + processing fee` },
     { label: "Stripe fees paid", value: formatTotals(totals.stripeFees), hint: "Stripe's real cost, incl. refunded orders" },

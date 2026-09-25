@@ -3,6 +3,8 @@
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { checkMessageAllowed } from "@/lib/messages";
+import { checkUpload } from "@/lib/uploads";
 
 // 私信图片复用已有的 ad-space-photos bucket,不用新建。
 const MESSAGE_MEDIA_BUCKET = "ad-space-photos";
@@ -34,13 +36,21 @@ export async function replyToThreadAction(
     return { error: "Write a message or attach a photo" };
   }
 
+  const notAllowed = await checkMessageAllowed(supabase, listingId, user.id, otherUserId);
+  if (notAllowed) {
+    return { error: notAllowed };
+  }
+
   let imageUrl: string | null = null;
   if (hasImage && imageFile instanceof File) {
-    const ext = imageFile.name.split(".").pop() || "jpg";
-    const path = `${user.id}/messages/${randomUUID()}.${ext}`;
+    const checked = await checkUpload(imageFile, "image");
+    if (!checked.ok) {
+      return { error: checked.error };
+    }
+    const path = `${user.id}/messages/${randomUUID()}.${checked.ext}`;
     const { error: uploadError } = await supabase.storage
       .from(MESSAGE_MEDIA_BUCKET)
-      .upload(path, imageFile, { contentType: imageFile.type || undefined });
+      .upload(path, imageFile, { contentType: checked.contentType });
 
     if (uploadError) {
       return { error: `Photo upload failed: ${uploadError.message}` };
