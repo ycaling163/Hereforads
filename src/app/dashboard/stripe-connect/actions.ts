@@ -79,28 +79,3 @@ export async function startStripeOnboardingAction(
 
   redirect(accountLink.url);
 }
-
-export async function openStripeDashboardAction(): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("stripe_connect_account_id")
-    .eq("id", user.id)
-    .single();
-
-  const accountId = profile?.stripe_connect_account_id;
-  if (!accountId) {
-    redirect("/dashboard/stripe-connect");
-  }
-
-  const loginLink = await stripe.accounts.createLoginLink(accountId);
-  redirect(loginLink.url);
-}

@@ -18,6 +18,7 @@ import {
   type ListingOrderProofChange,
   type PartyListingOrder,
 } from "@/lib/supabase/types";
+import { ListingThumb, coverOf } from "@/components/ListingThumb";
 
 const ERROR_MESSAGES: Record<string, string> = {
   invalid_state: "This order can't be confirmed right now.",
@@ -75,14 +76,14 @@ export default async function PurchasesPage({
   }
 
   const { data: listingRows } = listingIds.length
-    ? await supabase.from("listings").select("id,title").in("id", listingIds)
+    ? await supabase.from("listings").select("id,title,media_urls").in("id", listingIds)
     : { data: [] };
   // Server Component, re-rendered fresh on every request (see dashboard/page.tsx).
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
-  const listingsById = new Map(
-    ((listingRows ?? []) as Pick<Listing, "id" | "title">[]).map((l) => [l.id, l.title])
-  );
+  const listingRowsTyped = (listingRows ?? []) as Pick<Listing, "id" | "title" | "media_urls">[];
+  const listingsById = new Map(listingRowsTyped.map((l) => [l.id, l.title]));
+  const coversById = new Map(listingRowsTyped.map((l) => [l.id, coverOf(l.media_urls)]));
 
   return (
     <div>
@@ -123,8 +124,9 @@ export default async function PurchasesPage({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Link
                   href={`/listings/${order.listing_id}`}
-                  className="font-medium text-zinc-900 hover:underline"
+                  className="flex items-center gap-3 font-medium text-zinc-900 hover:underline"
                 >
+                  <ListingThumb url={coversById.get(order.listing_id)} />
                   {listingsById.get(order.listing_id) ?? "Listing"}
                 </Link>
                 <span className="text-xs text-zinc-400">

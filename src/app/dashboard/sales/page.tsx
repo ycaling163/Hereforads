@@ -19,6 +19,7 @@ import type {
   Payment,
   Profile,
 } from "@/lib/supabase/types";
+import { ListingThumb, coverOf } from "@/components/ListingThumb";
 
 // 订单按"钱现在在哪"分成 4 个标签页(2026-09-24 产品负责人要求,避免各种状态
 // 混在一起):托管中(默认,卖家要处理的都在这)/ 待付款 / 已完成 / 已取消。
@@ -107,8 +108,8 @@ export default async function SalesPage({
   const [{ data: listingRows }, { data: paymentRows }, { data: buyerRows }] =
     await Promise.all([
       listingIds.length
-        ? supabase.from("listings").select("id,title").in("id", listingIds)
-        : Promise.resolve({ data: [] as Pick<Listing, "id" | "title">[] }),
+        ? supabase.from("listings").select("id,title,media_urls").in("id", listingIds)
+        : Promise.resolve({ data: [] as Pick<Listing, "id" | "title" | "media_urls">[] }),
       orderIds.length
         ? supabase.from("payments").select("*").in("order_id", orderIds)
         : Promise.resolve({ data: [] as Payment[] }),
@@ -116,9 +117,9 @@ export default async function SalesPage({
         ? supabase.from("profiles").select("id,display_name").in("id", buyerIds)
         : Promise.resolve({ data: [] as Pick<Profile, "id" | "display_name">[] }),
     ]);
-  const listingsById = new Map(
-    ((listingRows ?? []) as Pick<Listing, "id" | "title">[]).map((l) => [l.id, l.title])
-  );
+  const listingRowsTyped = (listingRows ?? []) as Pick<Listing, "id" | "title" | "media_urls">[];
+  const listingsById = new Map(listingRowsTyped.map((l) => [l.id, l.title]));
+  const coversById = new Map(listingRowsTyped.map((l) => [l.id, coverOf(l.media_urls)]));
   // 卖家改过交付链接的记录(RLS 只返回自己订单的)。
   const { data: proofChangeRows } = orderIds.length
     ? await supabase
@@ -234,8 +235,9 @@ export default async function SalesPage({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <Link
                         href={`/listings/${order.listing_id}`}
-                        className="font-medium text-zinc-900 hover:underline"
+                        className="flex items-center gap-3 font-medium text-zinc-900 hover:underline"
                       >
+                        <ListingThumb url={coversById.get(order.listing_id)} />
                         {listingsById.get(order.listing_id) ?? "Listing"}
                       </Link>
                       <span className="text-xs text-zinc-400">

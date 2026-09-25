@@ -356,3 +356,9 @@
 - **要人工做**:执行 README 里的两段 SQL;Supabase 密码规则 + Secure password change;Stripe webhook 加勾 `checkout.session.expired`。
 - 验证:lint + build + npm audit;SQL 在本地 Postgres 16(简化表结构)跑过两遍,测了触发器冲突/不冲突、私信策略四种情况、read_at 列权限、URL 约束。连不上 Supabase/Stripe,上传、私信、guest 成功页没实测。
 - 执行第 3 批 SQL 后核对:`social_accounts` 有一行 `url = ''`(只填账号名时代码存空字符串)。原约束不允许空字符串,会让卖家新增/修改只有账号名的社交账号报错——约束改成允许 `''`,产品负责人已按修正后的 SQL 重新执行。
+
+## 2026-09-25 第 3 批测试反馈:封面小图、Stripe 后台新标签页
+
+- 产品负责人测试第 3 批:1–6 项正常(第 7 项响应头待查)。反馈两点,已改:
+  - Sales、Purchases、Messages 列表和会话页的广告标题旁加小封面图(`ListingThumb`,封面是视频时显示第一帧),卖家/买家一眼认出是哪条广告。
+  - Payment Management 的 "View Stripe dashboard" 改成新标签页打开:普通链接指向新的 `/api/stripe/dashboard`(生成 Stripe 登录链接再跳转),删掉原来的 server action。无 SQL。

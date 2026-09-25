@@ -4,7 +4,6 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { stripe } from "@/lib/stripe/server";
 import { StatCard } from "@/components/StatCard";
 import { StripeConnectForm } from "./StripeConnectForm";
-import { openStripeDashboardAction } from "./actions";
 
 function formatBalance(amounts: { amount: number; currency: string }[]): string {
   if (amounts.length === 0) return "$0";
@@ -156,14 +155,17 @@ export default async function StripeConnectPage() {
               {defaultCurrency}.
             </p>
           )}
-          <form action={openStripeDashboardAction} className="mt-6">
-            <button
-              type="submit"
-              className="rounded-full border border-zinc-300 px-5 py-2 text-sm font-medium text-zinc-900 transition-colors hover:border-zinc-400"
+          <div className="mt-6">
+            <a
+              href="/api/stripe/dashboard"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block rounded-full border border-zinc-300 px-5 py-2 text-sm font-medium text-zinc-900 transition-colors hover:border-zinc-400"
             >
-              View Stripe dashboard →
-            </button>
-          </form>
+              View Stripe dashboard ↗
+            </a>
+            <p className="mt-2 text-xs text-zinc-500">Opens Stripe in a new tab.</p>
+          </div>
         </>
       ) : (
         <div className="mt-8 rounded-xl border border-zinc-200 p-6">
