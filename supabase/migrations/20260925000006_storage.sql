@@ -16,10 +16,10 @@ on conflict (id) do update
       file_size_limit = excluded.file_size_limit,
       allowed_mime_types = excluded.allowed_mime_types;
 
-create policy "public can view ad space photos" on storage.objects
-  for select to public
-  using (bucket_id = 'ad-space-photos');
-
+-- 公开 bucket 的图片链接不需要 select 策略就能打开;加了普通 select 策略反而会让任何人能
+-- 列出 bucket 里的全部文件名(包括私信图片)。2026-09-25 安全复查后线上已删掉原来的
+-- "public can view ad space photos",这里也不建。上传只需要下面的 insert 策略
+-- (代码从不 upsert 覆盖文件)。
 create policy "authenticated can upload their own ad space photos" on storage.objects
   for insert to authenticated
   with check (

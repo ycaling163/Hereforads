@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/supabase/admin";
 import { createServiceClient } from "@/lib/supabase/service";
 import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
 import { MarkContactRead } from "./MarkContactRead";
@@ -21,6 +22,7 @@ const RECENT_LIMIT = 200;
 // "New" tag for this view. Uses the service client: anon/authenticated have
 // no access to contact_messages at all (security batch 2).
 export default async function AdminContactPage() {
+  await requireAdmin();
   const admin = createServiceClient();
   const loadedAt = new Date().toISOString();
   const { data, error } = await admin

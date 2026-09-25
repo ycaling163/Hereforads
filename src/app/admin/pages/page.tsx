@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/supabase/admin";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { SitePage } from "@/lib/supabase/types";
 
 export default async function AdminPagesPage() {
+  await requireAdmin();
   const admin = createServiceClient();
   const { data, error } = await admin
     .from("site_pages")

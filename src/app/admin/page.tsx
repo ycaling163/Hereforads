@@ -1,8 +1,10 @@
+import { requireAdmin } from "@/lib/supabase/admin";
 import { createServiceClient } from "@/lib/supabase/service";
 import { StatCard } from "@/components/StatCard";
 import { bookingDayStart, bookingToday } from "@/lib/booking";
 
 export default async function AdminOverviewPage() {
+  await requireAdmin();
   const admin = createServiceClient();
   // "今日"按英国时间 0 点算(产品负责人 2026-09-25 确认),跟日历预订用同一个时区函数。
   const todayStart = bookingDayStart(bookingToday()).toISOString();
