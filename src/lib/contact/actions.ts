@@ -1,7 +1,7 @@
 "use server";
 
 import { createServiceClient } from "@/lib/supabase/service";
-import { LIMITS, RATE_LIMITED_MESSAGE, checkRateLimits, clientIp } from "@/lib/security/rateLimit";
+import { LIMITS, checkRateLimits, clientIp } from "@/lib/security/rateLimit";
 import {
   TURNSTILE_FAILED_MESSAGE,
   turnstileToken,
@@ -38,8 +38,9 @@ export async function submitContactMessageAction(
   }
 
   const ip = await clientIp();
-  if (!(await checkRateLimits(LIMITS.contact(ip)))) {
-    return { error: RATE_LIMITED_MESSAGE };
+  const limit = await checkRateLimits(LIMITS.contact(ip));
+  if (!limit.allowed) {
+    return { error: limit.message };
   }
   if (!(await verifyTurnstile(turnstileToken(formData), ip))) {
     return { error: TURNSTILE_FAILED_MESSAGE };

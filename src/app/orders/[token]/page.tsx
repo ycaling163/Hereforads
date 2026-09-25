@@ -160,7 +160,7 @@ export default async function OrderViewPage({
           <p className="text-sm text-green-700">
             Sign-in email sent — check your inbox (and spam folder). Click the link, or{" "}
             <Link href="/login?code=1" className="underline">
-              enter the 6-digit code
+              enter the code from the email
             </Link>{" "}
             on the login page.
           </p>

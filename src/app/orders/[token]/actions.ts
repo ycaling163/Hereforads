@@ -33,7 +33,7 @@ export async function sendOrderSignInLinkAction(token: string, formData: FormDat
   const email = order.buyer_email ?? (await getUserEmail(order.buyer_id));
   let result: Awaited<ReturnType<typeof sendSignInLink>> = "sent";
   if (email) {
-    result = (await checkRateLimits(LIMITS.signInLink(await clientIp(), email)))
+    result = (await checkRateLimits(LIMITS.signInLink(await clientIp(), email))).allowed
       ? await sendSignInLink(email, captchaToken)
       : "rate_limited";
   }

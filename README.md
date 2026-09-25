@@ -1954,7 +1954,7 @@ order by 1, 2, 3;   -- 应该只剩 listings.status 的 INSERT(发布广告时�
 
 | 入口 | 每个 IP | 每个邮箱 |
 |---|---|---|
-| 发登录链接(`login/actions.ts` `sendSignInLinkAction`、`orders/[token]/actions.ts`) | 5 次/小时 | 3 次/小时 |
+| 发登录链接(`login/actions.ts` `sendSignInLinkAction`、`orders/[token]/actions.ts`) | 5 次/小时 | ~~3~~ 5 次/小时(2026-09-25 测试后调整) |
 | 验证码登录(`login/actions.ts` `verifySignInCodeAction`) | 10 次/15 分钟 | 5 次/15 分钟 |
 | 找订单(`orders/find/actions.ts`) | 10 次/小时 | — |
 | guest 下单(`listings/[id]/actions.ts` 未登录分支) | 10 次/小时 | 5 次/小时 |
@@ -2214,12 +2214,22 @@ select bucket, window_start, hits from public.rate_limits order by hits desc lim
 
 1. `/contact` 提交一条留言 → `/admin/contact` 能看到。同一台电脑连续提交 6 次,第 6 次提示 "Too many attempts"。
 2. `/orders/find` 用真实的订单号 + 邮箱 → 打开订单页;连续错 10 次后第 11 次提示 "Too many attempts"(一小时后恢复)。
-3. 登录页 "Email me a sign-in link":同一个邮箱一小时内第 4 次提示 "Too many attempts";收到的邮件里链接和验证码都能登录。
-4. 验证码登录:故意输错 5 次后,第 6 次提示 "Too many attempts"(15 分钟后恢复)。
+3. 登录页 "Email me a sign-in link":每次发送后显示"还能再要几封、几点前";同一个邮箱一小时内第 6 次提示 "Too many attempts — please try again after HH:MM UK time"(2026-09-25 从 3 次调到 5 次);收到的邮件里链接和验证码都能登录(二选一,用过一个另一个就失效)。
+4. 验证码登录:故意输错时提示还剩几次;输错 5 次后,第 6 次提示 "Too many attempts"(15 分钟后恢复)。
 5. 退出登录,用一个新邮箱 "Continue as guest" 下单 → 正常进 Stripe 付款页。
 6. 开了日历的广告:同一个账号进付款页不付款、返回再订另一段日期、再返回订第三段 → 第三次提示 "You already have 2 unfinished checkouts…"。
 7. 浏览器控制台执行 `fetch('<SUPABASE_URL>/rest/v1/contact_messages', {method:'POST', headers:{apikey:'<anon key>', 'Content-Type':'application/json'}, body: JSON.stringify({name:'x',email:'x@x.com',message:'x'})}).then(r => r.status)` → 返回 401 或 403(以前是 201)。
 8. **开了 Supabase CAPTCHA 之后**:密码登录、注册、发登录链接(登录页和订单页)、验证码登录、Google 登录都还能正常用。
+
+### 第 2 批测试反馈(2026-09-25,产品负责人实测)
+
+- 通过:联系表单限流(第 6 条被拦)、发登录链接 + 验证码登录、订单页发登录链接、guest 下单进 Stripe 付款页、密码登录。第一次测联系表单发了 8 条没被拦,是因为刚好跨了整点(固定时间窗按整点分段,16 点段 4 条、17 点段 4 条),不是 bug。
+- 按反馈改了:
+  - 发登录链接每个邮箱 3 次/小时 → **5 次/小时**;发送成功后显示"还能再要几封、几点前";所有限流提示都带上"几点以后再试"(英国时间,计数按整点重置)。
+  - 验证码输错时显示还剩几次。
+  - 页面文案 "6-digit code" 改成 "Code from the email"(Supabase 项目设置的验证码是 8 位)。
+  - 登录邮件里的链接和验证码是**同一个一次性凭证**:先填了验证码,再点链接就会失效;再要一封新邮件,旧的也失效。`/auth/confirm` 遇到链接失效时,如果这个浏览器已经登录着就直接进 Purchases,不再显示"链接失效";否则登录页的提示改成说明这个规则。
+- Stripe 付款页的 Apple Pay、Link("Onelink")都属于卡类付款,钱照样进平台 Stripe 账户,代码里的 `payment_method_types: ["card"]` 不用改。
 
 ## 部署(Vercel)
 

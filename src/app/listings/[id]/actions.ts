@@ -11,7 +11,6 @@ import { fromMinorUnits, isSupportedCurrency, toMinorUnits } from "@/lib/fees";
 import { formatOrderNumber } from "@/lib/orders/orderNumber";
 import {
   LIMITS,
-  RATE_LIMITED_MESSAGE,
   checkRateLimits,
   clientIp,
   hashIdentifier,
@@ -103,8 +102,9 @@ async function startCheckout(
     // guest 下单会静默建账号、日历订单还会占档期:按 IP/邮箱限流 + Turnstile(我们自己
     // 校验),见 README"安全核查 · 第 2 批"。登录用户正常购买不加。
     const ip = await clientIp();
-    if (!(await checkRateLimits(LIMITS.guestCheckout(ip, guestEmail)))) {
-      return { error: RATE_LIMITED_MESSAGE };
+    const limit = await checkRateLimits(LIMITS.guestCheckout(ip, guestEmail));
+    if (!limit.allowed) {
+      return { error: limit.message };
     }
     if (!(await verifyTurnstile(turnstileToken(formData), ip))) {
       return { error: TURNSTILE_FAILED_MESSAGE };

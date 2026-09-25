@@ -41,5 +41,13 @@ export async function GET(request: Request) {
     }
   }
 
+  // 链接已经用过(比如先在登录页填了同一封邮件里的验证码)或过期了:如果这个浏览器已经
+  // 登录着,直接进 next,不要显示"链接失效"吓人;否则去登录页重新要链接。
+  const {
+    data: { user },
+  } = await (await createClient()).auth.getUser();
+  if (user) {
+    redirect(next);
+  }
   redirect("/login?error=invalid_link");
 }
