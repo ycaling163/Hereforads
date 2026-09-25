@@ -342,3 +342,9 @@
 - 产品负责人测试 B8 反馈:进了付款页想改日期,自己的占用挡住自己 36 分钟。做了:Stripe "返回"(cancel_url → `/api/checkout/cancelled`)和同一买家在同一条广告重新下单时,先作废旧付款链接再释放日期;回到广告页自动带回刚才选的日期。只有买家本人/同 IP 能释放,付款链接作废不了就不释放。新列 `listing_orders.checkout_session_id`,**先执行 README"改日期:立刻释放未付款的日历占用"的 SQL 再合并**。
 - 产品负责人问了"订单查询加手机号",还没定(见对话里的建议)。
 - B3 找订单已测通过;第 2 批测试只剩阶段 C(开 Supabase CAPTCHA)。
+
+## 2026-09-25 第 2 批验证完成
+
+- 产品负责人实测:阶段 C(开启 Supabase CAPTCHA 后登录/注册/登录链接/验证码/Google 登录/guest 下单)正常。第 2 批(限流 + Turnstile)全部验证通过,Supabase CAPTCHA 已开启。
+- 产品负责人决定不做:订单查询加手机号、"把名下订单发到邮箱"。用户靠订单邮件或登录后的 Purchases 找订单,有问题走联系表单。已记进 README"第 2 批测试反馈"。
+- 下一步:第 3 批(README 交接一节的表格);其中标"先问"的三项(币种缩减、默认币种提示、"Paid out" 改名)实现前要问产品负责人。另外待做:Stripe cancel_url 之外的 `checkout.session.expired` 事件处理(第 3 批第 10 条)。
