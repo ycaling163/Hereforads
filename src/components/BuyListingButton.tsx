@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import { buyListingAction, type BuyListingState } from "@/app/listings/[id]/actions";
 import { BookingPicker, type BookingOptions } from "@/components/BookingPicker";
+import { Turnstile } from "@/components/Turnstile";
 
 const primaryButtonClass =
   "w-full rounded-full bg-zinc-900 px-6 py-3 text-center text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50";
@@ -120,6 +121,7 @@ export function BuyListingButton({
             <p className="text-xs text-zinc-500">
               We&apos;ll email you a link to track this order.
             </p>
+            <Turnstile resetKey={state} />
           </div>
         )}
         {/* 结账前必勾(README"费用、取消与退款规则"第 10 条):同意条款 + 英国

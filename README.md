@@ -1931,7 +1931,7 @@ order by 1, 2, 3;   -- 应该只剩 listings.status 的 INSERT(发布广告时�
 
 ## 安全核查 · 第 1 批上线后的验证结果 + 第 2、3 批交接(2026-09-25)
 
-**给接手的 session**:这一节是切 Stripe live 前安全核查的交接文档。第 1 批(PR #50)已合并、SQL 已执行、测试卡验证通过;**第 2、3 批还没写代码**,下面的规则都已经跟产品负责人确认过,按这里实现即可。工作方式(产品负责人定的,不要改):每批一个 PR;提交前跑 `npm run lint`、`npm run build`、`npm audit`;需要的 SQL 写进 README、由产品负责人手动执行(Supabase MCP 连不上 HereForAds 的项目,只能给他 SQL 让他跑、把结果截图回来);密钥不进代码;拿不准的或会改产品规则的先问;推送 + 开 PR 后停下等确认。
+**给接手的 session**:这一节是切 Stripe live 前安全核查的交接文档。第 1 批(PR #50)已合并、SQL 已执行、测试卡验证通过;**第 2 批已写代码,见下一节"安全核查 · 第 2 批"(2026-09-25);第 3 批还没写代码**,下面的规则都已经跟产品负责人确认过,按这里实现即可。工作方式(产品负责人定的,不要改):每批一个 PR;提交前跑 `npm run lint`、`npm run build`、`npm audit`;需要的 SQL 写进 README、由产品负责人手动执行(Supabase MCP 连不上 HereForAds 的项目,只能给他 SQL 让他跑、把结果截图回来);密钥不进代码;拿不准的或会改产品规则的先问;推送 + 开 PR 后停下等确认。
 
 ### 第 1 批上线后已经验证过的(2026-09-25,Stripe 测试 sandbox)
 
@@ -1992,6 +1992,234 @@ order by 1, 2, 3;   -- 应该只剩 listings.status 的 INSERT(发布广告时�
 - **Vercel**:`STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`(live)、`SUPABASE_SERVICE_ROLE_KEY`、`CRON_SECRET`(≥32 位随机)、`RESEND_API_KEY`、`ADMIN_ALERT_EMAIL`、`NEXT_PUBLIC_SITE_URL=https://hereforads.com`,敏感的标 Sensitive;Cron Jobs 里 `/api/cron/auto-confirm` 每小时一次返回 200;开 Deployment Protection。
 - **Resend/DNS**:SPF/DKIM/Return-Path 都 Verified;DMARC 先 `p=none` 两周再收紧。
 - **会计/律师**:VAT、HMRC 数字平台申报、Terms 措辞(老问题,见"费用、取消与退款规则")。
+
+## 安全核查 · 第 2 批:限流 + Cloudflare Turnstile(2026-09-25)
+
+按上一节"第 2 批"交接实现,规则和额度没有改。**上线顺序很重要,按下面"要手动做的"一步步来**:`NEXT_PUBLIC_TURNSTILE_SITE_KEY` 是构建时写进前端代码的,必须先在 Vercel 配好再部署;Supabase 的 CAPTCHA 必须等部署完才开,先开会让所有登录/注册失败。
+
+### 代码改了什么
+
+- **限流**(`src/lib/security/rateLimit.ts`):server action 里先按访客 IP(Vercel 的 `x-forwarded-for` 第一个 / `x-real-ip`)和邮箱各计一次数,存在新表 `rate_limits`(固定时间窗,数据库函数 `rate_limit_hit` 原子加一,只给 service_role 执行)。表里只存 `HMAC-SHA256(RATE_LIMIT_SALT, IP 或邮箱)`,不存明文。额度就是交接表里那几行;"发登录链接"的额度登录页和订单页共用。限流表出错(包括没执行 SQL、没配盐)一律放行并记日志,Supabase 自己的限流是第二道兜底。旧计数由每小时的 cron(`/api/cron/auto-confirm`)顺带调 `purge_rate_limits()` 清掉一天以前的。
+- **Turnstile**:前端组件 `src/components/Turnstile.tsx`(Managed 模式 + `interaction-only`:多数访客看不到任何东西,Cloudflare 觉得可疑时才出现一个勾选框;提交失败后自动换新 token),服务端 `src/lib/security/turnstile.ts`。每个入口只在一边校验:
+  - **交给 Supabase 校验**(token 作为 `captchaToken` 传给 Supabase):发登录链接(登录页 + 订单页 "Email me a sign-in link")、注册、密码登录。
+  - **我们服务端校验**(siteverify):验证码登录、guest 下单("Continue as guest")、`/orders/find`、联系表单。
+  - **跟交接文档不一样的一处**:交接里写"验证码登录由 Supabase 校验",但查了 Supabase Auth 源码,`/verify` 接口(`verifyOtp`)不校验 CAPTCHA,传了也不看。所以验证码登录改成我们自己校验,效果一样。
+  - Cloudflare 接口本身不通(网络/5xx/`internal-error`)时放行并记日志;token 缺失、无效、过期、重复使用一律拒绝。没配 `TURNSTILE_SECRET_KEY` 时跳过校验(本地开发用),没配 `NEXT_PUBLIC_TURNSTILE_SITE_KEY` 时页面上不显示组件。
+- **未付款的日历占用**:同一买家或同一 IP 同时最多 2 个(登录用户也算)。在数据库函数 `create_booking_order` 里检查(所有日历下单在一把全站锁上排队,并发时也数得准),订单新增列 `hold_ip_hash`(下单 IP 的加盐哈希)。第 3 个会提示 "You already have 2 unfinished checkouts for date bookings. Complete one, or try again in about 30 minutes."(未付款占用 36 分钟后自动失效)。
+- **联系表单**改用 service_role 写 `contact_messages`,SQL 收回 anon/authenticated 直接 insert 的权限(以前拿公开的 anon key 能用 REST API 无限灌)。
+- 登录用户正常购买、Dashboard 内的操作都不加 Turnstile。密码登录、注册没有加应用层限流(交接表里没有),靠 Supabase CAPTCHA + Supabase 自己的限流。
+
+### 要手动做的(按顺序)
+
+**第 1 步 · Cloudflare 建 Turnstile 站点**
+
+1. 登录 Cloudflare → 左侧 **Turnstile**(新版后台在 "Application security → Turnstile")→ **Add widget**。
+2. Widget name 填 `HereForAds`;**Hostnames** 加 `hereforads.com`(子域名比如 `www` 自动包含)。
+   - Vercel Preview 环境也要能登录的话,再加一个 `vercel.app`(会覆盖所有 `*.vercel.app` 预览地址;site key 本来就是公开的,多加这个的风险只是别人可以在他的 vercel.app 站点上用我们的 key,消耗的是我们的免费额度,可以接受)。不加的话 Preview 上登录/下单会过不了人机校验。
+3. **Widget Mode** 选 **Managed**;"Pre-clearance" 选 No。→ Create。
+4. 记下 **Site Key**(公开的)和 **Secret Key**(保密)。
+
+**第 2 步 · Vercel 环境变量**(Settings → Environment Variables,Production 和 Preview 都勾)
+
+| 变量 | 值 | 类型 |
+|---|---|---|
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | 第 1 步的 Site Key | 普通即可(本来就会进前端代码) |
+| `TURNSTILE_SECRET_KEY` | 第 1 步的 Secret Key | **Sensitive** |
+| `RATE_LIMIT_SALT` | 随机 64 位十六进制:终端跑 `openssl rand -hex 32`,或者 1Password 生成 64 位随机字符串 | **Sensitive** |
+
+`RATE_LIMIT_SALT` 以后换掉只会让限流计数从零开始,不影响别的;但**不要**写进代码或聊天记录。
+
+**第 3 步 · 合并 PR、等 Vercel 部署完成**(环境变量必须在这之前配好,否则要在 Vercel 里 Redeploy 一次)。
+
+**第 4 步 · Supabase SQL Editor 执行下面的 SQL**(部署之后执行即可;先部署也不会出错——没有 SQL 时限流放行、日历占用上限不生效)。可以重复执行。
+
+**第 5 步 · 手动测一遍**(见下面"手动测一遍"第 1–7 条),都正常再做第 6 步。
+
+**第 6 步 · 部署之后才开 Supabase CAPTCHA**
+
+1. Supabase → 项目 → **Authentication** → **Attack Protection**(旧版后台叫 "Bot and Abuse Protection",在 Authentication → Settings 里)。
+2. 打开 **Enable Captcha protection**,Provider 选 **Turnstile by Cloudflare**,**Captcha secret** 填第 1 步的 **Secret Key**(跟 Vercel 里 `TURNSTILE_SECRET_KEY` 同一个)→ Save。
+3. 马上测"手动测一遍"第 8 条。万一登录全部失败,先把这个开关关掉(立刻恢复),再把现象发给开发。
+
+以后加 CSP(第 3 批第 13 条)时要放行 `https://challenges.cloudflare.com`(script-src 和 frame-src)。
+
+### 要手动执行的 SQL
+
+```sql
+-- 1. 限流计数表:固定时间窗,只存 IP/邮箱的加盐哈希。只给 service_role 用。
+create table if not exists public.rate_limits (
+  bucket text not null,          -- 入口 + 维度,比如 'signin_link:ip'
+  key_hash text not null,        -- HMAC-SHA256(IP 或邮箱),盐在 Vercel 环境变量 RATE_LIMIT_SALT
+  window_start timestamptz not null,
+  hits integer not null default 0,
+  primary key (bucket, key_hash, window_start)
+);
+
+alter table public.rate_limits enable row level security;   -- 不建任何策略:anon/authenticated 一行都读写不到
+revoke all on public.rate_limits from anon, authenticated;
+
+-- 计一次数并返回"还没超额"。insert ... on conflict 是原子的,并发请求不会少算。
+create or replace function public.rate_limit_hit(
+  p_bucket text, p_key text, p_limit integer, p_window_seconds integer
+)
+returns boolean
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_window timestamptz;
+  v_hits integer;
+begin
+  if p_limit <= 0 or p_window_seconds <= 0 then
+    raise exception 'rate_limit_hit: invalid arguments';
+  end if;
+  v_window := to_timestamp(floor(extract(epoch from now()) / p_window_seconds) * p_window_seconds);
+
+  insert into public.rate_limits as r (bucket, key_hash, window_start, hits)
+  values (p_bucket, p_key, v_window, 1)
+  on conflict (bucket, key_hash, window_start) do update set hits = r.hits + 1
+  returning r.hits into v_hits;
+
+  return v_hits <= p_limit;
+end;
+$$;
+
+-- 清理一天前的计数(每小时的 cron /api/cron/auto-confirm 顺带调用)。
+create or replace function public.purge_rate_limits()
+returns void
+language sql
+set search_path = ''
+as $$
+  delete from public.rate_limits where window_start < now() - interval '1 day';
+$$;
+
+revoke all on function public.rate_limit_hit(text, text, integer, integer) from public, anon, authenticated;
+revoke all on function public.purge_rate_limits() from public, anon, authenticated;
+grant execute on function public.rate_limit_hit(text, text, integer, integer) to service_role;
+grant execute on function public.purge_rate_limits() to service_role;
+
+-- 2. 联系表单:收回 anon/authenticated 直接 insert 的权限(以前拿公开的 anon key
+--    就能用 REST API 无限往里灌),改由服务端限流 + Turnstile 后用 service_role 写。
+drop policy if exists "anyone can submit a contact message" on public.contact_messages;
+revoke all on public.contact_messages from anon, authenticated;
+
+-- 3. 日历订单:同一买家或同一 IP 同时最多 2 个未付款的占用。
+--    hold_ip_hash 是下单 IP 的加盐哈希(跟限流表同一种哈希),不存明文 IP。
+--    第 1 批把 listing_orders 的 select 改成了逐列授权,新列默认 authenticated 读不到,不用另外处理。
+alter table public.listing_orders
+  add column if not exists hold_ip_hash text;
+
+create index if not exists listing_orders_pending_holds_idx
+  on public.listing_orders (hold_expires_at)
+  where status = 'pending_payment' and hold_expires_at is not null;
+
+-- 在原来的 create_booking_order(README"日历按天预订 → 第 1 批")基础上改了三处:
+-- 读 buyer_id / hold_ip_hash、检查未付款占用个数、插入时写 hold_ip_hash。其余不变。
+create or replace function public.create_booking_order(p_order jsonb)
+returns uuid
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_listing_id uuid := (p_order->>'listing_id')::uuid;
+  v_buyer_id uuid := (p_order->>'buyer_id')::uuid;
+  v_ip_hash text := nullif(p_order->>'hold_ip_hash', '');
+  v_start date := (p_order->>'start_date')::date;
+  v_end date := (p_order->>'end_date')::date;
+  v_id uuid;
+begin
+  if v_start is null or v_end is null or v_end < v_start then
+    raise exception 'create_booking_order: invalid dates';
+  end if;
+
+  -- 未付款占用上限:同一买家/同一 IP 的下单可能落在不同 listing 上,listing 行锁管不到,
+  -- 所以所有日历下单先在这把全站锁上排队(每次只锁几毫秒,量很小),数得才准。
+  -- 先拿这把锁、再锁 listing,顺序固定,不会死锁。
+  perform pg_advisory_xact_lock(hashtext('create_booking_order:pending_holds'));
+  if (
+    select count(*) from public.listing_orders o
+    where o.status = 'pending_payment'
+      and o.hold_expires_at > now()
+      and (o.buyer_id = v_buyer_id or (v_ip_hash is not null and o.hold_ip_hash = v_ip_hash))
+  ) >= 2 then
+    raise exception 'too_many_pending_holds';
+  end if;
+
+  -- 同一条 listing 的下单排队执行,直到这个事务结束。
+  perform 1 from public.listings where id = v_listing_id for update;
+  if not found then
+    raise exception 'create_booking_order: listing not found';
+  end if;
+
+  if exists (
+    select 1 from public.listing_orders o
+    where o.listing_id = v_listing_id
+      and o.start_date is not null
+      and o.start_date <= v_end
+      and o.end_date >= v_start
+      and o.status <> 'cancelled'
+      and (o.status <> 'pending_payment' or o.hold_expires_at > now())
+  ) then
+    return null;
+  end if;
+
+  insert into public.listing_orders (
+    listing_id, buyer_id, seller_id, amount, currency, status, buyer_email,
+    terms_accepted_at, immediate_start_consent_at,
+    start_date, end_date, booking_units, hold_expires_at, hold_ip_hash
+  ) values (
+    v_listing_id,
+    v_buyer_id,
+    (p_order->>'seller_id')::uuid,
+    (p_order->>'amount')::numeric,
+    p_order->>'currency',
+    'pending_payment',
+    p_order->>'buyer_email',
+    (p_order->>'terms_accepted_at')::timestamptz,
+    (p_order->>'immediate_start_consent_at')::timestamptz,
+    v_start,
+    v_end,
+    (p_order->>'booking_units')::integer,
+    (p_order->>'hold_expires_at')::timestamptz,
+    v_ip_hash
+  )
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+revoke all on function public.create_booking_order(jsonb) from public, anon, authenticated;
+grant execute on function public.create_booking_order(jsonb) to service_role;
+```
+
+执行完核对(应该返回 `false, false, true, false, false, true`):
+
+```sql
+select has_function_privilege('anon', 'public.rate_limit_hit(text,text,integer,integer)', 'execute'),
+       has_function_privilege('authenticated', 'public.rate_limit_hit(text,text,integer,integer)', 'execute'),
+       has_function_privilege('service_role', 'public.rate_limit_hit(text,text,integer,integer)', 'execute'),
+       has_table_privilege('anon', 'public.contact_messages', 'insert'),
+       has_table_privilege('authenticated', 'public.rate_limits', 'select'),
+       has_function_privilege('service_role', 'public.create_booking_order(jsonb)', 'execute');
+```
+
+上线后看限流效果(计数最多的几个;`key_hash` 是哈希,看不出是谁):
+
+```sql
+select bucket, window_start, hits from public.rate_limits order by hits desc limit 20;
+```
+
+### 手动测一遍(部署到正式环境、执行完 SQL 之后)
+
+1. `/contact` 提交一条留言 → `/admin/contact` 能看到。同一台电脑连续提交 6 次,第 6 次提示 "Too many attempts"。
+2. `/orders/find` 用真实的订单号 + 邮箱 → 打开订单页;连续错 10 次后第 11 次提示 "Too many attempts"(一小时后恢复)。
+3. 登录页 "Email me a sign-in link":同一个邮箱一小时内第 4 次提示 "Too many attempts";收到的邮件里链接和验证码都能登录。
+4. 验证码登录:故意输错 5 次后,第 6 次提示 "Too many attempts"(15 分钟后恢复)。
+5. 退出登录,用一个新邮箱 "Continue as guest" 下单 → 正常进 Stripe 付款页。
+6. 开了日历的广告:同一个账号进付款页不付款、返回再订另一段日期、再返回订第三段 → 第三次提示 "You already have 2 unfinished checkouts…"。
+7. 浏览器控制台执行 `fetch('<SUPABASE_URL>/rest/v1/contact_messages', {method:'POST', headers:{apikey:'<anon key>', 'Content-Type':'application/json'}, body: JSON.stringify({name:'x',email:'x@x.com',message:'x'})}).then(r => r.status)` → 返回 401 或 403(以前是 201)。
+8. **开了 Supabase CAPTCHA 之后**:密码登录、注册、发登录链接(登录页和订单页)、验证码登录、Google 登录都还能正常用。
 
 ## 部署(Vercel)
 

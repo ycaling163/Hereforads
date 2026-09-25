@@ -6,6 +6,13 @@ import { ensureProfile } from "@/lib/supabase/ensure-profile";
 import { safeRedirectPath } from "@/lib/safeRedirect";
 import { sendSignInLink } from "@/lib/orders/signInLink";
 import { EMAIL_PATTERN } from "@/lib/supabase/guest-checkout";
+import { LIMITS, RATE_LIMITED_MESSAGE, checkRateLimits, clientIp } from "@/lib/security/rateLimit";
+import {
+  TURNSTILE_FAILED_MESSAGE,
+  missingSupabaseCaptcha,
+  turnstileToken,
+  verifyTurnstile,
+} from "@/lib/security/turnstile";
 
 export interface LoginState {
   error?: string;
@@ -22,13 +29,22 @@ export async function loginAction(
   if (!email || !password) {
     return { error: "Please enter your email and password" };
   }
+  // Turnstile token 交给 Supabase 校验(Supabase 后台开了 CAPTCHA 之后),见 src/lib/security/turnstile.ts。
+  const captchaToken = turnstileToken(formData);
+  if (missingSupabaseCaptcha(captchaToken)) {
+    return { error: TURNSTILE_FAILED_MESSAGE };
+  }
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
+    options: { captchaToken: captchaToken || undefined },
   });
 
+  if (error?.code === "captcha_failed") {
+    return { error: TURNSTILE_FAILED_MESSAGE };
+  }
   if (error) {
     // Guest 下单时建的账号没有密码,用密码登录一定失败——提示他们用登录链接。
     return {
@@ -61,9 +77,19 @@ export async function sendSignInLinkAction(
   if (!EMAIL_PATTERN.test(email)) {
     return { error: "Please enter a valid email address" };
   }
-  const result = await sendSignInLink(email);
+  const captchaToken = turnstileToken(formData);
+  if (missingSupabaseCaptcha(captchaToken)) {
+    return { error: TURNSTILE_FAILED_MESSAGE };
+  }
+  if (!(await checkRateLimits(LIMITS.signInLink(await clientIp(), email)))) {
+    return { error: RATE_LIMITED_MESSAGE };
+  }
+  const result = await sendSignInLink(email, captchaToken);
   if (result === "rate_limited") {
     return { error: "We just sent a link — please wait a minute before asking for another." };
+  }
+  if (result === "captcha_failed") {
+    return { error: TURNSTILE_FAILED_MESSAGE };
   }
   return { sent: true };
 }
@@ -84,6 +110,16 @@ export async function verifySignInCodeAction(
 
   if (!EMAIL_PATTERN.test(email) || !/^\d{6,10}$/.test(token)) {
     return { error: "Please enter your email and the code from the email" };
+  }
+
+  // Supabase 的 /verify 接口不校验 CAPTCHA,这个入口由我们自己校验 Turnstile。
+  // 先限流再校验,刷接口的请求不用每次都去问 Cloudflare。
+  const ip = await clientIp();
+  if (!(await checkRateLimits(LIMITS.verifyCode(ip, email)))) {
+    return { error: RATE_LIMITED_MESSAGE };
+  }
+  if (!(await verifyTurnstile(turnstileToken(formData), ip))) {
+    return { error: TURNSTILE_FAILED_MESSAGE };
   }
 
   const supabase = await createClient();

@@ -13,6 +13,8 @@ import {
 } from "@/lib/supabase/enums";
 import type { ListingOrder, ListingOrderProofChange } from "@/lib/supabase/types";
 import { sendOrderSignInLinkAction } from "./actions";
+import { Turnstile } from "@/components/Turnstile";
+import { TURNSTILE_FAILED_MESSAGE } from "@/lib/security/turnstile";
 
 // 带 view_token 的链接只在买家邮件里,不要被搜索引擎收录,也不要通过 Referer 泄露出去。
 export const metadata: Metadata = {
@@ -165,13 +167,20 @@ export default async function OrderViewPage({
         )}
         {link === "wait" && (
           <p className="text-sm text-red-600">
-            We just sent one — please wait a minute before asking for another.
+            We just sent one — please wait a while before asking for another.
           </p>
         )}
-        <form action={sendOrderSignInLinkAction.bind(null, token)}>
+        {link === "captcha" && (
+          <p className="text-sm text-red-600">{TURNSTILE_FAILED_MESSAGE}</p>
+        )}
+        <form
+          action={sendOrderSignInLinkAction.bind(null, token)}
+          className="flex flex-col gap-2"
+        >
+          <Turnstile resetKey={link} />
           <button
             type="submit"
-            className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+            className="self-start rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
           >
             Email me a sign-in link
           </button>

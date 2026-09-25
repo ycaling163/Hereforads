@@ -307,3 +307,11 @@
 - PR #50 已合并,SQL 已执行并核对(列级权限生效)。测试卡验证了:拒付自动暂停放款、Accept dispute 后订单取消、放款金额正确(USD 83.75 / GBP 25.00)。
 - 产品负责人在 Stripe 开了 USD/EUR/GBP 多币种余额;Adaptive Pricing(买家选本国货币付)经验证不影响我们的金额核对和放款,保留。美元转给只有英镑账户的卖家时由卖家那边换汇(约 2%,卖家承担)。
 - **下一步:新对话从 README"安全核查 · 第 1 批上线后的验证结果 + 第 2、3 批交接"开始做第 2 批(限流 + Turnstile)**,规则和额度都已确认;第 3 批里标"先问"的三项(币种缩减、默认币种提示、"Paid out" 改名)实现前再问产品负责人。
+
+## 2026-09-25 安全核查 · 第 2 批:限流 + Turnstile(分支 `claude/wonderful-sagan-i5bufm`)
+
+- 产品负责人确认:Stripe webhook 已勾 `charge.dispute.closed`、`charge.refunded`;Vercel 已加 `ADMIN_ALERT_EMAIL`(第 1 批的手动项全部完成)。
+- 做了:Postgres 限流表 `rate_limits` + `rate_limit_hit()`/`purge_rate_limits()`(只存 IP/邮箱的 HMAC,出错放行);发登录链接、验证码登录、找订单、guest 下单、联系表单按交接表的额度限流;Turnstile 组件 + 服务端校验;注册/密码登录/发登录链接把 token 交给 Supabase CAPTCHA;日历未付款占用同一买家/同一 IP 最多 2 个(改了 `create_booking_order`,新增 `listing_orders.hold_ip_hash`);联系表单改走 service_role 并收回 anon insert。细节、SQL、手动步骤见 README"安全核查 · 第 2 批"。
+- 跟交接文档不同的一处:Supabase 的 `/verify`(`verifyOtp`)不校验 CAPTCHA(查了 supabase/auth 源码 `internal/api/api.go`),所以验证码登录改成我们服务端校验 Turnstile。
+- **要人工做**(顺序不能乱):Cloudflare 建 Turnstile widget → Vercel 加 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`、`TURNSTILE_SECRET_KEY`、`RATE_LIMIT_SALT` → 合并部署 → 执行 SQL → 手动测 → **最后**才开 Supabase CAPTCHA。
+- 验证:lint + build + npm audit;SQL 在本地 Postgres 16(简化表结构)跑过两遍,核对了限流计数、权限、占用上限、日期重叠;本地 dev 验证了没有 token 时服务端拒绝、限流表连不上时放行。这个沙箱连不上 Cloudflare 和 Supabase,Turnstile 组件的真实渲染和 Supabase CAPTCHA 没有实测。
