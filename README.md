@@ -1929,6 +1929,70 @@ order by 1, 2, 3;   -- 应该只剩 listings.status 的 INSERT(发布广告时�
 7. 管理员封一个有托管中订单的卖家 → 这些订单都出现在 `/admin/holds`(Seller account suspended);他的广告点 Buy now 提示不可购买。
 8. `/login?next=/%5Cexample.com` 登录后停在 `/listings`,不会跳到 example.com。
 
+## 安全核查 · 第 1 批上线后的验证结果 + 第 2、3 批交接(2026-09-25)
+
+**给接手的 session**:这一节是切 Stripe live 前安全核查的交接文档。第 1 批(PR #50)已合并、SQL 已执行、测试卡验证通过;**第 2、3 批还没写代码**,下面的规则都已经跟产品负责人确认过,按这里实现即可。工作方式(产品负责人定的,不要改):每批一个 PR;提交前跑 `npm run lint`、`npm run build`、`npm audit`;需要的 SQL 写进 README、由产品负责人手动执行(Supabase MCP 连不上 HereForAds 的项目,只能给他 SQL 让他跑、把结果截图回来);密钥不进代码;拿不准的或会改产品规则的先问;推送 + 开 PR 后停下等确认。
+
+### 第 1 批上线后已经验证过的(2026-09-25,Stripe 测试 sandbox)
+
+- 列级权限 SQL 已执行并核对:authenticated 读不到 `listing_orders` 的 `buyer_email/buyer_phone/buyer_address/buyer_name/view_token/payout_hold_note`;`profiles`/`listings`/`seller_profiles` 的敏感列只剩 `listings.status` 的 INSERT。
+- 拒付:`4000 0000 0000 0259` 付款 → 订单自动进 `/admin/holds`(Payment disputed),买家页显示 On hold;在 Stripe 点 Accept dispute → 订单变成已取消(dispute lost)。暂停中的订单没有放款(Stripe 里只有 chargeback,没有对应 transfer)。
+- 放款金额正确:USD 100 订单转给卖家 US$83.75(100 − 12 − 4%·100 − 0.25),GBP 30 订单转 £25.00。
+- **多币种**:产品负责人已在 Stripe 平台账户的 Balance 里开了 USD、EUR、GBP 三个币种余额。美元付款直接进美元余额,不再换成英镑;转给卖家也用美元。
+- **Adaptive Pricing(买家可选用本国货币付款)可以保留**:买家选英镑付 £78.46,Stripe 记的仍是 US$100 进美元余额,webhook 金额核对通过,放款仍是 US$83.75。换汇费(4%)由买家承担。**代码不需要为它改**(session 回传的 currency/amount_total 是原标价币种)。
+- **卖家那边的换汇**:美元转给只有英镑银行账户的卖家,钱一进卖家 Stripe 账户就被换成英镑,换汇费(约 2%)由卖家承担,平台转出的是足额美元。卖家账户已开 "Debit negative balances"。
+- 平台提现是手动的;提现时只提 `/admin/finance` 里的平台收入部分(托管中的是欠卖家的钱)。
+
+### 第 2 批:限流 + Cloudflare Turnstile(产品负责人已同意方案)
+
+**问题**:公开入口没有应用层限流。Supabase Auth 的限流按 IP 算,而我们所有 Auth 请求都从 Vercel 服务器发出,等于全站共用一个额度——攻击者刷"发登录链接"就能让所有用户收不到邮件;知道某人邮箱可以枚举 `/orders/find`(订单号连续);guest 下单能批量建账号、不付款无限占日历档期(36 分钟一次)。
+
+**方案**(已确认):
+- **Postgres 自建限流表**(不接 Upstash):一张 `rate_limits` 表 + 一个只给 service_role 执行的函数(原子 upsert 计数,固定时间窗),服务端在 action 里调用。**只存 IP 的 SHA-256 哈希**(加盐,盐放环境变量),不存明文 IP;定期清理旧记录。IP 取 Vercel 的 `x-forwarded-for` 第一个 / `x-real-ip`。
+- **限流表查询出错时放行并记日志**(fail-open),Supabase 自己的限流做第二道兜底。
+- **额度**(产品负责人同意,上线后看日志再调):
+
+| 入口 | 每个 IP | 每个邮箱 |
+|---|---|---|
+| 发登录链接(`login/actions.ts` `sendSignInLinkAction`、`orders/[token]/actions.ts`) | 5 次/小时 | 3 次/小时 |
+| 验证码登录(`login/actions.ts` `verifySignInCodeAction`) | 10 次/15 分钟 | 5 次/15 分钟 |
+| 找订单(`orders/find/actions.ts`) | 10 次/小时 | — |
+| guest 下单(`listings/[id]/actions.ts` 未登录分支) | 10 次/小时 | 5 次/小时 |
+| 联系表单(`lib/contact/actions.ts`,另外要收回 anon 直接 insert `contact_messages` 的权限,改走 service_role) | 5 次/小时 | — |
+
+- 未付款的日历占用:同一买家或同一 IP **同时最多 2 个**。
+- **Turnstile**(Cloudflare,Managed 模式):同一个 token 只能验证一次,所以每个入口只选一边校验——
+  - **Supabase 校验**(Supabase 后台开 CAPTCHA 后,Auth 接口必须带 `captchaToken`,顺带挡住拿公开 anon key 直调 Auth API):发登录链接、验证码登录、注册、密码登录。代码把前端拿到的 token 作为 `options.captchaToken` 传给 `signInWithOtp`/`verifyOtp`/`signUp`/`signInWithPassword`。
+  - **我们服务端校验**(`https://challenges.cloudflare.com/turnstile/v0/siteverify`):guest 下单("Continue as guest")、`/orders/find`、联系表单。
+  - 登录用户正常购买、Dashboard 内操作不加。
+- **需要产品负责人手动做的(写代码时把具体步骤告诉他)**:Cloudflare → Turnstile 建站点(`hereforads.com`,Managed),Vercel 加 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`、`TURNSTILE_SECRET_KEY`(和 IP 哈希盐);**第 2 批部署之后**才在 Supabase → Auth → Bot and Abuse Protection 开 CAPTCHA(选 Turnstile,填同一个 secret),先开会让现有登录全部失效。以后加 CSP 时要放行 `challenges.cloudflare.com`。
+
+### 第 3 批:中/低风险 + 小的产品调整
+
+| # | 问题 | 位置 | 做法(已确认的写明"已确认") |
+|---|---|---|---|
+| 10 | 日历订单可能被重复预订:付款链接 31 分钟过期、占用 36 分钟,webhook 延迟超过几分钟时第二个买家能订同一段日期 | `api/stripe/webhook/route.ts` 付款分支、`create_booking_order` | webhook 推进日历订单前按同样的锁再查一次重叠,冲突就自动全额退款 + 通知买家和管理员;处理 `checkout.session.expired` 释放占用 |
+| 12 | 上传文件不校验类型/大小(能往公开 bucket 传 HTML/SVG 做钓鱼页),扩展名取自文件名 | `new-listing/actions.ts:74`、`my-listings/[id]/edit/actions.ts:65`、`profile/actions.ts:82`、`dashboard/messages/actions.ts:39`、`listings/[id]/actions.ts:354` | 服务端白名单 + 校验文件头,扩展名由类型决定:广告媒体 jpeg/png/webp/gif + mp4/webm/mov,私信/头像/横幅只允许图片;单文件 ≤ 10MB。Storage bucket 设 `allowed_mime_types`/`file_size_limit`(给 SQL 或后台步骤)。**产品负责人问过"交付内容"——交付仍然只收链接,这条跟交付无关** |
+| 13 | 没有安全响应头 | `next.config.ts` | HSTS、`X-Frame-Options: DENY`(或 CSP `frame-ancestors 'none'`)、`X-Content-Type-Options: nosniff`、`Referrer-Policy`、`Permissions-Policy`;CSP 先 Report-Only(Next 内联脚本需要 nonce,放行 Stripe/Supabase/Turnstile 域名) |
+| 17 | 私信线程页把 URL 参数 `otherUserId` 直接拼进 `.or()`(PostgREST 过滤注入,RLS 兜住了) | `dashboard/messages/[listingId]/[otherUserId]/page.tsx:33` | 校验 UUID 格式 |
+| 18 | 私信能发给任意用户、挂在任意 listing 下 | `dashboard/messages/actions.ts:58` | **已确认**:只有注册用户能发;买家只能发给这条广告的卖家;卖家只能回复已经给他发过消息的人。消息要让卖家看出是哪条广告(会话已有 "Re: 广告标题" 链接,检查一下卖家的消息列表是否也清楚) |
+| 19 | 密码最短 6 位 | `register/actions.ts:27`、`dashboard/password/actions.ts:26` | **已确认**:至少 8 位,必须同时有数字、大写字母、小写字母;另外让产品负责人在 Supabase → Auth → Password 设同样的规则、开 "Secure password change" |
+| 20 | `existing_media` 用 `includes` 校验,能塞外部 URL | `new-listing/actions.ts:69`、`my-listings/[id]/edit/actions.ts:60` | 改成 `startsWith(`${SUPABASE_URL}/storage/v1/object/public/ad-space-photos/${user.id}/`)` |
+| 21 | guest 付款成功页 URL 带邮箱(进浏览器历史/日志) | `listings/[id]/actions.ts:290` | 改成带 `session_id`,页面服务端查 Stripe 后只显示打码邮箱 |
+| 22 | `service.ts`/`stripe/server.ts` 没有 `import "server-only"` | `lib/supabase/service.ts`、`lib/stripe/server.ts` | 加上(先确认 `server-only` 包在依赖里) |
+| 23 | `seller_profiles.website_url`、`social_accounts.url` 能直接用 REST 写成 `javascript:`(React 19 会拦 href,目前不构成 XSS) | 数据库 | 加 check 约束 `url is null or url ~* '^https?://'`(先查有没有不符合的老数据) |
+| — | 广告标价币种有 8 种(`enums.ts` 的 `CURRENCIES`),但英国平台只能转账给美国/英国/EEA/加拿大/瑞士;`lib/stripe/countries.ts` 仍有 44 个开户国家,那些地区的卖家放款会失败 | `lib/supabase/enums.ts:41`、`lib/stripe/countries.ts`、`lib/fees.ts` | **建议**只保留 GBP/USD/EUR(+CAD 可选)、开户国家缩到 5 个地区——**产品负责人还没拍板,先问** |
+| — | 发布广告时币种默认用卖家收款国家的币种,并提示"建议用你银行账户的币种标价";Payment Management 页把换汇说明写明确(转到卖家 Stripe 时自动换汇、约 2% 由卖家承担) | `ListingForm.tsx`、`dashboard/stripe-connect/page.tsx` | 产品负责人倾向做,实现前再确认一次 |
+| — | 订单状态 "Paid out" 容易被误解成已经到卖家银行卡 | `lib/supabase/enums.ts:209-210` | 建议改成 "Released to seller",**先问** |
+
+### 切 live 前产品负责人要手动做的(清单,不是代码)
+
+- **Stripe(live)**:`sk_live_` 只配 Vercel Production(Preview 继续 test key);建 live webhook endpoint,订阅 `checkout.session.completed`、经典 `account.updated`、`charge.dispute.created`、`charge.dispute.closed`、`charge.refunded`,勾 "Listen to events on Connected accounts",`whsec_` 填 `STRIPE_WEBHOOK_SECRET`;平台提现改手动;Balance 开 USD/EUR/GBP(需要对应币种的收款账户,产品负责人倾向 Wise Business 这类 sole trader 可开的多币种账户);Connect 设置关掉 Express 账户的 Instant Payouts 和"卖家自己改打款计划",打开 debit negative balances;Radar 默认规则 + 高风险交易要求 3DS;Branding 和对账单描述填 HEREFORADS;Business 资料(sole trader 信息)按实际填;用一笔小额真实订单走通付款→放款→退款。
+- **Supabase**:Site URL = `https://hereforads.com`,Redirect URLs 只留正式域名的 `/auth/callback`、`/auth/confirm`;Auth 限流、CAPTCHA(第 2 批之后)、密码规则(第 3 批);Storage bucket 类型/大小限制。
+- **Vercel**:`STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`(live)、`SUPABASE_SERVICE_ROLE_KEY`、`CRON_SECRET`(≥32 位随机)、`RESEND_API_KEY`、`ADMIN_ALERT_EMAIL`、`NEXT_PUBLIC_SITE_URL=https://hereforads.com`,敏感的标 Sensitive;Cron Jobs 里 `/api/cron/auto-confirm` 每小时一次返回 200;开 Deployment Protection。
+- **Resend/DNS**:SPF/DKIM/Return-Path 都 Verified;DMARC 先 `p=none` 两周再收紧。
+- **会计/律师**:VAT、HMRC 数字平台申报、Terms 措辞(老问题,见"费用、取消与退款规则")。
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀

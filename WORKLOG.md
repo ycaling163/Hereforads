@@ -301,3 +301,9 @@
 - **要人工做**:先执行 README 里的 SQL(第 0 步先查 payments 有没有重复行);Vercel 加 `ADMIN_ALERT_EMAIL`;Stripe webhook 加勾 `charge.dispute.created`、`charge.dispute.closed`、`charge.refunded`。
 - 没实测:连不上 Supabase/Stripe,只跑了 lint + build + npm audit。
 - 下一批:限流 + Cloudflare Turnstile(产品负责人已同意方案和额度)。
+
+## 2026-09-25 安全核查第 1 批上线验证 + 第 2、3 批交接
+
+- PR #50 已合并,SQL 已执行并核对(列级权限生效)。测试卡验证了:拒付自动暂停放款、Accept dispute 后订单取消、放款金额正确(USD 83.75 / GBP 25.00)。
+- 产品负责人在 Stripe 开了 USD/EUR/GBP 多币种余额;Adaptive Pricing(买家选本国货币付)经验证不影响我们的金额核对和放款,保留。美元转给只有英镑账户的卖家时由卖家那边换汇(约 2%,卖家承担)。
+- **下一步:新对话从 README"安全核查 · 第 1 批上线后的验证结果 + 第 2、3 批交接"开始做第 2 批(限流 + Turnstile)**,规则和额度都已确认;第 3 批里标"先问"的三项(币种缩减、默认币种提示、"Paid out" 改名)实现前再问产品负责人。
