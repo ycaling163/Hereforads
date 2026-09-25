@@ -2460,6 +2460,8 @@ where url is not null and url <> '' and url !~* '^https?://';
 **目标**:以后复制出一个新站点(最可能是"虚拟活动预订")时,不用翻 README 几十段 SQL,也不用满代码找品牌字样。**对现在的 hereforads.com 没有任何功能变化**(见下面"怎么验证的")。
 **不做的**(产品负责人确认过):不把"广告/活动/商品"抽象成可切换的多业务系统;不改任何业务规则和页面行为。
 
+**模板版本**:以后复制新站点,从 GitHub Releases 上**安全复查之后**的版本开始(计划中的 `template-v2`,在 main `cf5131e` 或之后);`template-v1` 早于安全修复,不要用。
+
 ### 做了什么
 
 1. **数据库迁移文件 `supabase/migrations/`**:6 个文件(类型 → 表/约束/索引/序列 → 函数和触发器 → RLS 策略 → 表/列/函数权限 → storage bucket 和策略),在一个**新建的空** Supabase 项目里按文件名顺序执行,就得到跟线上一样的库。**以 2026-09-25 线上导出的结构为准**,不是 README 里的历史 SQL。
@@ -2543,6 +2545,8 @@ select policyname, cmd from pg_policies where schemaname = 'storage';
 
 执行后测:① 首页/广告详情页的图片、卖家头像和横幅正常显示;② 发布一条带图片的广告(或给已有广告加一张图)能上传;③ 私信里发一张图,双方都能看到。
 
+**已执行(2026-09-25)**:产品负责人已在线上执行(PR #63 合并之后)。
+
 ### 3. 【低,产品负责人要求一起修】Stripe 账户 ID 公开可读;删广告/换头像时旧图片没删
 
 **(a) 卖家 Stripe 账户 ID 不再对外公开。** 以前任何人都能通过 API 读到 `profiles.stripe_connect_account_id`、`seller_profiles.stripe_account_id`。改成列级权限:这两列只有服务端(service_role)能读,其它列照旧公开(页面上的"已认证"标记、封禁状态、国家等不受影响)。
@@ -2574,6 +2578,8 @@ select
 ```
 
 执行后测:① 不登录打开首页、`/listings`、一条广告详情、一个卖家主页、`/publishers`,都正常显示(卖家名、头像、"已认证"标记);② 登录卖家账号打开 `/dashboard/profile` 能改资料和用户名;③ `/dashboard/stripe-connect` 正常显示 Stripe 状态,"View Stripe dashboard" 能打开;④ 编辑一条广告删掉一张图保存,在 Supabase → Storage → ad-space-photos → 你的用户 ID 文件夹里,那张图没了;⑤ 用 Duplicate 复制一条广告,删掉原来那条,复制出来的那条图片还在;⑥ 换一次头像,旧头像文件没了、新头像正常显示。
+
+**已执行(2026-09-25)**:PR #64 合并部署之后,产品负责人已在线上执行上面的 SQL。
 
 ## 部署(Vercel)
 
