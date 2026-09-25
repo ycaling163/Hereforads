@@ -28,6 +28,8 @@ export interface EmailContent {
   // 订单详情(订单号、广告、卖家……),渲染成两列表格,放在正文段落后面。
   details?: [string, string][];
   cta?: { label: string; path: string };
+  /** 收件人点"回复"时回给谁(比如联系表单留言人的邮箱)。 */
+  replyTo?: string;
 }
 
 export async function sendEmail(to: string | null | undefined, content: EmailContent) {
@@ -74,7 +76,14 @@ ${
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from: FROM, to: [to], subject: content.subject, html, text }),
+      body: JSON.stringify({
+        from: FROM,
+        to: [to],
+        subject: content.subject,
+        html,
+        text,
+        ...(content.replyTo ? { reply_to: content.replyTo } : {}),
+      }),
     });
     if (!res.ok) {
       console.error("Resend send failed:", res.status, await res.text());
@@ -101,7 +110,8 @@ export async function getUserEmail(userId: string): Promise<string | null> {
 export async function sendAdminAlert(
   subject: string,
   paragraphs: string[],
-  details?: [string, string][]
+  details?: [string, string][],
+  options: { cta?: EmailContent["cta"]; replyTo?: string } = {}
 ) {
   const to = process.env.ADMIN_ALERT_EMAIL;
   if (!to) {
@@ -112,6 +122,7 @@ export async function sendAdminAlert(
     subject: `[HereForAds admin] ${subject}`,
     paragraphs,
     details,
-    cta: { label: "Open disputes & holds", path: "/admin/holds" },
+    cta: options.cta ?? { label: "Open disputes & holds", path: "/admin/holds" },
+    replyTo: options.replyTo,
   });
 }

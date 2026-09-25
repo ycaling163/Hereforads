@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
+import { MarkContactRead } from "./MarkContactRead";
 
 interface ContactMessage {
   id: string;
@@ -6,18 +7,20 @@ interface ContactMessage {
   email: string;
   message: string;
   created_at: string;
+  read_at: string | null;
 }
 
 const RECENT_LIMIT = 200;
 
-// Read-only, same as /admin/orders — there's no email notification hooked up
-// yet (see README's "已知欠缺"), so this is currently the only way anyone
-// sees a footer contact form submission. Uses the service client because
-// contact_messages only has an insert policy (anyone can submit, nobody can
-// read it back), on purpose — admin reads deliberately bypass RLS instead of
-// opening up a select policy to authenticated users.
+// Read-only list of contact form submissions. Since 2026-09-25 each new
+// message also emails ADMIN_ALERT_EMAIL, and opening this page marks every
+// message shown as read (clears the red count on the admin nav) — see
+// MarkContactRead. Messages that were unread when the page loaded get a
+// "New" tag for this view. Uses the service client: anon/authenticated have
+// no access to contact_messages at all (security batch 2).
 export default async function AdminContactPage() {
   const admin = createServiceClient();
+  const loadedAt = new Date().toISOString();
   const { data, error } = await admin
     .from("contact_messages")
     .select("*")
@@ -38,6 +41,7 @@ export default async function AdminContactPage() {
       </p>
 
       {error && <p className="mt-8 text-sm text-red-600">{error.message}</p>}
+      {messages.some((msg) => !msg.read_at) && <MarkContactRead before={loadedAt} />}
 
       <div className="mt-6 flex flex-col gap-4">
         {messages.map((msg) => (
@@ -46,7 +50,14 @@ export default async function AdminContactPage() {
             className="rounded-xl border border-zinc-200 bg-white p-4"
           >
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <span className="font-medium text-zinc-900">{msg.name}</span>
+              <span className="font-medium text-zinc-900">
+                {msg.name}
+                {!msg.read_at && (
+                  <span className="ml-2 rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
+                    New
+                  </span>
+                )}
+              </span>
               <a
                 href={`mailto:${msg.email}`}
                 className="text-sm text-zinc-500 hover:underline"

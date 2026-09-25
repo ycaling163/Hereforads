@@ -2231,6 +2231,40 @@ select bucket, window_start, hits from public.rate_limits order by hits desc lim
   - 登录邮件里的链接和验证码是**同一个一次性凭证**:先填了验证码,再点链接就会失效;再要一封新邮件,旧的也失效。`/auth/confirm` 遇到链接失效时,如果这个浏览器已经登录着就直接进 Purchases,不再显示"链接失效";否则登录页的提示改成说明这个规则。
 - Stripe 付款页的 Apple Pay、Link("Onelink")都属于卡类付款,钱照样进平台 Stripe 账户,代码里的 `payment_method_types: ["card"]` 不用改。
 
+## 后台留言提醒 + 登录链接防邮箱扫描(2026-09-25)
+
+**产品负责人确认的规则**:打开 `/admin/contact` 就把当时看到的留言全部算作已读;"今日"按英国时间 0 点算;每收到一条留言立刻发一封邮件。
+
+### 代码改了什么
+
+- **新留言邮件**:联系表单提交成功后给 `ADMIN_ALERT_EMAIL` 发一封 "[HereForAds admin] New contact message from …",正文是留言内容(超过 2000 字截断),按钮指向 `/admin/contact`;邮件的 Reply-To 是留言人邮箱,直接点"回复"就能回他。用 `after()` 发,不拖慢提交。
+- **未读**:`contact_messages` 加 `read_at` 列(下面 SQL)。后台顶部导航 "Contact" 上显示未读数红点;打开 `/admin/contact` 后,页面在浏览器里显示出来才把当时看到的留言标成已读(不在服务端渲染时标——链接预取也会渲染页面),这次看到的未读留言带 "New" 标签,导航红点清零。
+- **总览页卡片**右上角:Contact messages 显示 "N new"(红),Total users 显示 "+N today"(绿,按 `profiles.created_at` 英国时间当天 0 点起算)。
+- **登录邮件链接防邮箱安全扫描**:Hotmail/Outlook 的 Safe Links 等会在用户点开之前先访问邮件里的链接;以前 `/auth/confirm` 一被访问就登录,一次性的链接和验证码就被扫描器用掉,用户再点/再填显示"已过期"。现在 `/auth/confirm` 把 `token_hash` 转到新页面 `/auth/continue`,显示一个 "Log in" 按钮,**点了按钮才真正登录**(POST,扫描器不会点)。Supabase 邮件模板**不用改**。
+
+### 要手动执行的 SQL
+
+```sql
+alter table public.contact_messages
+  add column if not exists read_at timestamptz;
+
+create index if not exists contact_messages_unread_idx
+  on public.contact_messages (created_at) where read_at is null;
+
+-- 可选:上线前已经看过的老留言全部标成已读,红点从 0 开始
+update public.contact_messages set read_at = now() where read_at is null;
+```
+
+**顺序**:先执行 SQL,再合并部署(代码会读 `read_at`,没有这一列时后台总览页和 Contact 页的未读数会出错)。
+
+### 手动测一遍
+
+1. 无痕窗口在 `/contact` 提交一条留言 → `ADMIN_ALERT_EMAIL` 收到邮件,点"回复"收件人是留言人的邮箱。
+2. 管理员账号打开 `/admin` → 顶部 "Contact" 有红色数字 1,Contact messages 卡片右上角 "1 new"。
+3. 点进 `/admin/contact` → 那条留言带 "New";顶部红点消失。刷新页面 → "New" 没了。
+4. 用新邮箱注册一个账号 → `/admin` 的 Total users 卡片右上角 "+1 today"。
+5. 登录页要一封登录邮件,点邮件里的 "Log in to HereForAds" → 先看到一个 "Log in" 按钮的页面,点了才进 Purchases。验证码照常能用。
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀

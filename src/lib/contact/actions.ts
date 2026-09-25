@@ -1,5 +1,8 @@
 "use server";
 
+import { after } from "next/server";
+import { sendAdminAlert } from "@/lib/email/send";
+
 import { createServiceClient } from "@/lib/supabase/service";
 import { LIMITS, checkRateLimits, clientIp } from "@/lib/security/rateLimit";
 import {
@@ -56,6 +59,20 @@ export async function submitContactMessageAction(
     console.error("Contact message insert failed:", error.message);
     return { error: "Couldn't send your message, please try again." };
   }
+
+  // 每条新留言立刻发邮件给管理员(产品负责人 2026-09-25 确认),点"回复"直接回给留言人。
+  // 放在 after() 里,发信不拖慢提交;sendEmail 本身出错只记日志。
+  after(() =>
+    sendAdminAlert(
+      `New contact message from ${name.replace(/\s+/g, " ").slice(0, 80)}`,
+      [message.length > 2000 ? `${message.slice(0, 2000)}…` : message],
+      [
+        ["Name", name],
+        ["Email", email],
+      ],
+      { cta: { label: "Open contact messages", path: "/admin/contact" }, replyTo: email }
+    )
+  );
 
   return { success: true };
 }

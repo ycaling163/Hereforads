@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/supabase/admin";
+import { createServiceClient } from "@/lib/supabase/service";
+import { AdminNavBadge } from "@/components/AdminNavBadge";
 
 const ADMIN_NAV: { href: string; label: string }[] = [
   { href: "/admin", label: "Overview" },
@@ -21,6 +23,12 @@ export default async function AdminLayout({
 }) {
   await requireAdmin();
 
+  // Contact 未读数(read_at 为空),显示成导航上的红点。
+  const { count: unreadContactCount } = await createServiceClient()
+    .from("contact_messages")
+    .select("id", { count: "exact", head: true })
+    .is("read_at", null);
+
   return (
     <div className="min-h-screen bg-zinc-50">
       <header className="border-b border-zinc-800 bg-zinc-900">
@@ -37,6 +45,9 @@ export default async function AdminLayout({
                 className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
               >
                 {item.label}
+                {item.href === "/admin/contact" && (
+                  <AdminNavBadge initialCount={unreadContactCount ?? 0} />
+                )}
               </Link>
             ))}
           </nav>
