@@ -1931,7 +1931,7 @@ order by 1, 2, 3;   -- 应该只剩 listings.status 的 INSERT(发布广告时�
 
 ## 安全核查 · 第 1 批上线后的验证结果 + 第 2、3 批交接(2026-09-25)
 
-**给接手的 session**:这一节是切 Stripe live 前安全核查的交接文档。第 1 批(PR #50)已合并、SQL 已执行、测试卡验证通过;**第 2 批已上线并验证通过(2026-09-25,PR #52–#57,见"安全核查 · 第 2 批"和"第 2 批测试反馈");Supabase CAPTCHA 已开启;第 3 批已写代码,见"安全核查 · 第 3 批"**,下面的规则都已经跟产品负责人确认过,按这里实现即可。工作方式(产品负责人定的,不要改):每批一个 PR;提交前跑 `npm run lint`、`npm run build`、`npm audit`;需要的 SQL 写进 README、由产品负责人手动执行(Supabase MCP 连不上 HereForAds 的项目,只能给他 SQL 让他跑、把结果截图回来);密钥不进代码;拿不准的或会改产品规则的先问;推送 + 开 PR 后停下等确认。
+**给接手的 session**:这一节是切 Stripe live 前安全核查的交接文档。第 1 批(PR #50)已合并、SQL 已执行、测试卡验证通过;**第 2 批已上线并验证通过(2026-09-25,PR #52–#57,见"安全核查 · 第 2 批"和"第 2 批测试反馈");Supabase CAPTCHA 已开启;第 3 批已上线并验证通过(2026-09-25,PR #59/#60,见"安全核查 · 第 3 批")**,下面的规则都已经跟产品负责人确认过,按这里实现即可。工作方式(产品负责人定的,不要改):每批一个 PR;提交前跑 `npm run lint`、`npm run build`、`npm audit`;需要的 SQL 写进 README、由产品负责人手动执行(Supabase MCP 连不上 HereForAds 的项目,只能给他 SQL 让他跑、把结果截图回来);密钥不进代码;拿不准的或会改产品规则的先问;推送 + 开 PR 后停下等确认。
 
 ### 第 1 批上线后已经验证过的(2026-09-25,Stripe 测试 sandbox)
 
@@ -2435,6 +2435,12 @@ union all
 select 'social_accounts', id::text, url from public.social_accounts
 where url is not null and url <> '' and url !~* '^https?://';
 ```
+
+### 验证结果(2026-09-25,产品负责人实测)
+
+- 第 1–6 项(上传校验、私信、密码规则、guest 成功页、状态名、默认币种)正常;SQL、Supabase 密码规则、Stripe `checkout.session.expired` 都已配置。
+- 第 7 项:securityheaders.com 评分 **A**。HSTS、X-Frame-Options、X-Content-Type-Options、Referrer-Policy、Permissions-Policy 都有;"Content-Security-Policy" 显示缺失是**预期的**——现在发的是 `Content-Security-Policy-Report-Only`(只报告不拦截)。观察一两周 Vercel 日志里的 "CSP violation",没有误伤再改成强制(script-src 换成 nonce)。
+- 测试反馈后加了:订单/消息列表的广告小封面图、"View Stripe dashboard" 新标签页打开(PR #60)。
 
 ### 手动测一遍
 

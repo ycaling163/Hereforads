@@ -362,3 +362,8 @@
 - 产品负责人测试第 3 批:1–6 项正常(第 7 项响应头待查)。反馈两点,已改:
   - Sales、Purchases、Messages 列表和会话页的广告标题旁加小封面图(`ListingThumb`,封面是视频时显示第一帧),卖家/买家一眼认出是哪条广告。
   - Payment Management 的 "View Stripe dashboard" 改成新标签页打开:普通链接指向新的 `/api/stripe/dashboard`(生成 Stripe 登录链接再跳转),删掉原来的 server action。无 SQL。
+
+## 2026-09-25 第 3 批验证完成
+
+- 产品负责人实测第 3 批 1–7 项正常;securityheaders.com 评分 A(CSP 显示缺失是因为现在是 Report-Only,预期内)。三批安全核查全部完成。
+- 待办:① 一两周后看 Vercel 日志 "CSP violation",没问题就把 CSP 改成强制(nonce);② 产品负责人提出以后要复用这套代码做"活动预订"等站点,建议第 3 批之后做一次"模板化整理"(数据库迁移文件 `supabase/migrations/`、站点配置集中、新站点上线清单),**还没排期,等产品负责人确认**;③ 切 live 前的手动清单见 README"切 live 前产品负责人要手动做的"。
