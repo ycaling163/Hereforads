@@ -65,6 +65,19 @@ grant update (
   price_card_image_url
 ) on table public.seller_profiles to authenticated;
 
+-- profiles / seller_profiles:谁都能读公开资料,但 Stripe 账户 ID 只有服务端能读
+-- (2026-09-25 安全复查;代码里公开查询用 PUBLIC_PROFILE_COLUMNS /
+-- PUBLIC_SELLER_PROFILE_COLUMNS)。以后给这两张表加新列,要在这里把新列加进 grant,
+-- 不然前台读不到。
+revoke select on table public.profiles from anon, authenticated;
+grant select (id, role, display_name, created_at, updated_at, country, stripe_onboarded, is_banned, username)
+  on table public.profiles to anon, authenticated;
+revoke select on table public.seller_profiles from anon, authenticated;
+grant select (
+  user_id, bio, avatar_url, is_verified, created_at, updated_at, stripe_charges_enabled,
+  stripe_payouts_enabled, content_categories, website_url, banner_url, price_card_image_url
+) on table public.seller_profiles to anon, authenticated;
+
 -- 函数:只给服务端调
 revoke all on function public.create_booking_order(jsonb) from public, anon, authenticated;
 grant execute on function public.create_booking_order(jsonb) to service_role;

@@ -3,9 +3,9 @@
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { deleteUnusedMedia } from "@/lib/mediaCleanup";
 import { checkUpload } from "@/lib/uploads";
 import { parseFollowerCount } from "@/lib/format";
-import { storagePathFromPublicUrl } from "@/lib/storage";
 import { normalizeUsername } from "@/lib/username";
 import { normalizeWebUrl } from "@/lib/url";
 import { MEDIA_BUCKET } from "@/config/site";
@@ -153,16 +153,10 @@ export async function updateProfileAction(
 
   // Only remove the old file once the new URL is safely saved, so a storage
   // hiccup never leaves the profile pointing at a file we've deleted.
-  const oldPathsToDelete = [
+  await deleteUnusedMedia(user.id, [
     avatarUrl ? existingSellerProfile?.avatar_url : null,
     bannerUrl ? existingSellerProfile?.banner_url : null,
-  ]
-    .map((url) => (url ? storagePathFromPublicUrl(url, AVATAR_BUCKET) : null))
-    .filter((path): path is string => path !== null);
-
-  if (oldPathsToDelete.length > 0) {
-    await supabase.storage.from(AVATAR_BUCKET).remove(oldPathsToDelete);
-  }
+  ]);
 
   return { success: true };
 }

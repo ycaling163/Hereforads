@@ -25,11 +25,13 @@ import {
   PRICING_UNIT_LABELS,
   SOCIAL_PLATFORM_LABELS,
 } from "@/lib/supabase/enums";
-import type {
-  Listing,
-  Profile,
-  SellerProfile,
-  SocialAccount,
+import {
+  PUBLIC_PROFILE_COLUMNS,
+  PUBLIC_SELLER_PROFILE_COLUMNS,
+  type Listing,
+  type Profile,
+  type SellerProfile,
+  type SocialAccount,
 } from "@/lib/supabase/types";
 
 export async function generateMetadata({
@@ -80,10 +82,10 @@ export default async function ListingDetailPage({
       data: { user },
     },
   ] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", listing.seller_id).maybeSingle(),
+    supabase.from("profiles").select(PUBLIC_PROFILE_COLUMNS).eq("id", listing.seller_id).maybeSingle(),
     supabase
       .from("seller_profiles")
-      .select("*")
+      .select(PUBLIC_SELLER_PROFILE_COLUMNS)
       .eq("user_id", listing.seller_id)
       .maybeSingle(),
     // Only this listing's own placement — not every account the seller owns,

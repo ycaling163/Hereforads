@@ -1,5 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Listing, Profile, SellerProfile, SocialAccount } from "@/lib/supabase/types";
+import {
+  PUBLIC_PROFILE_COLUMNS,
+  PUBLIC_SELLER_PROFILE_COLUMNS,
+  type Listing,
+  type Profile,
+  type SellerProfile,
+  type SocialAccount,
+} from "@/lib/supabase/types";
 
 export interface PublisherPriceRange {
   currency: string;
@@ -54,8 +61,8 @@ export async function getActivePublishers(
 
   const [{ data: profileRows }, { data: sellerProfileRows }, { data: socialAccountRows }] =
     await Promise.all([
-      supabase.from("profiles").select("*").in("id", sellerIds),
-      supabase.from("seller_profiles").select("*").in("user_id", sellerIds),
+      supabase.from("profiles").select(PUBLIC_PROFILE_COLUMNS).in("id", sellerIds),
+      supabase.from("seller_profiles").select(PUBLIC_SELLER_PROFILE_COLUMNS).in("user_id", sellerIds),
       supabase.from("social_accounts").select("*").in("user_id", sellerIds),
     ]);
 

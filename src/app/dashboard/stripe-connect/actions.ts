@@ -25,7 +25,8 @@ export async function startStripeOnboardingAction(
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
+  // Stripe 账户 ID 只有 service_role 能读(README"安全复查"第 3 条);上面已确认是本人,只查自己这一行。
+  const { data: profile } = await createServiceClient()
     .from("profiles")
     .select("country,stripe_connect_account_id")
     .eq("id", user.id)

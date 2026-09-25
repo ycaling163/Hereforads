@@ -2543,10 +2543,37 @@ select policyname, cmd from pg_policies where schemaname = 'storage';
 
 执行后测:① 首页/广告详情页的图片、卖家头像和横幅正常显示;② 发布一条带图片的广告(或给已有广告加一张图)能上传;③ 私信里发一张图,双方都能看到。
 
-### 3. 【低,没改,记录】
+### 3. 【低,产品负责人要求一起修】Stripe 账户 ID 公开可读;删广告/换头像时旧图片没删
 
-- **所有人都能通过 API 读到 `profiles`、`seller_profiles` 的全部列**,包括 `stripe_connect_account_id`/`stripe_account_id`、`stripe_onboarded`、`stripe_charges_enabled`、`is_banned`、`country`。Stripe 账户 ID 单独拿到做不了什么(没有我们的 secret key),但属于不必要公开的信息。要收紧得改成列级 select 权限,并确认页面上所有读这两张表的地方都不再读这些列,改动面较大,以后单独做。
-- **用户删除广告/换头像时,旧文件其实没被删掉**:代码用登录用户的身份调 `storage.remove()`,但 storage 没有 delete 策略,删除静默失败。不是安全问题(文件还是公开的图片),只是存储空间会一直增长。以后要清理可以改成服务端用 service_role 删。
+**(a) 卖家 Stripe 账户 ID 不再对外公开。** 以前任何人都能通过 API 读到 `profiles.stripe_connect_account_id`、`seller_profiles.stripe_account_id`。改成列级权限:这两列只有服务端(service_role)能读,其它列照旧公开(页面上的"已认证"标记、封禁状态、国家等不受影响)。
+
+- 代码:公开页面(广告详情、卖家主页 `/sellers/[id]` 和 `/[username]`、广告/卖家卡片列表、`/dashboard/profile`)原来 `select("*")`,改成只读 `PUBLIC_PROFILE_COLUMNS` / `PUBLIC_SELLER_PROFILE_COLUMNS`(`src/lib/supabase/types.ts`);卖家读自己 Stripe 账户 ID 的 3 处(Payment Management 页面、连接 Stripe、打开 Stripe 后台)改成确认本人后用 service_role 读。放款、webhook、下单本来就是 service_role。
+- **以后给 `profiles` / `seller_profiles` 加新列,要同时在下面的 grant 里加上这一列**(迁移文件 `_grants.sql` 也要加),不然前台读不到、页面会报错。
+
+**(b) 删广告、编辑广告去掉图片、换头像/横幅时,真的删掉旧文件。** 以前代码用登录用户身份删,但 storage 没有 delete 策略,删除静默失败。现在统一走 `src/lib/mediaCleanup.ts`:只删这个用户自己文件夹下的文件;删之前查一遍还有没有别的地方在用(复制广告会共用同一批图片;头像、横幅、价目表图、私信图片都在同一个 bucket),还在用的保留;用 service_role 删;失败只记日志,不影响保存。**以前没删掉的老文件这次不清理**(要清的话以后另做一次性清理)。
+
+**顺序很重要:先合并部署,再执行下面的 SQL。** 新代码在执行 SQL 前后都能用;反过来先执行 SQL 的话,旧代码的 `select("*")` 会让广告页、卖家主页报错。
+
+```sql
+-- Stripe 账户 ID 只给服务端读(可以重复执行)
+revoke select on table public.profiles from anon, authenticated;
+grant select (id, role, display_name, created_at, updated_at, country, stripe_onboarded, is_banned, username)
+  on table public.profiles to anon, authenticated;
+revoke select on table public.seller_profiles from anon, authenticated;
+grant select (
+  user_id, bio, avatar_url, is_verified, created_at, updated_at, stripe_charges_enabled,
+  stripe_payouts_enabled, content_categories, website_url, banner_url, price_card_image_url
+) on table public.seller_profiles to anon, authenticated;
+
+-- 核对:应该是 false、true、false、true
+select
+  has_column_privilege('anon', 'public.profiles', 'stripe_connect_account_id', 'select') as anon_sees_stripe_id,
+  has_column_privilege('anon', 'public.profiles', 'display_name', 'select') as anon_sees_name,
+  has_column_privilege('authenticated', 'public.seller_profiles', 'stripe_account_id', 'select') as user_sees_old_stripe_id,
+  has_column_privilege('authenticated', 'public.seller_profiles', 'avatar_url', 'select') as user_sees_avatar;
+```
+
+执行后测:① 不登录打开首页、`/listings`、一条广告详情、一个卖家主页、`/publishers`,都正常显示(卖家名、头像、"已认证"标记);② 登录卖家账号打开 `/dashboard/profile` 能改资料和用户名;③ `/dashboard/stripe-connect` 正常显示 Stripe 状态,"View Stripe dashboard" 能打开;④ 编辑一条广告删掉一张图保存,在 Supabase → Storage → ad-space-photos → 你的用户 ID 文件夹里,那张图没了;⑤ 用 Duplicate 复制一条广告,删掉原来那条,复制出来的那条图片还在;⑥ 换一次头像,旧头像文件没了、新头像正常显示。
 
 ## 部署(Vercel)
 
