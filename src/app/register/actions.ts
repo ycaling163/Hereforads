@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ensureProfile } from "@/lib/supabase/ensure-profile";
 import { safeRedirectPath } from "@/lib/safeRedirect";
+import { passwordProblem } from "@/lib/passwordRules";
 import {
   TURNSTILE_FAILED_MESSAGE,
   missingSupabaseCaptcha,
@@ -29,8 +30,9 @@ export async function registerAction(
   if (!email || !password) {
     return { error: "Please enter your email and password" };
   }
-  if (password.length < 6) {
-    return { error: "Password must be at least 6 characters" };
+  const weakPassword = passwordProblem(password);
+  if (weakPassword) {
+    return { error: weakPassword };
   }
   if (password !== confirmPassword) {
     return { error: "Passwords don't match" };

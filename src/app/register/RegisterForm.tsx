@@ -5,6 +5,7 @@ import Link from "next/link";
 import { PasswordInput } from "@/components/PasswordInput";
 import { OAuthButtons } from "@/components/OAuthButtons";
 import { Turnstile } from "@/components/Turnstile";
+import { PASSWORD_HINT } from "@/lib/passwordRules";
 import { registerAction, type RegisterState } from "./actions";
 
 const initialState: RegisterState = {};
@@ -44,14 +45,15 @@ export function RegisterForm({ next }: { next?: string }) {
           id="password"
           name="password"
           label="Password"
-          minLength={6}
+          minLength={8}
           autoComplete="new-password"
         />
+        <p className="-mt-2 text-xs text-zinc-500">{PASSWORD_HINT}</p>
         <PasswordInput
           id="confirmPassword"
           name="confirmPassword"
           label="Confirm password"
-          minLength={6}
+          minLength={8}
           autoComplete="new-password"
         />
 

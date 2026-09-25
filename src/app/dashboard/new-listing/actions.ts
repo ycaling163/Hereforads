@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { checkUpload, isOwnStorageUrl } from "@/lib/uploads";
 import { parseListingFormFields } from "@/lib/listingFormValidation";
 
 // listing 图片/视频复用已有的 ad-space-photos bucket,不用重新建。
@@ -62,20 +63,22 @@ export async function createListingAction(
   // Carried over when duplicating another listing (ListingForm's hidden
   // "existing_media" inputs) — only accept ones that are actually this
   // user's own storage objects, never an arbitrary client-submitted URL.
-  const ownedMediaMarker = `/object/public/${MEDIA_BUCKET}/${user.id}/`;
   const existingMediaUrls = formData
     .getAll("existing_media")
     .map(String)
-    .filter((url) => url.includes(ownedMediaMarker));
+    .filter((url) => isOwnStorageUrl(url, MEDIA_BUCKET, user.id));
 
   const mediaUrls: string[] = [...existingMediaUrls];
   try {
     for (const file of mediaFiles) {
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `${user.id}/listings/${randomUUID()}.${ext}`;
+      const checked = await checkUpload(file, "listing_media");
+      if (!checked.ok) {
+        return { error: checked.error };
+      }
+      const path = `${user.id}/listings/${randomUUID()}.${checked.ext}`;
       const { error: uploadError } = await supabase.storage
         .from(MEDIA_BUCKET)
-        .upload(path, file, { contentType: file.type || undefined });
+        .upload(path, file, { contentType: checked.contentType });
 
       if (uploadError) {
         return { error: `Media upload failed: ${uploadError.message}` };

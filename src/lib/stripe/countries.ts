@@ -56,3 +56,23 @@ export function isStripeSupportedCountry(
 ): code is StripeSupportedCountryCode {
   return STRIPE_SUPPORTED_COUNTRIES.some((c) => c.code === code);
 }
+
+// 欧元区国家(发布广告时默认币种用 EUR)。
+const EURO_COUNTRIES = new Set([
+  "AT", "BE", "HR", "CY", "EE", "FI", "FR", "DE", "GR", "IE", "IT", "LV", "LT", "LU", "MT",
+  "NL", "PT", "SK", "SI", "ES",
+]);
+const COUNTRY_CURRENCY: Record<string, string> = {
+  US: "USD", GB: "GBP", CA: "CAD", AU: "AUD", SG: "SGD", HK: "HKD", JP: "JPY",
+};
+
+/**
+ * 发布广告时的默认标价币种:卖家收款国家的货币(产品负责人 2026-09-25 同意),用银行账户
+ * 的币种标价,放款时就不用换汇。不在可选币种里的国家返回 null(表单用 USD)。
+ */
+export function defaultCurrencyForCountry(country: string | null | undefined): string | null {
+  if (!country) return null;
+  const code = country.toUpperCase();
+  if (EURO_COUNTRIES.has(code)) return "EUR";
+  return COUNTRY_CURRENCY[code] ?? null;
+}

@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { checkUpload } from "@/lib/uploads";
 import { parseFollowerCount } from "@/lib/format";
 import { storagePathFromPublicUrl } from "@/lib/storage";
 import { normalizeUsername } from "@/lib/username";
@@ -79,11 +80,14 @@ export async function updateProfileAction(
     file: File,
     folder: "avatar" | "banner"
   ): Promise<string | { error: string }> {
-    const ext = file.name.split(".").pop() || "jpg";
-    const path = `${user!.id}/${folder}/${randomUUID()}.${ext}`;
+    const checked = await checkUpload(file, "image");
+    if (!checked.ok) {
+      return { error: checked.error };
+    }
+    const path = `${user!.id}/${folder}/${randomUUID()}.${checked.ext}`;
     const { error: uploadError } = await supabase.storage
       .from(AVATAR_BUCKET)
-      .upload(path, file, { contentType: file.type || undefined });
+      .upload(path, file, { contentType: checked.contentType });
 
     if (uploadError) {
       return { error: `${folder === "avatar" ? "Avatar" : "Banner"} upload failed: ${uploadError.message}` };

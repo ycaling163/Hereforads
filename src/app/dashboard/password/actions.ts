@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { passwordProblem } from "@/lib/passwordRules";
 
 export interface SetPasswordState {
   error?: string;
@@ -23,8 +24,9 @@ export async function setPasswordAction(
 
   const password = String(formData.get("password") ?? "");
   const confirmPassword = String(formData.get("confirm_password") ?? "");
-  if (password.length < 6) {
-    return { error: "Password must be at least 6 characters" };
+  const weakPassword = passwordProblem(password);
+  if (weakPassword) {
+    return { error: weakPassword };
   }
   if (password !== confirmPassword) {
     return { error: "Passwords don't match" };

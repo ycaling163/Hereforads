@@ -41,6 +41,7 @@ export function ListingForm({
   websiteUrl,
   submitLabel,
   pendingLabel,
+  defaultCurrency,
 }: {
   action: (
     prevState: ListingFormState,
@@ -55,13 +56,16 @@ export function ListingForm({
   websiteUrl: string | null;
   submitLabel: string;
   pendingLabel: string;
+  /** 新发布时的默认币种(卖家收款国家的货币);编辑/复制时用原来的币种。 */
+  defaultCurrency?: string | null;
 }) {
   const [state, formAction, pending] = useActionState(action, {});
   const [priceAmount, setPriceAmount] = useState(
     initialListing?.price_amount !== undefined ? String(initialListing.price_amount) : ""
   );
   const [priceCurrency, setPriceCurrency] = useState(
-    initialListing?.price_currency ?? "USD"
+    initialListing?.price_currency ??
+      (defaultCurrency && CURRENCIES.includes(defaultCurrency) ? defaultCurrency : "USD")
   );
   const [pricingUnit, setPricingUnit] = useState(initialListing?.pricing_unit ?? "one_time");
   const [bookingEnabled, setBookingEnabled] = useState(initialListing?.booking_enabled ?? false);
@@ -283,6 +287,11 @@ export function ListingForm({
               </option>
             ))}
           </select>
+          <p className="text-xs text-zinc-500">
+            Tip: price in your bank account&apos;s currency
+            {defaultCurrency ? ` (${defaultCurrency})` : ""} — otherwise Stripe converts your
+            earnings (about 2%, paid by you).
+          </p>
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="pricing_unit" className={labelClass}>

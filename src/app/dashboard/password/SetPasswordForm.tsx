@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { PasswordInput } from "@/components/PasswordInput";
+import { PASSWORD_HINT } from "@/lib/passwordRules";
 import { setPasswordAction, type SetPasswordState } from "./actions";
 
 export function SetPasswordForm({ submitLabel }: { submitLabel: string }) {
@@ -11,7 +12,14 @@ export function SetPasswordForm({ submitLabel }: { submitLabel: string }) {
   );
   return (
     <form action={formAction} className="flex max-w-sm flex-col gap-4">
-      <PasswordInput id="password" name="password" label="New password" autoComplete="new-password" />
+      <PasswordInput
+        id="password"
+        name="password"
+        label="New password"
+        autoComplete="new-password"
+        minLength={8}
+      />
+      <p className="-mt-2 text-xs text-zinc-500">{PASSWORD_HINT}</p>
       <PasswordInput
         id="confirm_password"
         name="confirm_password"

@@ -206,8 +206,8 @@ export const LISTING_ORDER_STATUS_LABELS: Record<ListingOrderStatus, string> = {
   paid_in_escrow: "In escrow — awaiting delivery",
   delivered: "Delivered — awaiting buyer confirmation",
   confirmed: "Releasing…",
-  released: "Paid out",
-  expired_auto_confirmed: "Paid out", // 历史遗留标签,当前流程放款一律落在 released
+  released: "Released to seller",
+  expired_auto_confirmed: "Released to seller", // 历史遗留标签,当前流程放款一律落在 released
   cancelled: "Cancelled — refunded",
 };
 

@@ -1,14 +1,19 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ReplyForm } from "@/components/ReplyForm";
 import { replyToThreadAction } from "../../actions";
 import type { ListingMessage } from "@/lib/supabase/types";
+import { UUID_PATTERN } from "@/lib/messages";
 
 export default async function MessageThreadPage({
   params,
 }: PageProps<"/dashboard/messages/[listingId]/[otherUserId]">) {
   const { listingId, otherUserId } = await params;
+  // 这两个值会拼进下面的 .or() 过滤条件,先确认是 UUID(安全核查第 3 批第 17 条)。
+  if (!UUID_PATTERN.test(listingId) || !UUID_PATTERN.test(otherUserId)) {
+    notFound();
+  }
   const supabase = await createClient();
   const {
     data: { user },

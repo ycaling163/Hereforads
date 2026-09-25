@@ -147,11 +147,13 @@ export default async function StripeConnectPage() {
             <StatCard label="Available to withdraw" value={availableLabel} />
             <StatCard label="Pending" value={pendingLabel} />
           </div>
-          {defaultCurrency && hasForeignCurrencySales && (
-            <p className="mt-3 text-xs text-zinc-500">
-              Your payouts settle in {defaultCurrency}. Stripe automatically
-              converts sales in other currencies when it pays out, minus a
-              small conversion fee — you don&apos;t need to do anything.
+          {defaultCurrency && (
+            <p className={`mt-3 text-xs ${hasForeignCurrencySales ? "text-amber-700" : "text-zinc-500"}`}>
+              Your bank payouts are in {defaultCurrency}. We send your earnings in the
+              currency the buyer paid (your listing&apos;s currency); if that isn&apos;t{" "}
+              {defaultCurrency}, Stripe converts it as soon as it reaches your Stripe account,
+              at about 2% — paid by you. To avoid this, price your listings in{" "}
+              {defaultCurrency}.
             </p>
           )}
           <form action={openStripeDashboardAction} className="mt-6">
