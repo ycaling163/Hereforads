@@ -355,3 +355,4 @@
 - 做了:付款时日期冲突触发器 + 自动退款 + `checkout.session.expired`;上传按文件头白名单 + 10MB + bucket 限制;安全响应头 + CSP Report-Only(`/api/csp-report` 记日志);私信规则(服务端 + RLS)、收件人只能改 read_at;会话页 UUID 校验;密码 8 位 + 数字/大小写;existing_media 前缀校验;guest 成功页改 session_id + 打码邮箱;`server-only`;URL http/https 约束;默认币种 + 换汇说明;状态改名。细节见 README"安全核查 · 第 3 批"。
 - **要人工做**:执行 README 里的两段 SQL;Supabase 密码规则 + Secure password change;Stripe webhook 加勾 `checkout.session.expired`。
 - 验证:lint + build + npm audit;SQL 在本地 Postgres 16(简化表结构)跑过两遍,测了触发器冲突/不冲突、私信策略四种情况、read_at 列权限、URL 约束。连不上 Supabase/Stripe,上传、私信、guest 成功页没实测。
+- 执行第 3 批 SQL 后核对:`social_accounts` 有一行 `url = ''`(只填账号名时代码存空字符串)。原约束不允许空字符串,会让卖家新增/修改只有账号名的社交账号报错——约束改成允许 `''`,产品负责人已按修正后的 SQL 重新执行。

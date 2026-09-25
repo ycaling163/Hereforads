@@ -2314,7 +2314,7 @@ alter table public.listing_orders
 | 20 | 复制/编辑广告时沿用的旧图片,只认 `{SUPABASE_URL}/storage/v1/object/public/ad-space-photos/{自己的 user id}/` 开头的地址。 |
 | 21 | guest 付款成功页的 URL 不再带邮箱,改成带 Stripe 的 `session_id`,页面服务端查 Stripe 后只显示打码邮箱(`kc•••@hotmail.co.uk`)。 |
 | 22 | `lib/supabase/service.ts`、`lib/stripe/server.ts` 加了 `import "server-only"`(Next 16 自带,不用装包),万一被前端代码引用,构建直接报错。 |
-| 23 | `seller_profiles.website_url`、`social_accounts.url` 数据库约束只能是 http/https。 |
+| 23 | `seller_profiles.website_url`、`social_accounts.url` 数据库约束只能是 http/https(`social_accounts.url` 允许空字符串:只填账号名时存的是 `''`,2026-09-25 执行 SQL 后核对发现,已修正约束)。 |
 | — | 发布广告时默认币种 = 卖家收款国家的货币(欧元区 → EUR,英国 → GBP……,不在可选币种里的用 USD),币种下拉框下面提示"用银行账户币种标价,否则 Stripe 换汇约 2%、由你承担";Payment Management 页写明换汇规则。 |
 | — | 订单状态 "Paid out" → "Released to seller";Sales 页 "Completed" 标签下的小标题 → "Released to your Stripe account";`/admin/finance` "Paid out to sellers" → "Released to sellers"。 |
 
@@ -2410,7 +2410,7 @@ alter table public.seller_profiles
 alter table public.social_accounts
   drop constraint if exists social_accounts_url_http,
   add constraint social_accounts_url_http
-    check (url is null or url ~* '^https?://') not valid;
+    check (url is null or url = '' or url ~* '^https?://') not valid;  -- 只填账号名时 url 存的是空字符串
 ```
 
 ```sql
@@ -2433,7 +2433,7 @@ select 'seller_profiles' as tbl, user_id::text as id, website_url as url from pu
 where website_url is not null and website_url !~* '^https?://'
 union all
 select 'social_accounts', id::text, url from public.social_accounts
-where url is not null and url !~* '^https?://';
+where url is not null and url <> '' and url !~* '^https?://';
 ```
 
 ### 手动测一遍
