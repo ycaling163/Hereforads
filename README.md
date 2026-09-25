@@ -4,6 +4,8 @@
 
 技术栈: Next.js 16 (App Router) + TypeScript + Tailwind CSS 4 + Supabase (Auth / Postgres / Storage)。
 
+> **复制成新站点**:品牌和业务参数在 `src/config/site.ts`,数据库结构在 `supabase/migrations/`,上线步骤见 [`docs/NEW_SITE_CHECKLIST.md`](./docs/NEW_SITE_CHECKLIST.md)(背景见下文"模板化整理"一节)。
+
 > **开始干活前先看 [`WORKLOG.md`](./WORKLOG.md) 最近几条 + 本文件的决策记录**,这个仓库好几个 session 在并行改,只看代码/git log 容易漏掉背景和已经拍板的决策(教训见 WORKLOG 2026-09-17 那条)。改完之后记得回 WORKLOG 补一条。
 >
 > **界面语言统一成英文了(2026-09-17)**:产品面向的是英文用户,之前中英文混杂(有些页面是早期原型阶段顺手写的中文)。以后新加页面/文案**一律写英文**,不要再顺手写中文 UI 文案——代码注释仍然可以是中文,给团队自己看,不影响这条规则。
@@ -2453,18 +2455,55 @@ where url is not null and url <> '' and url !~* '^https?://';
 7. **响应头**:浏览器 F12 → Network → 点任意页面请求 → Response Headers 里有 `strict-transport-security`、`x-frame-options: DENY`、`content-security-policy-report-only`。之后一周在 Vercel Logs 搜 "CSP violation",有结果截图给开发。
 8. **付款时日期冲突**(不好手动造,可以不测):触发器已在本地 Postgres 上测过;真遇到时买家和 `ADMIN_ALERT_EMAIL` 会收到邮件。
 
-## 模板化整理(交接给新对话,2026-09-25 立项,还没开始)
+## 模板化整理(2026-09-25)
 
-**给接手的 session**:产品负责人打算以后把这套代码复用成别的站点(最可能是"虚拟活动预订",也提过户外用品)。已经跟产品负责人确认的方向和边界写在这里,按这里做;实现前先读 AGENTS.md、本 README 的"安全核查"三节和 WORKLOG 最后几条。工作方式跟安全核查一样:一个 PR;提交前 `npm run lint`、`npm run build`、`npm audit`;需要的 SQL/命令写清楚由产品负责人手动执行(Supabase MCP 连不上 HereForAds 的项目);拿不准的先问;推送 + 开 PR 后停下等确认。
+**目标**:以后复制出一个新站点(最可能是"虚拟活动预订")时,不用翻 README 几十段 SQL,也不用满代码找品牌字样。**对现在的 hereforads.com 没有任何功能变化**(见下面"怎么验证的")。
+**不做的**(产品负责人确认过):不把"广告/活动/商品"抽象成可切换的多业务系统;不改任何业务规则和页面行为。
 
-**目标**:以后复制出一个新站点时,不用翻 README 几十段 SQL,也不用满代码找品牌字样。**对现在的 hereforads.com 不能有任何功能变化。**
+### 做了什么
 
-**要做的(按优先级)**:
-1. **数据库迁移文件**(最重要):把线上真实的数据库结构(public schema 的表、列、约束、索引、函数、触发器、RLS 策略、列级权限,以及 storage bucket 设置和 storage 策略)整理成按顺序排好的 `supabase/migrations/*.sql`,在一个空的 Supabase 项目里按顺序执行就能得到一样的库。**以线上导出的结构为准**,README 里的 SQL 可能跟线上有差别(比如 2026-09-25 发现 `social_accounts.url` 会存空字符串)。需要产品负责人配合导出线上结构(新对话里给他最简单的导出步骤,比如 Supabase CLI `supabase db dump`,或在 SQL Editor 跑查询导出),拿到后在本地 Postgres 上验证能从零建起来(这个沙箱有 Postgres 16,可以 `initdb` 起一个临时实例)。不导出数据,只要结构;种子数据只放必要的(比如 `site_pages` 的默认条款如果需要)。
-2. **站点配置集中**:网站名称、logo 路径、主色、客服/发信邮箱、平台佣金和手续费、托管天数、免费取消时限、日历规则(占用分钟数、最远可订天数)等,集中到一个配置文件(比如 `src/config/site.ts`),代码里引用它;现在散落的 "HereForAds" 字样改成读配置。
-3. **新站点上线清单**:一份文档(比如 `docs/NEW_SITE_CHECKLIST.md`),按顺序列出 GitHub(新建私有仓库导入,不要 Fork)、Supabase(建项目、跑迁移、Auth 设置:Site URL/Redirect URLs、邮件模板、SMTP、CAPTCHA、密码规则)、Stripe(Connect 平台、webhook 事件列表、Branding)、Vercel(环境变量全表、域名、Cron)、Cloudflare Turnstile(hostname)、Resend(发信域名 DNS)每一步要做什么。
+1. **数据库迁移文件 `supabase/migrations/`**:6 个文件(类型 → 表/约束/索引/序列 → 函数和触发器 → RLS 策略 → 表/列/函数权限 → storage bucket 和策略),在一个**新建的空** Supabase 项目里按文件名顺序执行,就得到跟线上一样的库。**以 2026-09-25 线上导出的结构为准**,不是 README 里的历史 SQL。
+   - ⚠️ **不要在 HereForAds 线上库执行这些迁移**(对象都已经存在,会报错)。以后线上库结构有改动,继续按老办法写 SQL 手动执行,**同时**在 `supabase/migrations/` 加一个新文件(文件名用更晚的时间戳),保证新站点也能跟上。
+   - **导出工具 `supabase/scripts/export_schema.sql`**:在 SQL Editor 里运行、Download CSV,就是当前库的完整结构(只读,不导出数据)。以后核对"迁移文件和线上是否一致"、或者核对新站点建得对不对,都用它。
+   - **老流程的 5 张表**(`ad_spaces`、`orders`、`campaigns`、`payouts`、`proof_uploads`)和 5 个相关枚举代码早就不用了,**没放进迁移**,结构存档在 `supabase/legacy/`。线上的这些表**没动**(产品负责人决定)。
+   - 不需要种子数据:`site_pages` 没有行时 `/terms`、`/privacy` 用代码里的默认文案;第一个管理员按上线清单手动 insert。
+2. **站点配置 `src/config/site.ts`**:站名、域名、标语、描述、logo、图标主色和文字、默认发件地址、订单号前缀、存储 bucket 名、费率和固定手续费、最低发布价、托管天数、免费取消时限、日历规则都在这里。代码里原来写死的 "HereForAds"(页面标题/分享卡片、页头 logo、页脚、登录/注册页、订单页、邮件落款和管理员邮件标题、条款默认文案、个人主页链接前缀、找订单页的 "HFA-" 提示)都改成读配置。`fees.ts`、`booking.ts`、`enums.ts` 原来导出的常量名不变,只是数值改成从配置里来。
+3. **新站点上线清单 `docs/NEW_SITE_CHECKLIST.md`**:GitHub(新建私有仓库导入,不要 Fork)→ 改代码 → Supabase(建项目、跑迁移、Auth 设置、邮件模板、SMTP、密码规则、Google 登录)→ Stripe(Connect、webhook 事件、Branding)→ Cloudflare(DNS、Turnstile)→ Vercel(环境变量全表、域名、Cron)→ Resend → 第一个管理员 → 测一遍再开 CAPTCHA。
 
-**不做的**:不把"广告/活动/商品"抽象成可切换的多业务系统(现在只有一种业务,提前抽象会让代码变复杂);不改任何业务规则和页面行为。
+### 导出线上结构时发现、已跟产品负责人确认的两处问题
+
+1. **`social_accounts` 的链接约束没有 `url = ''`**:WORKLOG 记的是"已按修正后的 SQL 重新执行",但线上导出的约束仍然是 `url is null or url ~* '^https?://'`。代码在卖家只填账号名、不填链接时存的是空字符串,所以**现在线上"只填账号名添加/修改社交账号"会报约束错误**。
+2. **`get_user_id_by_email` 匿名访客和登录用户都能调**:README"Guest 结账"那段 SQL 只 `revoke ... from public`,但 Supabase 默认单独给了 `anon`/`authenticated` 执行权限,这两条没收回。这个函数是 SECURITY DEFINER、能读 `auth.users`,任何人拿网页里公开的 anon key 就能查"某个邮箱有没有注册、对应哪个用户 ID",再对上公开的卖家主页。代码只在服务端用 service_role 调它,收回后功能不受影响。
+
+迁移文件里这两处都是修正后的写法。**线上要补执行下面的 SQL**(可以重复执行,只改这一个约束和一个函数权限,不碰数据):
+
+```sql
+-- 1. 只填账号名的社交账号:允许 url 为空字符串
+alter table public.social_accounts
+  drop constraint if exists social_accounts_url_http,
+  add constraint social_accounts_url_http
+    check (url is null or url = '' or url ~* '^https?://') not valid;
+
+-- 2. get_user_id_by_email 只给服务端调
+revoke execute on function public.get_user_id_by_email(text) from anon, authenticated;
+
+-- 核对:应该是 url = ''、false、false、true
+select
+  (select pg_get_constraintdef(oid) from pg_constraint where conname = 'social_accounts_url_http') as social_url_rule,
+  has_function_privilege('anon', 'public.get_user_id_by_email(text)', 'execute') as anon_can_call,
+  has_function_privilege('authenticated', 'public.get_user_id_by_email(text)', 'execute') as logged_in_can_call,
+  has_function_privilege('service_role', 'public.get_user_id_by_email(text)', 'execute') as server_can_call;
+```
+
+执行后测:① `/dashboard/profile` 只填账号名(不填链接)添加一个社交账号,能保存;② 不登录用一个**已注册过的邮箱**走 guest 下单到 Stripe 付款页(用到这个函数),正常跳转。
+
+### 怎么验证的
+
+- **迁移 = 线上**:本地 Postgres 16 模拟 Supabase 环境(anon/authenticated/service_role 角色、auth/storage schema、Supabase 的默认权限),空库按顺序跑 6 个迁移,再用导出工具导出,跟线上导出逐段逐条对比:类型、序列、表、约束、外键、索引、函数、触发器、RLS、策略、storage 策略、表/列/函数权限、bucket 全部一致,差别只有上面两处修正和老流程的表。另外用 SQL 实测了权限:匿名能看上架广告、看不到联系留言;登录用户能发布广告、改不了 status/is_banned、读不到订单的买家邮箱列、调不了 `get_user_id_by_email`;service_role 调 `create_booking_order` 能下单,订单号 HFA-000001。
+  - 线上是 Postgres 17,本地只有 16,17 多出来的 `maintain` 权限没法在本地验证(它是 Supabase 默认给的,迁移里没有碰)。**迁移还没在真正的 Supabase 新项目里跑过**,第一次建新站点时按清单第 3 步跑完后,用导出工具核对一遍。
+  - 上面两条线上修正 SQL 在"按线上导出重建的库"上跑过两遍,结果正确。
+- **网站无变化**:改动前(main)和改动后各 `next build` 一次、`next start` 起来,对比首页、登录、注册、联系、条款、隐私、找订单、`/publishers/join`、`/auth/continue` 9 个页面的 HTML(去掉脚本和构建哈希后完全相同,包括 `<title>` 和分享卡片 meta),两个图标(`/icon`、`/apple-icon`)逐字节相同。要登录才能看的几处(个人主页链接前缀、后台订单搜索框提示、订单页标题、邮件落款)是同样的字符串替换,没有实际打开看。订单号解析的正则改成从前缀生成,11 个输入(含 "HFA-000118"、"hfa000118"、"hfa 118"、"#118"、非法输入)跟原来结果一致。
+- `npm run lint`、`npm run build`、`npm audit` 见 PR。
 
 **以后做"活动预订"时的差异**(供参考,不是这次的任务):按场次(具体时间)而不是按天订、一场多个名额、活动所在地时区、活动结束后放款、开始前自动发参加链接和提醒、按活动定退款规则(英国"指定日期的休闲活动"不适用 14 天取消权)。账号、Stripe Connect 托管放款、拒付/退款、订单号、邮件、后台、安全防护都能直接复用。
 
@@ -2480,7 +2519,7 @@ where url is not null and url <> '' and url !~* '^https?://';
 
 下面是当前唯一在跑的 MVP v2(`listings`/`listing_orders`)已知欠缺:
 
-- **SQL 迁移还没在真实 Supabase 项目跑过**:这个开发环境连不上 `myadsspace` 项目(也连不上任何跟 HereForAds 对应的项目),README 里的 SQL 是写好等人工去 Supabase 后台执行的,没有被验证过
+- **迁移文件还没在真正的 Supabase 新项目里跑过**:这个开发环境连不上 HereForAds 的 Supabase 项目。2026-09-25 起 `supabase/migrations/` 按线上导出整理好了,在本地 Postgres 上验证过跟线上一致(见"模板化整理"一节);第一次建新站点时要用导出工具再核对一遍
 - **没配自动放款的定时触发器**:`/api/cron/auto-confirm` 端点写了,处理资金冻结期(`ESCROW_HOLD_DAYS`,3 天)到期后的自动放款,但没有实际的 Vercel Cron / Supabase pg_cron 去调用它
 - **退款/纠纷仍是人工**:规则已在 2026-09-23 定下(见"费用、取消与退款规则"一节),代码还没实现,在实现之前出问题仍需要人工去 Stripe 后台处理
 - **没做自动翻译**、**没做可嵌入组件**、**没做中国卖家收款通道**:都是产品方案里明确列的"预留但 MVP 不做"

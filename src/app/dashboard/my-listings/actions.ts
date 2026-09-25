@@ -3,9 +3,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { storagePathFromPublicUrl } from "@/lib/storage";
+import { MEDIA_BUCKET } from "@/config/site";
 import type { Listing } from "@/lib/supabase/types";
-
-const MEDIA_BUCKET = "ad-space-photos";
 
 export async function deleteListingAction(listingId: string): Promise<void> {
   const supabase = await createClient();

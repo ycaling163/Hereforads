@@ -1,4 +1,5 @@
 import { RegisterForm } from "./RegisterForm";
+import { SITE } from "@/config/site";
 
 export default async function RegisterPage({
   searchParams,
@@ -11,7 +12,7 @@ export default async function RegisterPage({
     <div className="flex flex-1 items-center justify-center px-6 py-16">
       <div className="w-full max-w-sm">
         <h1 className="mb-8 text-2xl font-semibold tracking-tight text-zinc-900">
-          Create your HereForAds account
+          Create your {SITE.name} account
         </h1>
         <RegisterForm next={next} />
       </div>

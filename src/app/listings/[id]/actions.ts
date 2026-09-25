@@ -12,6 +12,7 @@ import { formatOrderNumber } from "@/lib/orders/orderNumber";
 import { releaseBuyerHoldsOnListing } from "@/lib/orders/releaseHold";
 import { checkUpload } from "@/lib/uploads";
 import { UUID_PATTERN } from "@/lib/messages";
+import { MEDIA_BUCKET } from "@/config/site";
 import {
   LIMITS,
   checkRateLimits,
@@ -38,8 +39,8 @@ import {
   minBookingUnits,
 } from "@/lib/booking";
 
-// 私信图片复用已有的 ad-space-photos bucket,不用新建。
-const MESSAGE_MEDIA_BUCKET = "ad-space-photos";
+// 私信图片跟广告媒体放在同一个 bucket(名字在 src/config/site.ts)。
+const MESSAGE_MEDIA_BUCKET = MEDIA_BUCKET;
 
 export interface BuyListingState {
   error?: string;

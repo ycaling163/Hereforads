@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SITE } from "@/config/site";
 import { FindOrderForm } from "./FindOrderForm";
 
 export const metadata: Metadata = { title: "Find your order" };
@@ -17,7 +18,7 @@ export default async function FindOrderPage({
       <div className="w-full max-w-sm">
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Find your order</h1>
         <p className="mt-2 mb-8 text-sm text-zinc-600">
-          Enter the order number from your confirmation email (it starts with HFA-) and the
+          Enter the order number from your confirmation email (it starts with {SITE.orderNumberPrefix}) and the
           email you paid with.
         </p>
         <FindOrderForm initialOrderNumber={order} />

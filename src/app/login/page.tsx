@@ -1,4 +1,5 @@
 import { LoginForm } from "./LoginForm";
+import { SITE } from "@/config/site";
 
 export default async function LoginPage({
   searchParams,
@@ -11,7 +12,7 @@ export default async function LoginPage({
     <div className="flex flex-1 items-center justify-center px-6 py-16">
       <div className="w-full max-w-sm">
         <h1 className="mb-8 text-2xl font-semibold tracking-tight text-zinc-900">
-          Log in to HereForAds
+          Log in to {SITE.name}
         </h1>
         {error === "invalid_link" && (
           <p className="mb-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">

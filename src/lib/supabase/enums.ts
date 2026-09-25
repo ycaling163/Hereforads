@@ -1,4 +1,5 @@
 import { bookingDayStart } from "@/lib/booking";
+import { ESCROW_HOLD_DAYS, FREE_CANCEL_HOURS } from "@/config/site";
 import type { PayoutHold } from "./types";
 
 /**
@@ -218,18 +219,10 @@ export const PAYOUT_HOLD_LABELS: Record<PayoutHold, string> = {
   seller_banned: "Seller account suspended",
 };
 
-// 最低发布价和费率已挪到 src/lib/fees.ts(2026-09-23 改成固定费率,按币种区分最低价)。
+// 最低发布价和费率在 src/lib/fees.ts / src/config/site.ts(2026-09-23 改成固定费率,按币种区分最低价)。
 
-// 卖家标记交付后,给买家留几天确认窗口,窗口内没有异议(或买家主动提前确认)就自动
-// 放款 —— 平台不验证卖家提交的交付链接是否属实、也不裁定履约质量,这几天纯粹是给
-// 买家一个"看一眼、有问题赶紧联系卖家"的机会,同时也给拒付/欺诈留操作窗口(见 README
-// "平台责任边界"一节)。这个窗口从卖家标记 `delivered` 开始算,不是从付款时间算——
-// 卖家不标记交付,订单就一直停在 `paid_in_escrow`,不会超时自动放款。
-export const ESCROW_HOLD_DAYS = 3;
-
-// 付款后多少小时内,买家或卖家可以单方面免费取消(卖家还没交付的前提下),全额退款,
-// 不收卖家任何费用,不算违约。见 README"费用、取消与退款规则"第 4 条。
-export const FREE_CANCEL_HOURS = 24;
+// 托管确认天数、免费取消小时数在 src/config/site.ts(说明也在那里)。
+export { ESCROW_HOLD_DAYS, FREE_CANCEL_HOURS };
 
 /**
  * 免费取消截止时间;订单没付款时返回 null。日历预订的订单(有 start_date)另外要求

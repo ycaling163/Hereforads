@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { Turnstile } from "@/components/Turnstile";
+import { formatOrderNumber } from "@/lib/orders/orderNumber";
 import { findOrderAction, type FindOrderState } from "./actions";
 
 const inputClass =
@@ -24,7 +25,7 @@ export function FindOrderForm({ initialOrderNumber }: { initialOrderNumber?: str
           name="order_number"
           required
           defaultValue={initialOrderNumber}
-          placeholder="e.g. HFA-000118"
+          placeholder={`e.g. ${formatOrderNumber(118)}`}
           autoCapitalize="characters"
           className={inputClass}
         />

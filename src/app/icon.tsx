@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { SITE } from "@/config/site";
 
 export const size = { width: 32, height: 32 };
 export const contentType = "image/png";
@@ -15,7 +16,7 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#0B5CFF",
+          background: SITE.brandColor,
           borderRadius: 7,
           color: "#ffffff",
           fontSize: 17,
@@ -23,7 +24,7 @@ export default function Icon() {
           fontFamily: "sans-serif",
         }}
       >
-        Ad
+        {SITE.iconText}
       </div>
     ),
     { ...size }

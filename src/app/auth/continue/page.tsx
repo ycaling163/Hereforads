@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { continueSignInAction } from "./actions";
+import { SITE } from "@/config/site";
 
 // 带一次性 token 的页面:不收录、不通过 Referer 泄露。
 export const metadata: Metadata = {
@@ -23,7 +24,7 @@ export default async function ContinueSignInPage({
     <div className="flex flex-1 items-center justify-center px-6 py-16">
       <form action={continueSignInAction} className="flex w-full max-w-sm flex-col gap-4 text-center">
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
-          Log in to HereForAds
+          Log in to {SITE.name}
         </h1>
         <p className="text-sm text-zinc-600">Click the button below to finish logging in.</p>
         <input type="hidden" name="token_hash" value={token_hash ?? ""} />

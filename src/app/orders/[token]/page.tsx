@@ -5,6 +5,7 @@ import { ProofLinkHistory } from "@/components/ProofLinkHistory";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadOrderSummary } from "@/lib/orders/summary";
 import { formatOrderNumber } from "@/lib/orders/orderNumber";
+import { SITE } from "@/config/site";
 import { formatBookingRange } from "@/lib/booking";
 import {
   ESCROW_HOLD_DAYS,
@@ -109,7 +110,7 @@ export default async function OrderViewPage({
 
   return (
     <div className="mx-auto w-full max-w-xl flex-1 px-6 py-12">
-      <p className="text-sm text-zinc-500">HereForAds order</p>
+      <p className="text-sm text-zinc-500">{SITE.name} order</p>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900">
         {formatOrderNumber(order.order_number)}
       </h1>

@@ -5,35 +5,15 @@
 // "到手金额"预览)共用这一份,保证两边算出来一模一样。所有金额都先换成最小货币
 // 单位(便士/分/日元)的整数再算,避免浮点误差。
 
-export const SERVICE_FEE_RATE = 0.12;
-export const PROCESSING_FEE_RATE = 0.04;
+// 费率、固定手续费、最低发布价的数值在 src/config/site.ts。
+import {
+  SERVICE_FEE_RATE,
+  PROCESSING_FEE_RATE,
+  PROCESSING_FIXED_FEE_MINOR,
+  MIN_LISTING_PRICE_MINOR,
+} from "@/config/site";
 
-// Payment processing fee 的固定部分:GBP 0.20,其他币种按大致等值取整(USD/EUR 的
-// 0.25 是 README 第 2 条写明的;其余几种是按 2026-09 汇率取的等值整数)。
-// 最小货币单位。改金额只改这里。
-export const PROCESSING_FIXED_FEE_MINOR: Record<string, number> = {
-  GBP: 20,
-  USD: 25,
-  EUR: 25,
-  CAD: 35,
-  AUD: 40,
-  SGD: 35,
-  HKD: 200,
-  JPY: 40,
-};
-
-// 最低发布价:约等于 USD 1(2026-09-24 产品负责人定;不是每种货币都填 1——1 日元连
-// Stripe 的最低收款额都不到)。最小货币单位。
-export const MIN_LISTING_PRICE_MINOR: Record<string, number> = {
-  USD: 100,
-  GBP: 80,
-  EUR: 90,
-  CAD: 140,
-  AUD: 150,
-  SGD: 130,
-  HKD: 800,
-  JPY: 150,
-};
+export { SERVICE_FEE_RATE, PROCESSING_FEE_RATE, PROCESSING_FIXED_FEE_MINOR, MIN_LISTING_PRICE_MINOR };
 
 // Stripe 的零小数位货币(金额本身就是最小单位)。本站支持的币种里只有 JPY。
 const ZERO_DECIMAL_CURRENCIES = new Set(["JPY"]);

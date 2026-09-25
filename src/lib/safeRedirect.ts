@@ -8,7 +8,7 @@
 // 2026-09-24 安全核查:浏览器解析 URL 时会把 "\" 当成 "/"、并且删掉制表符/换行,
 // 所以 "/\evil.com"、"/\t/evil.com" 都会变成 "//evil.com" 跳到站外。这里直接拒绝
 // 反斜杠和控制字符,再用 URL 解析器确认解析结果仍然是本站。
-const BASE = "https://hereforads.invalid";
+const BASE = "https://placeholder.invalid";
 
 export function safeRedirectPath(path: string | null | undefined, fallback: string): string {
   if (!path) return fallback;
