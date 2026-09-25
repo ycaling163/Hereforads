@@ -5,6 +5,7 @@ import {
   submitContactMessageAction,
   type ContactFormState,
 } from "@/lib/contact/actions";
+import { Turnstile } from "@/components/Turnstile";
 
 export function ContactForm() {
   const [state, formAction, pending] = useActionState<ContactFormState, FormData>(
@@ -41,6 +42,7 @@ export function ContactForm() {
         placeholder="How can we help?"
         className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900"
       />
+      <Turnstile resetKey={state} />
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       <button
         type="submit"

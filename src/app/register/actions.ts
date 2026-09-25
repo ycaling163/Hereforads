@@ -4,6 +4,11 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ensureProfile } from "@/lib/supabase/ensure-profile";
 import { safeRedirectPath } from "@/lib/safeRedirect";
+import {
+  TURNSTILE_FAILED_MESSAGE,
+  missingSupabaseCaptcha,
+  turnstileToken,
+} from "@/lib/security/turnstile";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
@@ -30,6 +35,11 @@ export async function registerAction(
   if (password !== confirmPassword) {
     return { error: "Passwords don't match" };
   }
+  // Turnstile token 交给 Supabase 校验(Supabase 后台开了 CAPTCHA 之后),见 src/lib/security/turnstile.ts。
+  const captchaToken = turnstileToken(formData);
+  if (missingSupabaseCaptcha(captchaToken)) {
+    return { error: TURNSTILE_FAILED_MESSAGE };
+  }
 
   const supabase = await createClient();
   // 开了邮箱验证时,用户点验证邮件后经 /auth/callback 换 session,再回到 next
@@ -40,8 +50,13 @@ export async function registerAction(
     password,
     options: {
       emailRedirectTo: `${SITE_URL}/auth/callback?next=${encodeURIComponent(next)}`,
+      captchaToken: captchaToken || undefined,
     },
   });
+
+  if (error?.code === "captcha_failed") {
+    return { error: TURNSTILE_FAILED_MESSAGE };
+  }
 
   // 这个邮箱已经有账号(常见情况:之前用这个邮箱以访客身份下过单,系统自动建了一个没有
   // 密码的账号)。开了邮箱验证时 Supabase 不报错,而是返回一个 identities 为空的 user;

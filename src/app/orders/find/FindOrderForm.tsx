@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { Turnstile } from "@/components/Turnstile";
 import { findOrderAction, type FindOrderState } from "./actions";
 
 const inputClass =
@@ -41,6 +42,7 @@ export function FindOrderForm({ initialOrderNumber }: { initialOrderNumber?: str
           className={inputClass}
         />
       </div>
+      <Turnstile resetKey={state} />
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       <button
         type="submit"

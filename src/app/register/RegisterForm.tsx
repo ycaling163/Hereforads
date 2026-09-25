@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { PasswordInput } from "@/components/PasswordInput";
 import { OAuthButtons } from "@/components/OAuthButtons";
+import { Turnstile } from "@/components/Turnstile";
 import { registerAction, type RegisterState } from "./actions";
 
 const initialState: RegisterState = {};
@@ -53,6 +54,8 @@ export function RegisterForm({ next }: { next?: string }) {
           minLength={6}
           autoComplete="new-password"
         />
+
+        <Turnstile resetKey={state} />
 
         {state.error && <p className="text-sm text-red-600">{state.error}</p>}
         {state.message && (

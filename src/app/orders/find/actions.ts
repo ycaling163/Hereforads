@@ -3,6 +3,12 @@
 import { redirect } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase/service";
 import { parseOrderNumber } from "@/lib/orders/orderNumber";
+import { LIMITS, RATE_LIMITED_MESSAGE, checkRateLimits, clientIp } from "@/lib/security/rateLimit";
+import {
+  TURNSTILE_FAILED_MESSAGE,
+  turnstileToken,
+  verifyTurnstile,
+} from "@/lib/security/turnstile";
 
 export interface FindOrderState {
   error?: string;
@@ -23,6 +29,15 @@ export async function findOrderAction(
 
   if (!orderNumber || !email) {
     return notFoundError;
+  }
+
+  // 订单号是连续的,知道某人邮箱就能挨个试:按 IP 限流 + Turnstile(我们自己校验)。
+  const ip = await clientIp();
+  if (!(await checkRateLimits(LIMITS.findOrder(ip)))) {
+    return { error: RATE_LIMITED_MESSAGE };
+  }
+  if (!(await verifyTurnstile(turnstileToken(formData), ip))) {
+    return { error: TURNSTILE_FAILED_MESSAGE };
   }
 
   const { data: order } = await createServiceClient()

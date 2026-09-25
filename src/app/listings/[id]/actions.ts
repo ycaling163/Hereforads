@@ -10,6 +10,18 @@ import type { Listing } from "@/lib/supabase/types";
 import { fromMinorUnits, isSupportedCurrency, toMinorUnits } from "@/lib/fees";
 import { formatOrderNumber } from "@/lib/orders/orderNumber";
 import {
+  LIMITS,
+  RATE_LIMITED_MESSAGE,
+  checkRateLimits,
+  clientIp,
+  hashIdentifier,
+} from "@/lib/security/rateLimit";
+import {
+  TURNSTILE_FAILED_MESSAGE,
+  turnstileToken,
+  verifyTurnstile,
+} from "@/lib/security/turnstile";
+import {
   CHECKOUT_EXPIRES_MINUTES,
   MAX_ADVANCE_DAYS,
   PENDING_HOLD_MINUTES,
@@ -86,6 +98,16 @@ async function startCheckout(
     const guestEmail = String(formData.get("guest_email") ?? "").trim().toLowerCase();
     if (!guestEmail || !EMAIL_PATTERN.test(guestEmail)) {
       return { error: "Please enter a valid email address" };
+    }
+
+    // guest 下单会静默建账号、日历订单还会占档期:按 IP/邮箱限流 + Turnstile(我们自己
+    // 校验),见 README"安全核查 · 第 2 批"。登录用户正常购买不加。
+    const ip = await clientIp();
+    if (!(await checkRateLimits(LIMITS.guestCheckout(ip, guestEmail)))) {
+      return { error: RATE_LIMITED_MESSAGE };
+    }
+    if (!(await verifyTurnstile(turnstileToken(formData), ip))) {
+      return { error: TURNSTILE_FAILED_MESSAGE };
     }
 
     const resolved = await resolveGuestBuyerId(guestEmail);
@@ -179,6 +201,9 @@ async function startCheckout(
   if (booking && startDate && endDate) {
     // 日历订单走数据库函数:锁住这条 listing、检查日期没有跟已付款或还在付款占用期内
     // 的订单重叠,再插入——两个买家同时抢同一段日期,只有一个能下单成功。
+    // 同一买家或同一 IP 同时最多 2 个未付款的占用(数据库函数里检查,
+    // hold_ip_hash 是 IP 的加盐哈希,没配盐或拿不到 IP 时只按买家算)。
+    const ip = await clientIp();
     const { data: newOrderId, error: bookingError } = await createServiceClient().rpc(
       "create_booking_order",
       {
@@ -188,9 +213,16 @@ async function startCheckout(
           end_date: endDate,
           booking_units: quantity,
           hold_expires_at: new Date(Date.now() + PENDING_HOLD_MINUTES * 60_000).toISOString(),
+          hold_ip_hash: ip ? hashIdentifier("ip", ip) : null,
         },
       }
     );
+    if (bookingError?.message.includes("too_many_pending_holds")) {
+      return {
+        error:
+          "You already have 2 unfinished checkouts for date bookings. Complete one, or try again in about 30 minutes.",
+      };
+    }
     if (bookingError) {
       console.error("Failed to create booking order:", bookingError.message);
       return { error: "Couldn't start checkout, please try again" };

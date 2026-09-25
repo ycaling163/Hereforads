@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import { PasswordInput } from "@/components/PasswordInput";
 import { OAuthButtons } from "@/components/OAuthButtons";
+import { Turnstile } from "@/components/Turnstile";
 import {
   loginAction,
   sendSignInLinkAction,
@@ -54,6 +55,8 @@ export function LoginForm({ next, startWithCode }: { next?: string; startWithCod
           label="Password"
           autoComplete="current-password"
         />
+
+        <Turnstile resetKey={state} />
 
         {state.error && (
           <p className="text-sm text-red-600">{state.error}</p>
@@ -139,6 +142,7 @@ function SignInLinkForm({ next, startWithCode }: { next?: string; startWithCode?
             onChange={(e) => setEmail(e.target.value)}
             className={inputClass}
           />
+          <Turnstile resetKey={linkState} />
           {linkState.error && <p className="text-sm text-red-600">{linkState.error}</p>}
           <button
             type="submit"
@@ -188,6 +192,7 @@ function SignInLinkForm({ next, startWithCode }: { next?: string; startWithCode?
             required
             className={`${inputClass} tracking-widest`}
           />
+          <Turnstile resetKey={codeState} />
           {codeState.error && <p className="text-sm text-red-600">{codeState.error}</p>}
           <button
             type="submit"

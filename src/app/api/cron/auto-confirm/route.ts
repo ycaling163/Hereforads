@@ -53,6 +53,13 @@ async function handle(request: Request) {
 
   const results = { released: 0, retried: 0, held: 0, failed: 0 };
 
+  // 顺带清理限流表里过期的计数(安全核查第 2 批,src/lib/security/rateLimit.ts)。
+  // 失败只记日志,不影响放款。
+  const { error: purgeError } = await supabase.rpc("purge_rate_limits");
+  if (purgeError) {
+    console.error("Purging rate_limits failed:", purgeError.message);
+  }
+
   // 日历预订的订单(有 end_date):分两次放款(过半 40%、结束 3 天后 60%)在下一批
   // 实现;这一批先整笔压到预订期结束 3 天后再放,不会提前放款。
   const now = Date.now();
