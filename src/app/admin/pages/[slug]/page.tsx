@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { requireAdmin } from "@/lib/supabase/admin";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { SitePage } from "@/lib/supabase/types";
 import { EditPageForm } from "./EditPageForm";
@@ -16,6 +17,7 @@ export default async function AdminEditPagePage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
+  await requireAdmin();
   const { slug } = await params;
   if (!isEditableSlug(slug)) {
     notFound();

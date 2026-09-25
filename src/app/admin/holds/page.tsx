@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/supabase/admin";
 import { createServiceClient } from "@/lib/supabase/service";
 import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
 import { LISTING_ORDER_STATUS_LABELS, PAYOUT_HOLD_LABELS } from "@/lib/supabase/enums";
@@ -21,6 +22,7 @@ export default async function AdminHoldsPage({
 }: {
   searchParams: Promise<{ removed?: string; error?: string }>;
 }) {
+  await requireAdmin();
   const { removed, error } = await searchParams;
   const admin = createServiceClient();
 

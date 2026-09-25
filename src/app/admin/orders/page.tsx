@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/supabase/admin";
 import { createServiceClient } from "@/lib/supabase/service";
 import { LISTING_ORDER_STATUS_LABELS } from "@/lib/supabase/enums";
 import type { Listing, ListingOrder, Payment, Profile } from "@/lib/supabase/types";
@@ -31,6 +32,7 @@ export default async function AdminOrdersPage({
 }: {
   searchParams: Promise<{ seller?: string; q?: string }>;
 }) {
+  await requireAdmin();
   const { seller: sellerFilter, q } = await searchParams;
   // 按订单号(HFA-000118 / 118)或买家邮箱搜索,见 README"订单号与订单查询"。
   const search = (q ?? "").trim();

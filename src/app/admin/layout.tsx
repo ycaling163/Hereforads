@@ -21,6 +21,10 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // 这里的检查只管"不是管理员就跳走",挡不住子页面:Next.js 站内跳转时 layout 不重新
+  // 渲染,子页面照样会执行、内容照样会返回给浏览器(见 Next.js 文档 Authentication →
+  // "Layouts and auth checks")。所以 /admin 下每个页面、每个 server action 都必须自己先
+  // 调 requireAdmin(),新加页面别漏(2026-09-25 安全复查发现过 6 个页面漏了)。
   await requireAdmin();
 
   // Contact 未读数(read_at 为空),显示成导航上的红点。

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/supabase/admin";
 import { createServiceClient } from "@/lib/supabase/service";
 import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
 import {
@@ -28,14 +29,15 @@ export default async function AdminListingsPage({
 }: {
   searchParams: Promise<{ status?: string }>;
 }) {
+  await requireAdmin();
   const { status: statusParam } = await searchParams;
   const activeTab = TABS.some((t) => t.status === statusParam)
     ? (statusParam as ListingStatus | "all")
     : "active";
 
   // 管理员这几个页面用 service_role client 查全站数据,绕过 RLS(RLS 本来就只让
-  // 卖家看自己的 listing),访问权限完全靠上面 AdminLayout 的 requireAdmin() 把关,
-  // 不是靠数据库策略。
+  // 卖家看自己的 listing),访问权限靠本页开头的 requireAdmin() 把关(不能只靠
+  // AdminLayout,见 layout 里的说明),不是靠数据库策略。
   const admin = createServiceClient();
   let query = admin.from("listings").select("*").order("created_at", { ascending: false });
   if (activeTab !== "all") {

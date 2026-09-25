@@ -2509,6 +2509,45 @@ select
 
 **以后做"活动预订"时的差异**(供参考,不是这次的任务):按场次(具体时间)而不是按天订、一场多个名额、活动所在地时区、活动结束后放款、开始前自动发参加链接和提醒、按活动定退款规则(英国"指定日期的休闲活动"不适用 14 天取消权)。账号、Stripe Connect 托管放款、拒付/退款、订单号、邮件、后台、安全防护都能直接复用。
 
+## 安全复查(2026-09-25 晚,模板化整理之后)
+
+产品负责人要求再扫一遍:密钥有没有进代码、卖家之间能不能互看、普通用户能不能看到管理员、其它漏洞。
+
+### 结论
+
+| 检查项 | 结果 |
+|---|---|
+| 密钥写进代码 | **没有**。当前代码和全部 git 历史里没有 Stripe/Supabase/Resend/Turnstile 的真实密钥;`.env.example` 只有占位符;用到密钥的文件全在服务端,浏览器下载的构建文件里搜不到任何密钥变量 |
+| 卖家 A 看/改卖家 B 的数据 | **不能**。数据库 RLS + 列级权限(见迁移文件)只让买卖双方看到自己的订单、私信、付款,读不到买家邮箱/电话/地址这几列;代码里所有用 service_role 写订单的操作(交付、改链接、确认放款、取消、Stripe 收款账户)都先核对"是这单的买家/卖家"和订单状态;下单金额和卖家取自数据库里的广告,不是表单 |
+| 普通用户看到管理员 | **不能**看到管理员名单(`admins` 表只能查自己那一行,也没有任何途径把自己加成管理员);后台所有 server action 都先 `requireAdmin()`。**但后台页面有漏洞,见下面第 1 条(已修)** |
+| 其它 | 找订单要订单号 + 邮箱 + IP 限流 + Turnstile;订单专属页用随机 UUID;webhook 校验 Stripe 签名;定时任务要 `CRON_SECRET`;条款页 HTML 保存前过滤;`npm audit` 0 个漏洞 |
+
+### 1. 【高,已修,代码】后台 7 个页面只靠 layout 检查管理员身份
+
+`/admin`、`/admin/orders`、`/admin/contact`、`/admin/holds`、`/admin/listings`、`/admin/pages`、`/admin/pages/[slug]` 用 service_role 查全站数据,但只在 `admin/layout.tsx` 里 `requireAdmin()`。Next.js 站内跳转时 layout 不重新渲染(文档 Authentication → "Layouts and auth checks"),**不登录的人**发一个模拟站内跳转的请求就能让页面执行、拿到页面内容——比如 `/admin/orders` 会返回全部订单的买家姓名/邮箱/电话/地址,`/admin/contact` 返回全部联系留言。本地已复现(未登录请求拿到 HTTP 200 和订单页内容)。
+
+修法:这 7 个页面开头都加 `await requireAdmin()`(Users、Finance 两个页面本来就有),layout 里写了说明,以后新加后台页面必须自己检查。修后用同样的请求测了全部 9 个后台页面,都只返回"跳转登录",没有数据。
+
+**线上没有访问日志可以确认有没有人用过这个漏洞。** 利用它需要懂 Next.js 内部请求格式,普通用户点页面不会触发。
+
+### 2. 【中,SQL 要手动执行】任何人能列出图片 bucket 里的全部文件(包括私信图片)
+
+storage 上的 select 策略 "public can view ad space photos" 允许任何人查 `storage.objects`,也就是能调用 Storage 的"列出文件"接口。私信图片存在 `用户ID/messages/随机名`,用户 ID 在卖家主页等地方是公开的,所以别人能列出某个用户的私信图片再打开。Supabase 文档(Storage → Access Control)写明:公开 bucket 不需要这条策略就能访问;上传只需要 insert 策略(代码从不 upsert)。**产品负责人同意删掉**,迁移文件已同步。
+
+```sql
+drop policy if exists "public can view ad space photos" on storage.objects;
+
+-- 核对:应该只剩一条 insert 策略
+select policyname, cmd from pg_policies where schemaname = 'storage';
+```
+
+执行后测:① 首页/广告详情页的图片、卖家头像和横幅正常显示;② 发布一条带图片的广告(或给已有广告加一张图)能上传;③ 私信里发一张图,双方都能看到。
+
+### 3. 【低,没改,记录】
+
+- **所有人都能通过 API 读到 `profiles`、`seller_profiles` 的全部列**,包括 `stripe_connect_account_id`/`stripe_account_id`、`stripe_onboarded`、`stripe_charges_enabled`、`is_banned`、`country`。Stripe 账户 ID 单独拿到做不了什么(没有我们的 secret key),但属于不必要公开的信息。要收紧得改成列级 select 权限,并确认页面上所有读这两张表的地方都不再读这些列,改动面较大,以后单独做。
+- **用户删除广告/换头像时,旧文件其实没被删掉**:代码用登录用户的身份调 `storage.remove()`,但 storage 没有 delete 策略,删除静默失败。不是安全问题(文件还是公开的图片),只是存储空间会一直增长。以后要清理可以改成服务端用 service_role 删。
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀
