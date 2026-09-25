@@ -336,3 +336,9 @@
 ## 2026-09-25 后台留言可删除
 
 - 产品负责人要求:`/admin/contact` 每条留言加 "Delete" 按钮(点了先弹确认框),删除没用的留言。直接删除、不可恢复,只有管理员能操作(`deleteContactMessageAction`,service_role)。无 SQL。
+
+## 2026-09-25 改日期立刻释放未付款占用
+
+- 产品负责人测试 B8 反馈:进了付款页想改日期,自己的占用挡住自己 36 分钟。做了:Stripe "返回"(cancel_url → `/api/checkout/cancelled`)和同一买家在同一条广告重新下单时,先作废旧付款链接再释放日期;回到广告页自动带回刚才选的日期。只有买家本人/同 IP 能释放,付款链接作废不了就不释放。新列 `listing_orders.checkout_session_id`,**先执行 README"改日期:立刻释放未付款的日历占用"的 SQL 再合并**。
+- 产品负责人问了"订单查询加手机号",还没定(见对话里的建议)。
+- B3 找订单已测通过;第 2 批测试只剩阶段 C(开 Supabase CAPTCHA)。

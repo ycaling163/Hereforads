@@ -2265,6 +2265,31 @@ update public.contact_messages set read_at = now() where read_at is null;
 4. 用新邮箱注册一个账号 → `/admin` 的 Total users 卡片右上角 "+1 today"。
 5. 登录页要一封登录邮件,点邮件里的 "Log in to HereForAds" → 先看到一个 "Log in" 按钮的页面,点了才进 Purchases。验证码照常能用。
 
+## 改日期:立刻释放未付款的日历占用(2026-09-25)
+
+**问题**(产品负责人测试 B8):买家进了 Stripe 付款页又想改日期/时长,回到广告页时自己刚才选的日期还被占着(最多 36 分钟),重新选会提示日期冲突。
+
+**做法**:
+- **点 Stripe 付款页上的"返回"**:日历订单的 `cancel_url` 改成 `/api/checkout/cancelled?order=…`。这里先让 Stripe 付款链接作废(`checkout.sessions.expire`),再把订单的 `hold_expires_at` 改成现在,日期马上变回可选;然后带着刚才选的开始日期和时长回到广告页(顶部蓝色提示 "Checkout cancelled and those dates are free again"),买家直接改。
+- **浏览器后退 / 关掉付款页之后重新下单**:同一买家在同一条广告上再次下单时,先自动释放他之前没付款的占用(同样先作废付款链接),不会被自己挡住。
+- **安全**:只有买家本人(登录)或下单时同一个 IP(guest,按 `hold_ip_hash` 比对)能释放;付款链接作废失败、已经付款成功或查不清楚的一律不释放,不会出现"日期放出去了钱又付进来"。订单留在 `pending_payment`,跟自然过期的一样,不改成 cancelled。
+- 没付款也没改的,仍然是 36 分钟后自动释放。
+- 需要新列 `listing_orders.checkout_session_id`(记下付款链接)。**这个功能上线前建的未付款订单没有这个值,不会被提前释放,等它们自然过期。**
+
+**要手动执行的 SQL**(先执行再合并;没执行时下单照常,只是不能提前释放):
+
+```sql
+alter table public.listing_orders
+  add column if not exists checkout_session_id text;
+```
+
+(第 1 批把 `listing_orders` 的读权限改成了逐列授权,新列 authenticated 默认读不到,不用另外处理。)
+
+**手动测一遍**:
+1. 买家账号在一条开了日历的广告上选 3 天 → 进付款页 → 点页面左上角的 "←" 返回 → 回到广告页,顶部有蓝色提示,日历上这 3 天是可选的,刚才的日期和时长已经填好;改成 5 天 → 能再进付款页。
+2. 进付款页后用浏览器后退键回来,换一段日期直接下单 → 能进付款页,不提示日期冲突;原来那段日期也变回可选。
+3. 在第 1 步作废的旧付款页(如果还开着)点付款 → Stripe 提示链接已失效,付不了。
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀
