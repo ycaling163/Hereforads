@@ -328,3 +328,7 @@
 - 做了:留言邮件发 `ADMIN_ALERT_EMAIL`(Reply-To 留言人);`contact_messages.read_at` + 后台导航未读红点 + "New" 标签;总览页 "N new" / "+N today";`/auth/confirm` → `/auth/continue` 点按钮才登录。细节和 SQL 见 README"后台留言提醒 + 登录链接防邮箱扫描"。
 - **要人工做**:先执行 README 里的 SQL(`read_at` 列),再合并部署。
 - 验证:lint + build + npm audit;本地 dev 验证了 `/auth/confirm` 转到按钮页、点按钮后无效 token 回登录页。后台页面需要登录 + 数据库,没实测。
+
+## 2026-09-25 联系页提交后只留感谢语
+
+- 产品负责人测试反馈:`/contact` 提交成功后,上面的 "Questions, feedback, or something not working?…" 说明不需要,只留 "Thanks — …"。说明文字挪进 `ContactForm`(`intro` 参数),提交成功后跟表单一起隐藏。无 SQL。
