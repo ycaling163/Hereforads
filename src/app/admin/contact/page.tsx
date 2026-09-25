@@ -1,5 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
+import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
 import { MarkContactRead } from "./MarkContactRead";
+import { deleteContactMessageAction } from "./actions";
 
 interface ContactMessage {
   id: string;
@@ -37,7 +39,7 @@ export default async function AdminContactPage() {
       <p className="mt-2 text-zinc-600">
         Submissions from the footer contact form — the {RECENT_LIMIT} most
         recent. Reply directly to the sender&rsquo;s email; there&rsquo;s no
-        in-app reply flow.
+        in-app reply flow. Deleting a message removes it permanently.
       </p>
 
       {error && <p className="mt-8 text-sm text-red-600">{error.message}</p>}
@@ -71,6 +73,14 @@ export default async function AdminContactPage() {
             <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-700">
               {msg.message}
             </p>
+            <div className="mt-3 flex justify-end">
+              <ConfirmSubmitForm
+                action={deleteContactMessageAction.bind(null, msg.id)}
+                confirmMessage={`Delete this message from ${msg.name}? This can't be undone.`}
+                label="Delete"
+                className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-600 transition-colors hover:border-red-600 hover:text-red-600"
+              />
+            </div>
           </div>
         ))}
         {messages.length === 0 && !error && (

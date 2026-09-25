@@ -332,3 +332,7 @@
 ## 2026-09-25 联系页提交后只留感谢语
 
 - 产品负责人测试反馈:`/contact` 提交成功后,上面的 "Questions, feedback, or something not working?…" 说明不需要,只留 "Thanks — …"。说明文字挪进 `ContactForm`(`intro` 参数),提交成功后跟表单一起隐藏。无 SQL。
+
+## 2026-09-25 后台留言可删除
+
+- 产品负责人要求:`/admin/contact` 每条留言加 "Delete" 按钮(点了先弹确认框),删除没用的留言。直接删除、不可恢复,只有管理员能操作(`deleteContactMessageAction`,service_role)。无 SQL。
