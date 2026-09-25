@@ -418,3 +418,30 @@
 - 中危:storage 的公开 select 策略让任何人能列出 bucket 文件(含私信图片)。产品负责人同意删,迁移已同步,**线上要执行** README 里的一条 SQL。
 - 低危两项产品负责人要求一起修(PR #64):① Stripe 账户 ID 改成只有服务端能读——公开页面的 `select("*")` 换成公开列清单,读自己 Stripe ID 的 3 处改走 service_role;**先合并部署、再执行** README 里的列权限 SQL。② 删广告/编辑去图/换头像时真正删掉旧文件(`src/lib/mediaCleanup.ts`:只删本人文件夹、删前查引用避免误删复制广告共用的图、service_role 删)。老的残留文件没清。
 - `template-v1` 标签在修复之前,合并后建议再打 `template-v2`。
+
+## 2026-09-25 晚 · 小结(模板化整理 + 安全复查,交接给下一个对话)
+
+今天后半段做了两件事:模板化整理、之后的安全复查。**代码都已合并部署,线上 SQL 都已执行。**
+
+| PR | 内容 | 线上 SQL |
+|---|---|---|
+| #61 | 模板化整理:`supabase/migrations/`(按线上导出整理,6 个文件)、`src/config/site.ts`(品牌和业务参数集中)、`docs/NEW_SITE_CHECKLIST.md`(新站点上线清单)、`supabase/scripts/export_schema.sql`(结构导出工具) | 已执行:`social_accounts_url_http` 允许空字符串;`get_user_id_by_email` 只给 service_role |
+| #62 | 文档:记录上面的 SQL 已执行并验证 | — |
+| #63 | 【高危】后台 7 个页面只靠 layout 检查管理员,未登录的人模拟站内跳转请求就能拿到页面数据(订单买家联系方式、联系留言等),改成每个页面自己 `requireAdmin()`;【中危】storage 公开 select 策略能列出全部文件(含私信图片) | 已执行:删掉 storage 策略 "public can view ad space photos" |
+| #64 | 卖家 Stripe 账户 ID 不再公开(公开查询改成列清单,读自己 Stripe ID 改走 service_role);删广告/编辑去图/换头像时真正删掉旧文件(`src/lib/mediaCleanup.ts`) | 已执行:`profiles`、`seller_profiles` 改成列级 select 权限 |
+
+**线上现在的状态**:迁移文件跟线上结构一致(除了老流程的 5 张表,按决定只存档在 `supabase/legacy/`)。以后改线上库结构,**同时**在 `supabase/migrations/` 加一个新文件。
+
+**以后写代码要记住的规则**(细节见 README"安全复查"):
+- `/admin` 下每个页面、每个 server action 都要自己先 `requireAdmin()`,不能只靠 layout(Next.js 站内跳转不重新渲染 layout)。
+- 用户态 / 匿名 client 查 `profiles`、`seller_profiles` 不能 `select("*")`,用 `PUBLIC_PROFILE_COLUMNS` / `PUBLIC_SELLER_PROFILE_COLUMNS`;给这两张表加新列要同时加进列级 grant(线上 SQL + `_grants.sql`)。查 `listing_orders` 同理用 `PARTY_ORDER_COLUMNS`。
+- 删用户上传的文件用 `deleteUnusedMedia()`,不要直接 `storage.remove()`(用户没有 delete 权限;复制广告会共用图片)。
+- 品牌字样和费率、天数等参数只改 `src/config/site.ts`。
+
+**模板版本**:GitHub Releases 上的 `template-v1` 是安全修复**之前**的版本(含上面的高危漏洞),不要再用。建议现在在 main(`cf5131e` 或之后)上建 `template-v2`,以后复制新站点用 v2(这个环境不能推标签,要在 GitHub 网页上建)。
+
+**还没做 / 待跟进**:
+1. 在 GitHub 上建 `template-v2` 标签(见上)。
+2. PR #64 的手动测试结果待产品负责人确认(README"安全复查"第 3 条的 6 项;重点是删广告/编辑去图后 Storage 里旧文件确实没了,复制出来的广告图片还在)。
+3. 以前积累的、没被删掉的旧图片没有清理;要清的话另做一次性清理(先查引用再删)。
+4. 更早留下的:一两周后看 Vercel 日志 "CSP violation",没问题就把 CSP 改成强制;切 Stripe live 前的手动清单;日历订单分两次放款;Terms/隐私政策给律师看。
