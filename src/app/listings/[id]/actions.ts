@@ -9,6 +9,7 @@ import { EMAIL_PATTERN, resolveGuestBuyerId } from "@/lib/supabase/guest-checkou
 import type { Listing } from "@/lib/supabase/types";
 import { fromMinorUnits, isSupportedCurrency, toMinorUnits } from "@/lib/fees";
 import { formatOrderNumber } from "@/lib/orders/orderNumber";
+import { releaseBuyerHoldsOnListing } from "@/lib/orders/releaseHold";
 import {
   LIMITS,
   checkRateLimits,
@@ -204,6 +205,10 @@ async function startCheckout(
     // 同一买家或同一 IP 同时最多 2 个未付款的占用(数据库函数里检查,
     // hold_ip_hash 是 IP 的加盐哈希,没配盐或拿不到 IP 时只按买家算)。
     const ip = await clientIp();
+    const ipHash = ip ? hashIdentifier("ip", ip) : null;
+    // 买家改主意换日期/时长:先释放他在这条广告上之前没付款的占用(付款链接作废),
+    // 不会被自己刚才的占用挡住(见 src/lib/orders/releaseHold.ts)。
+    await releaseBuyerHoldsOnListing(listing.id, buyerId, user?.id ?? null, ipHash);
     const { data: newOrderId, error: bookingError } = await createServiceClient().rpc(
       "create_booking_order",
       {
@@ -213,7 +218,7 @@ async function startCheckout(
           end_date: endDate,
           booking_units: quantity,
           hold_expires_at: new Date(Date.now() + PENDING_HOLD_MINUTES * 60_000).toISOString(),
-          hold_ip_hash: ip ? hashIdentifier("ip", ip) : null,
+          hold_ip_hash: ipHash,
         },
       }
     );
@@ -320,7 +325,11 @@ async function startCheckout(
     success_url: user
       ? `${SITE_URL}/dashboard/purchases?checkout=success`
       : `${SITE_URL}/checkout/guest-success?email=${encodeURIComponent(buyerEmail ?? "")}`,
-    cancel_url: `${SITE_URL}/listings/${listing.id}?checkout=cancelled`,
+    // 日历订单:点 Stripe 页面上的"返回"先经过 /api/checkout/cancelled,立刻释放这段日期
+    // 并把选过的日期带回广告页,买家可以直接改。
+    cancel_url: booking
+      ? `${SITE_URL}/api/checkout/cancelled?order=${order.id}`
+      : `${SITE_URL}/listings/${listing.id}?checkout=cancelled`,
     // Guest 没走注册表单,邮箱之外没有任何联系方式留底——让 Stripe Checkout 自己
     // 的付款页顺手收一下姓名/地址/电话(买家反正要填卡号,多这几个字段不算额外
     // 的一步),webhook 收到 checkout.session.completed 后把这些写进
@@ -336,6 +345,17 @@ async function startCheckout(
 
   if (!session.url) {
     return { error: "Couldn't start checkout, please try again" };
+  }
+
+  // 记下付款链接,买家改日期时要先让这个链接作废才能释放日期(releaseHold.ts)。
+  if (booking) {
+    const { error: sessionSaveError } = await createServiceClient()
+      .from("listing_orders")
+      .update({ checkout_session_id: session.id })
+      .eq("id", order.id);
+    if (sessionSaveError) {
+      console.error("Failed to save checkout session id:", sessionSaveError.message);
+    }
   }
 
   return { url: session.url };

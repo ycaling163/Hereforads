@@ -57,7 +57,7 @@ export default async function ListingDetailPage({
   searchParams,
 }: PageProps<"/listings/[id]">) {
   const { id } = await params;
-  const { resume, start, units } = await searchParams;
+  const { resume, start, units, checkout } = await searchParams;
   const supabase = await createClient();
 
   const { data: listingRow } = await supabase
@@ -142,6 +142,16 @@ export default async function ListingDetailPage({
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-12">
+      {/* 从 Stripe 付款页点"返回"回来(/api/checkout/cancelled 已经释放了之前的日期)。 */}
+      {checkout === "changed" && booking && (
+        <p className="mb-6 rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          Checkout cancelled and those dates are free again — change your dates below and
+          check out when you&apos;re ready.{" "}
+          <a href="#buy" className="font-medium underline">
+            Change dates
+          </a>
+        </p>
+      )}
       {resumingPurchase && (
         <p className="mb-6 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-800">
           You&apos;re signed in — complete your purchase below.{" "}
