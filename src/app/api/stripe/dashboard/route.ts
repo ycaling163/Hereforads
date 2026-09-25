@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { stripe } from "@/lib/stripe/server";
 
 // Payment Management 页的 "View Stripe dashboard":在新标签页里打开(产品负责人 2026-09-25
@@ -14,7 +15,8 @@ export async function GET() {
     redirect("/login?next=/dashboard/stripe-connect");
   }
 
-  const { data: profile } = await supabase
+  // Stripe 账户 ID 只有 service_role 能读(README"安全复查"第 3 条);上面已确认是本人,只查自己这一行。
+  const { data: profile } = await createServiceClient()
     .from("profiles")
     .select("stripe_connect_account_id")
     .eq("id", user.id)

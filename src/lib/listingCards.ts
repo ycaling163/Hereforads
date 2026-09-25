@@ -1,9 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type {
-  Listing,
-  Profile,
-  SellerProfile,
-  SocialAccount,
+import {
+  PUBLIC_PROFILE_COLUMNS,
+  PUBLIC_SELLER_PROFILE_COLUMNS,
+  type Listing,
+  type Profile,
+  type SellerProfile,
+  type SocialAccount,
 } from "@/lib/supabase/types";
 
 export interface ListingCardData {
@@ -41,8 +43,8 @@ export async function attachSellerInfo(
 
   const [{ data: profiles }, { data: sellerProfiles }, { data: socialAccounts }] =
     await Promise.all([
-      supabase.from("profiles").select("*").in("id", sellerIds),
-      supabase.from("seller_profiles").select("*").in("user_id", sellerIds),
+      supabase.from("profiles").select(PUBLIC_PROFILE_COLUMNS).in("id", sellerIds),
+      supabase.from("seller_profiles").select(PUBLIC_SELLER_PROFILE_COLUMNS).in("user_id", sellerIds),
       placementAccountIds.length > 0
         ? supabase.from("social_accounts").select("*").in("id", placementAccountIds)
         : Promise.resolve({ data: [] as SocialAccount[] }),

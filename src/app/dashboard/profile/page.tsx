@@ -3,11 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 import { ProfileForm } from "./ProfileForm";
 import { SocialAccountsManager } from "./SocialAccountsManager";
 import { PriceCardManager } from "./PriceCardManager";
-import type {
-  PriceCardItem,
-  Profile,
-  SellerProfile,
-  SocialAccount,
+import {
+  PUBLIC_PROFILE_COLUMNS,
+  PUBLIC_SELLER_PROFILE_COLUMNS,
+  type PriceCardItem,
+  type Profile,
+  type SellerProfile,
+  type SocialAccount,
 } from "@/lib/supabase/types";
 
 export default async function ProfilePage({
@@ -31,10 +33,10 @@ export default async function ProfilePage({
     { data: socialAccounts },
     { data: priceCardItems },
   ] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select(PUBLIC_PROFILE_COLUMNS).eq("id", user.id).maybeSingle(),
     supabase
       .from("seller_profiles")
-      .select("*")
+      .select(PUBLIC_SELLER_PROFILE_COLUMNS)
       .eq("user_id", user.id)
       .maybeSingle(),
     supabase

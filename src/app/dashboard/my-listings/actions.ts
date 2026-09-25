@@ -2,8 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { storagePathFromPublicUrl } from "@/lib/storage";
-import { MEDIA_BUCKET } from "@/config/site";
+import { deleteUnusedMedia } from "@/lib/mediaCleanup";
 import type { Listing } from "@/lib/supabase/types";
 
 export async function deleteListingAction(listingId: string): Promise<void> {
@@ -46,13 +45,9 @@ export async function deleteListingAction(listingId: string): Promise<void> {
   }
 
   // Delete only after the row itself is gone — never risk deleting files a
-  // listing still points to.
-  const paths = listing.media_urls
-    .map((url) => storagePathFromPublicUrl(url, MEDIA_BUCKET))
-    .filter((path): path is string => path !== null);
-  if (paths.length > 0) {
-    await supabase.storage.from(MEDIA_BUCKET).remove(paths);
-  }
+  // listing still points to. Files another listing still uses (Duplicate
+  // shares them) are kept, see deleteUnusedMedia.
+  await deleteUnusedMedia(user.id, listing.media_urls);
 
   redirect("/dashboard/my-listings");
 }

@@ -3,9 +3,9 @@
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { deleteUnusedMedia } from "@/lib/mediaCleanup";
 import { checkUpload, isOwnStorageUrl } from "@/lib/uploads";
 import { parseListingFormFields } from "@/lib/listingFormValidation";
-import { storagePathFromPublicUrl } from "@/lib/storage";
 import { MEDIA_BUCKET } from "@/config/site";
 import type { ListingFormState } from "@/components/ListingForm";
 import type { Listing } from "@/lib/supabase/types";
@@ -115,14 +115,7 @@ export async function updateListingAction(
   // Only clean up dropped images once the new media_urls is safely saved,
   // so a mid-save failure never leaves the listing pointing at a deleted file.
   const removedUrls = original.media_urls.filter((url) => !keptMediaUrls.includes(url));
-  if (removedUrls.length > 0) {
-    const removedPaths = removedUrls
-      .map((url) => storagePathFromPublicUrl(url, MEDIA_BUCKET))
-      .filter((path): path is string => path !== null);
-    if (removedPaths.length > 0) {
-      await supabase.storage.from(MEDIA_BUCKET).remove(removedPaths);
-    }
-  }
+  await deleteUnusedMedia(user.id, removedUrls);
 
   // 发布免审核 + KYC 后置(2026-09-19 决策记录,见 README 同名一节)之后,编辑
   // 已经 active 的 listing 不再退回 pending_review 排队等审核——既然发布本身

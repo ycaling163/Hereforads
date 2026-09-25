@@ -1,12 +1,14 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SellerProfileView } from "@/components/SellerProfileView";
-import type {
-  Listing,
-  PriceCardItem,
-  Profile,
-  SellerProfile,
-  SocialAccount,
+import {
+  PUBLIC_PROFILE_COLUMNS,
+  PUBLIC_SELLER_PROFILE_COLUMNS,
+  type Listing,
+  type PriceCardItem,
+  type Profile,
+  type SellerProfile,
+  type SocialAccount,
 } from "@/lib/supabase/types";
 
 export default async function SellerProfilePage({
@@ -17,7 +19,7 @@ export default async function SellerProfilePage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("*")
+    .select(PUBLIC_PROFILE_COLUMNS)
     .eq("id", id)
     .maybeSingle();
 
@@ -31,7 +33,7 @@ export default async function SellerProfilePage({
     { data: listingRows },
     { data: priceCardItemRows },
   ] = await Promise.all([
-    supabase.from("seller_profiles").select("*").eq("user_id", id).maybeSingle(),
+    supabase.from("seller_profiles").select(PUBLIC_SELLER_PROFILE_COLUMNS).eq("user_id", id).maybeSingle(),
     supabase
       .from("social_accounts")
       .select("*")

@@ -21,7 +21,8 @@ export interface Profile {
   // MVP v2 新增字段,见 README 里的 schema 迁移说明。老账号这三个字段读出来是 null,
   // 代表还没走过新流程 —— country 未填、stripe_onboarded 视为 false。
   country: string | null;
-  stripe_connect_account_id: string | null;
+  // 只有 service_role 读得到(列级权限),用 PUBLIC_PROFILE_COLUMNS 查出来的没有这一项。
+  stripe_connect_account_id?: string | null;
   stripe_onboarded: boolean;
   // 管理员封禁,只有 service_role(管理员操作的 server action)能改,普通用户改不了
   // 自己这一列(数据库层面 revoke 掉了 authenticated 的 UPDATE 权限,不是只靠前端隐藏)。
@@ -47,7 +48,8 @@ export interface SellerProfile {
   banner_url: string | null;
   // Stripe Connect(Express 账户)相关字段,加之前读出来是 undefined。
   // 见 README 支付章节的 SQL。
-  stripe_account_id: string | null;
+  // 只有 service_role 读得到(列级权限),用 PUBLIC_SELLER_PROFILE_COLUMNS 查出来的没有这一项。
+  stripe_account_id?: string | null;
   stripe_charges_enabled: boolean;
   stripe_payouts_enabled: boolean;
   created_at: string;
@@ -194,6 +196,16 @@ export const PARTY_ORDER_COLUMNS =
   "start_date,end_date,booking_units,hold_expires_at,terms_accepted_at," +
   "immediate_start_consent_at,paid_at,delivered_at,confirmed_at,cancelled_at," +
   "cancelled_by,cancel_reason,payout_hold,payout_hold_at,created_at";
+
+// profiles / seller_profiles 里谁都能读的列(列级权限,见 README"安全复查"第 3 条):
+// Stripe 账户 ID(stripe_connect_account_id、stripe_account_id)只有 service_role 能读,
+// 所以用户态 / 匿名 client 查这两张表不能 select("*"),要用这两份列表;要读自己的
+// Stripe 账户 ID 走 service_role(先确认是本人)。
+export const PUBLIC_PROFILE_COLUMNS =
+  "id,role,display_name,created_at,updated_at,country,stripe_onboarded,is_banned,username";
+// 写成一整个字符串(不用 + 拼接),supabase-js 才能从列名推断返回类型。
+export const PUBLIC_SELLER_PROFILE_COLUMNS =
+  "user_id,bio,avatar_url,is_verified,created_at,updated_at,stripe_charges_enabled,stripe_payouts_enabled,content_categories,website_url,banner_url,price_card_image_url";
 
 export type PartyListingOrder = Omit<
   ListingOrder,
