@@ -5,9 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { checkUpload, isOwnStorageUrl } from "@/lib/uploads";
 import { parseListingFormFields } from "@/lib/listingFormValidation";
-
-// listing 图片/视频复用已有的 ad-space-photos bucket,不用重新建。
-const MEDIA_BUCKET = "ad-space-photos";
+import { MEDIA_BUCKET } from "@/config/site";
 
 export interface NewListingState {
   error?: string;

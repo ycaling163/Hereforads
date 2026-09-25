@@ -1,12 +1,13 @@
 import { createServiceClient } from "@/lib/supabase/service";
+import { SITE } from "@/config/site";
 
 // 订单通知邮件,走 Resend 的 HTTP API(跟 Supabase 发登录/验证邮件用的是同一个
-// Resend 账号和已验证的 hereforads.com 域名,见 README"订单邮件通知"一节)。
+// Resend 账号和已验证的发信域名,见 README"订单邮件通知"一节)。
 // 环境变量:RESEND_API_KEY(必填,没配就只打日志不发)、EMAIL_FROM(可选)。
 // 发信失败只记日志、从不抛异常——邮件是通知,不能让它把付款/取消流程搞挂。
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-const FROM = process.env.EMAIL_FROM ?? "HereForAds <hello@hereforads.com>";
+const FROM = process.env.EMAIL_FROM ?? SITE.defaultEmailFrom;
 
 export function siteUrl(path: string): string {
   return `${SITE_URL}${path}`;
@@ -58,7 +59,7 @@ ${
     ? `<p><a href="${escapeHtml(ctaUrl)}" style="display:inline-block;background:#18181b;color:#fff;padding:10px 20px;border-radius:999px;text-decoration:none">${escapeHtml(content.cta.label)}</a></p>`
     : ""
 }
-<p style="color:#71717a;font-size:13px">HereForAds · ${escapeHtml(SITE_URL.replace(/^https?:\/\//, ""))}</p>
+<p style="color:#71717a;font-size:13px">${escapeHtml(SITE.name)} · ${escapeHtml(SITE_URL.replace(/^https?:\/\//, ""))}</p>
 </div>`;
   const text = [
     ...content.paragraphs,
@@ -66,7 +67,7 @@ ${
       ? [content.details.map(([label, value]) => `${label}: ${value}`).join("\n")]
       : []),
     ...(content.cta && ctaUrl ? [`${content.cta.label}: ${ctaUrl}`] : []),
-    "HereForAds",
+    SITE.name,
   ].join("\n\n");
 
   try {
@@ -119,7 +120,7 @@ export async function sendAdminAlert(
     return;
   }
   await sendEmail(to, {
-    subject: `[HereForAds admin] ${subject}`,
+    subject: `[${SITE.name} admin] ${subject}`,
     paragraphs,
     details,
     cta: options.cta ?? { label: "Open disputes & holds", path: "/admin/holds" },

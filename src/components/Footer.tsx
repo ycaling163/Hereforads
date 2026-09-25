@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SITE } from "@/config/site";
 
 export function Footer() {
   return (
@@ -35,7 +36,7 @@ export function Footer() {
       </div>
 
       <div className="border-t border-zinc-200 px-6 py-4 text-center text-xs text-zinc-400">
-        © HereForAds. All rights reserved.
+        © {SITE.name}. All rights reserved.
       </div>
     </footer>
   );

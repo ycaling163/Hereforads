@@ -6,20 +6,24 @@
 // 按卖家当地时区会碰到美国这种一国多时区、买卖双方看到的日期对不上,MVP 先统一英国
 // 时间),页面上注明 "Dates are in UK time"。
 import type { PricingUnit } from "@/lib/supabase/enums";
+import {
+  BOOKING_TIME_ZONE,
+  DEFAULT_MIN_BOOKING_DAYS,
+  MAX_BOOKING_DAYS,
+  MAX_ADVANCE_DAYS,
+  CHECKOUT_EXPIRES_MINUTES,
+  PENDING_HOLD_MINUTES,
+} from "@/config/site";
 
-export const BOOKING_TIME_ZONE = "Europe/London";
-
-// 按天计价:卖家设最少预订天数,默认 7 天,可设 1–90。
-export const DEFAULT_MIN_BOOKING_DAYS = 7;
-// 单次预订最多 90 天(按周最多 12 周,按月最多 3 个月)。
-export const MAX_BOOKING_DAYS = 90;
-// 开始日期最远在今天之后 60 天。
-export const MAX_ADVANCE_DAYS = 60;
-// 还没付款的订单占用日期的时间。Stripe Checkout 付款链接的有效期设成
-// CHECKOUT_EXPIRES_MINUTES(Stripe 要求至少 30 分钟),占用时间比它多几分钟,
-// 保证付款链接失效之前日期一直是这个买家的。
-export const CHECKOUT_EXPIRES_MINUTES = 31;
-export const PENDING_HOLD_MINUTES = 36;
+// 时区、天数上限、占用时长等数值在 src/config/site.ts。
+export {
+  BOOKING_TIME_ZONE,
+  DEFAULT_MIN_BOOKING_DAYS,
+  MAX_BOOKING_DAYS,
+  MAX_ADVANCE_DAYS,
+  CHECKOUT_EXPIRES_MINUTES,
+  PENDING_HOLD_MINUTES,
+};
 
 // 按周计价的广告按整周订,按月计价的按 30 天一段订;价格 = 单价 × 周数/段数,
 // 卖家填的周价/月价就是套餐价,不要求等于日价 × 7/30。

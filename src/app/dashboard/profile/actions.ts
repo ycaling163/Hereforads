@@ -8,6 +8,7 @@ import { parseFollowerCount } from "@/lib/format";
 import { storagePathFromPublicUrl } from "@/lib/storage";
 import { normalizeUsername } from "@/lib/username";
 import { normalizeWebUrl } from "@/lib/url";
+import { MEDIA_BUCKET } from "@/config/site";
 import {
   AD_TYPES,
   CURRENCIES,
@@ -18,7 +19,8 @@ import {
   type SocialPlatform,
 } from "@/lib/supabase/enums";
 
-const AVATAR_BUCKET = "ad-space-photos";
+// 头像/横幅跟广告媒体放在同一个 bucket(名字在 src/config/site.ts)。
+const AVATAR_BUCKET = MEDIA_BUCKET;
 
 export interface ProfileFormState {
   error?: string;

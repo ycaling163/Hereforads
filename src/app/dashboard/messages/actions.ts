@@ -5,9 +5,10 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { checkMessageAllowed } from "@/lib/messages";
 import { checkUpload } from "@/lib/uploads";
+import { MEDIA_BUCKET } from "@/config/site";
 
-// 私信图片复用已有的 ad-space-photos bucket,不用新建。
-const MESSAGE_MEDIA_BUCKET = "ad-space-photos";
+// 私信图片跟广告媒体放在同一个 bucket(名字在 src/config/site.ts)。
+const MESSAGE_MEDIA_BUCKET = MEDIA_BUCKET;
 
 export interface ReplyState {
   error?: string;

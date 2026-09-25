@@ -5,6 +5,7 @@ import { getActionCounts } from "@/lib/supabase/notification-counts";
 import { isAdmin } from "@/lib/supabase/admin";
 import { UserMenu } from "./UserMenu";
 import { MobileNav } from "./MobileNav";
+import { SITE } from "@/config/site";
 
 export async function Header() {
   const supabase = await createClient();
@@ -42,10 +43,10 @@ export async function Header() {
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
         <Link href="/" className="flex shrink-0 items-center">
           <Image
-            src="/logo.png"
-            alt="Here For Ads"
-            width={140}
-            height={111}
+            src={SITE.logo.src}
+            alt={SITE.logo.alt}
+            width={SITE.logo.width}
+            height={SITE.logo.height}
             className="h-6 w-auto sm:h-10"
             priority
           />

@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { ContactForm } from "@/components/ContactForm";
+import { SITE } from "@/config/site";
 
 export const metadata: Metadata = {
   title: "Contact Us",
-  description: "Get in touch with the HereForAds team.",
+  description: `Get in touch with the ${SITE.name} team.`,
 };
 
 export default function ContactPage() {

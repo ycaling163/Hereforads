@@ -104,7 +104,7 @@ export default async function AdminOrdersPage({
         <input
           name="q"
           defaultValue={search}
-          placeholder="Order number (HFA-000118) or buyer email"
+          placeholder={`Order number (${formatOrderNumber(118)}) or buyer email`}
           className="w-full max-w-sm rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
         />
         <button

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { SITE } from "@/config/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,21 +15,21 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const defaultTitle = `${SITE.name} — ${SITE.tagline}`;
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://hereforads.com"),
+  metadataBase: new URL(SITE.url),
   title: {
-    default: "HereForAds — Turn Your Space Into Ad Space",
-    template: "%s | HereForAds",
+    default: defaultTitle,
+    template: `%s | ${SITE.name}`,
   },
-  description:
-    "HereForAds is a marketplace where creators and everyday people list their physical or digital space as ad placements, and brands find and book the right spot to advertise.",
+  description: SITE.description,
   openGraph: {
-    title: "HereForAds — Turn Your Space Into Ad Space",
-    description:
-      "List your space and get paid by brands, or browse ad placements — from creator bio-links to real-world walls and desks.",
-    url: "https://hereforads.com",
-    siteName: "HereForAds",
-    images: ["/logo.png"],
+    title: defaultTitle,
+    description: SITE.shareDescription,
+    url: SITE.url,
+    siteName: SITE.name,
+    images: [SITE.logo.src],
   },
 };
 

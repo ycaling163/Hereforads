@@ -5,6 +5,7 @@ import { LISTING_CATEGORIES, LISTING_CATEGORY_LABELS } from "@/lib/supabase/enum
 import type { ListingCategory } from "@/lib/supabase/enums";
 import { updateProfileAction, type ProfileFormState } from "./actions";
 import { FileInput } from "@/components/FileInput";
+import { SITE_DOMAIN } from "@/config/site";
 
 const initialState: ProfileFormState = {};
 
@@ -101,7 +102,7 @@ export function ProfileForm({
         </p>
         <div className="flex overflow-hidden rounded-lg border border-zinc-300 focus-within:border-zinc-900">
           <span className="flex shrink-0 items-center bg-zinc-50 px-3 text-sm text-zinc-500">
-            hereforads.com/
+            {SITE_DOMAIN}/
           </span>
           <input
             id="username"

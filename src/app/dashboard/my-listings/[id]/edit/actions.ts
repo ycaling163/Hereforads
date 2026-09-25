@@ -6,10 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 import { checkUpload, isOwnStorageUrl } from "@/lib/uploads";
 import { parseListingFormFields } from "@/lib/listingFormValidation";
 import { storagePathFromPublicUrl } from "@/lib/storage";
+import { MEDIA_BUCKET } from "@/config/site";
 import type { ListingFormState } from "@/components/ListingForm";
 import type { Listing } from "@/lib/supabase/types";
-
-const MEDIA_BUCKET = "ad-space-photos";
 
 export async function updateListingAction(
   listingId: string,
