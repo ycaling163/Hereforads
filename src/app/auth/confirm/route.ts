@@ -14,17 +14,12 @@ export async function GET(request: Request) {
   const type = searchParams.get("type");
   const next = safeRedirectPath(searchParams.get("next"), "/dashboard/purchases");
 
+  // 带 token_hash 的登录邮件链接:不在这里直接登录,转到 /auth/continue 让用户点按钮
+  // 再登录——邮箱安全扫描(Hotmail/Outlook Safe Links 等)会先 GET 一遍链接,直接登录的话
+  // 一次性凭证会被扫描器用掉,用户自己再点就"已过期"(2026-09-25 产品负责人测试反馈)。
   if (tokenHash && type) {
-    const supabase = await createClient();
-    const { data, error } = await supabase.auth.verifyOtp({
-      type: type as "signup" | "invite" | "magiclink" | "recovery" | "email_change" | "email",
-      token_hash: tokenHash,
-    });
-
-    if (!error && data.user) {
-      await ensureProfile(supabase, data.user);
-      redirect(next);
-    }
+    const params = new URLSearchParams({ token_hash: tokenHash, type, next });
+    redirect(`/auth/continue?${params.toString()}`);
   }
 
   // 2026-09-24 之前用 signInWithOtp 建的 guest 账号没确认过邮箱,他们要登录链接时 Supabase
