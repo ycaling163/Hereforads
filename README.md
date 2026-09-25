@@ -1931,7 +1931,7 @@ order by 1, 2, 3;   -- 应该只剩 listings.status 的 INSERT(发布广告时�
 
 ## 安全核查 · 第 1 批上线后的验证结果 + 第 2、3 批交接(2026-09-25)
 
-**给接手的 session**:这一节是切 Stripe live 前安全核查的交接文档。第 1 批(PR #50)已合并、SQL 已执行、测试卡验证通过;**第 2 批已上线并验证通过(2026-09-25,PR #52–#57,见"安全核查 · 第 2 批"和"第 2 批测试反馈");Supabase CAPTCHA 已开启;第 3 批还没写代码**,下面的规则都已经跟产品负责人确认过,按这里实现即可。工作方式(产品负责人定的,不要改):每批一个 PR;提交前跑 `npm run lint`、`npm run build`、`npm audit`;需要的 SQL 写进 README、由产品负责人手动执行(Supabase MCP 连不上 HereForAds 的项目,只能给他 SQL 让他跑、把结果截图回来);密钥不进代码;拿不准的或会改产品规则的先问;推送 + 开 PR 后停下等确认。
+**给接手的 session**:这一节是切 Stripe live 前安全核查的交接文档。第 1 批(PR #50)已合并、SQL 已执行、测试卡验证通过;**第 2 批已上线并验证通过(2026-09-25,PR #52–#57,见"安全核查 · 第 2 批"和"第 2 批测试反馈");Supabase CAPTCHA 已开启;第 3 批已写代码,见"安全核查 · 第 3 批"**,下面的规则都已经跟产品负责人确认过,按这里实现即可。工作方式(产品负责人定的,不要改):每批一个 PR;提交前跑 `npm run lint`、`npm run build`、`npm audit`;需要的 SQL 写进 README、由产品负责人手动执行(Supabase MCP 连不上 HereForAds 的项目,只能给他 SQL 让他跑、把结果截图回来);密钥不进代码;拿不准的或会改产品规则的先问;推送 + 开 PR 后停下等确认。
 
 ### 第 1 批上线后已经验证过的(2026-09-25,Stripe 测试 sandbox)
 
@@ -2293,6 +2293,159 @@ alter table public.listing_orders
 1. 买家账号在一条开了日历的广告上选 3 天 → 进付款页 → 点页面左上角的 "←" 返回 → 回到广告页,顶部有蓝色提示,日历上这 3 天是可选的,刚才的日期和时长已经填好;改成 5 天 → 能再进付款页。
 2. 进付款页后用浏览器后退键回来,换一段日期直接下单 → 能进付款页,不提示日期冲突;原来那段日期也变回可选。
 3. 在第 1 步作废的旧付款页(如果还开着)点付款 → Stripe 提示链接已失效,付不了。
+
+## 安全核查 · 第 3 批:中/低风险 + 小的产品调整(2026-09-25)
+
+按"第 2、3 批交接"一节的第 3 批表格实现。产品负责人本批的决定:
+- **标价币种(8 种)和开户国家(44 个)暂时不缩减**,等有了用户再看。风险仍在:收款国家不在美国/英国/EEA/加拿大/瑞士的卖家,放款那一步会失败(Stripe 报错,订单停在 confirmed,cron 每小时重试并记日志),到时候管理员人工处理。
+- **同意**:发布广告时默认用卖家收款国家的币种 + 提示用银行账户币种标价;Payment Management 页写明换汇规则。
+- **同意**:订单状态 "Paid out" 改成 "Released to seller"。
+
+### 代码改了什么
+
+| # | 改动 |
+|---|---|
+| 10 | **付款时再查一次日期冲突**:数据库触发器在日历订单从 `pending_payment` 推进到 `paid_in_escrow` 时锁住广告、查跟其他已付款订单有没有重叠;冲突就报 `booking_conflict`,webhook 把这一单记成 `cancelled`(`cancel_reason = 'booking_conflict'`)、全额退款(幂等)、邮件通知买家和管理员。另外处理 `checkout.session.expired`:付款链接过期立刻释放占用的日期。 |
+| 12 | **上传校验**(`src/lib/uploads.ts`):按文件头判断真实类型,广告媒体只收 JPG/PNG/WebP/GIF/MP4/WebM/MOV,头像/横幅/私信图片只收图片;单个文件 ≤ 10MB;扩展名和 Content-Type 由判断出的类型决定,不信文件名。bucket 也设了类型/大小白名单(下面 SQL),挡住绕过网站直接调 Storage 的上传。 |
+| 13 | **安全响应头**(`next.config.ts`):HSTS、`X-Frame-Options: DENY`、`nosniff`、`Referrer-Policy`、`Permissions-Policy`;CSP 先 **Report-Only**(只报告不拦截),违规记到 Vercel 日志("CSP violation")。观察一两周没有误伤再改成强制(那时 script-src 要改用 nonce)。 |
+| 17 | 私信会话页的 URL 参数先校验是 UUID 再拼进查询。 |
+| 18 | **私信规则**:买家只能发给这条广告的卖家;卖家只能回复在这条广告下给他发过消息的人;服务端 + 数据库策略两层检查。收件人只能改 `read_at`,改不了消息内容。卖家的消息列表每个会话都显示广告标题(之前就有)。 |
+| 19 | **密码**:至少 8 位,必须同时有数字、大写字母、小写字母(注册、设/改密码两处);表单下方有提示。 |
+| 20 | 复制/编辑广告时沿用的旧图片,只认 `{SUPABASE_URL}/storage/v1/object/public/ad-space-photos/{自己的 user id}/` 开头的地址。 |
+| 21 | guest 付款成功页的 URL 不再带邮箱,改成带 Stripe 的 `session_id`,页面服务端查 Stripe 后只显示打码邮箱(`kc•••@hotmail.co.uk`)。 |
+| 22 | `lib/supabase/service.ts`、`lib/stripe/server.ts` 加了 `import "server-only"`(Next 16 自带,不用装包),万一被前端代码引用,构建直接报错。 |
+| 23 | `seller_profiles.website_url`、`social_accounts.url` 数据库约束只能是 http/https。 |
+| — | 发布广告时默认币种 = 卖家收款国家的货币(欧元区 → EUR,英国 → GBP……,不在可选币种里的用 USD),币种下拉框下面提示"用银行账户币种标价,否则 Stripe 换汇约 2%、由你承担";Payment Management 页写明换汇规则。 |
+| — | 订单状态 "Paid out" → "Released to seller";Sales 页 "Completed" 标签下的小标题 → "Released to your Stripe account";`/admin/finance` "Paid out to sellers" → "Released to sellers"。 |
+
+### 要手动做的(顺序)
+
+1. **Supabase SQL Editor 执行下面两段 SQL**(先执行再合并,都可以重复执行)。
+2. **Supabase → Authentication → Providers → Email**(新版后台在 Authentication → Sign In / Providers → Email):
+   - **Minimum password length** 填 `8`;
+   - **Password requirements** 选 **"Lowercase, uppercase letters and digits"**;
+   - 打开 **Secure password change**(改密码前要求最近登录过)。
+   已有用户的旧密码不受影响,下次改密码时才按新规则。
+3. **Stripe 后台 webhook endpoint**(测试 sandbox 和 live 各一个)**加勾 `checkout.session.expired`**。
+4. 合并 PR、等部署完成,按下面"手动测一遍"测。
+
+### 要手动执行的 SQL
+
+```sql
+-- 1. 日历订单付款时再查一次日期重叠(第 10 条):订单从 pending_payment 推进到
+--    paid_in_escrow 时锁住这条广告,发现跟别的已付款订单重叠就报错 booking_conflict,
+--    webhook 收到这个错误会取消这一单并全额退款。
+create or replace function public.guard_booking_payment()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.start_date is null
+     or old.status::text <> 'pending_payment'
+     or new.status::text <> 'paid_in_escrow' then
+    return new;
+  end if;
+
+  perform 1 from public.listings where id = new.listing_id for update;
+
+  if exists (
+    select 1 from public.listing_orders o
+    where o.listing_id = new.listing_id
+      and o.id <> new.id
+      and o.start_date is not null
+      and o.start_date <= new.end_date
+      and o.end_date >= new.start_date
+      and o.status::text not in ('pending_payment', 'cancelled')
+  ) then
+    raise exception 'booking_conflict';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists listing_orders_booking_payment_guard on public.listing_orders;
+create trigger listing_orders_booking_payment_guard
+  before update of status on public.listing_orders
+  for each row execute function public.guard_booking_payment();
+
+-- 2. 私信规则(第 18 条):买家只能发给这条广告的卖家;卖家只能回复在这条广告下给他
+--    发过消息的人。数据库层也挡一次,防止绕过网站直接调 REST API。
+drop policy if exists "authenticated users can send messages" on public.listing_messages;
+drop policy if exists "send to the listing seller, or reply as the seller" on public.listing_messages;
+create policy "send to the listing seller, or reply as the seller"
+on public.listing_messages for insert
+to authenticated
+with check (
+  auth.uid() = sender_id
+  and sender_id <> receiver_id
+  and exists (
+    select 1 from public.listings l
+    where l.id = listing_messages.listing_id
+      and (
+        l.seller_id = listing_messages.receiver_id
+        or (
+          l.seller_id = listing_messages.sender_id
+          and exists (
+            select 1 from public.listing_messages m
+            where m.listing_id = listing_messages.listing_id
+              and m.sender_id = listing_messages.receiver_id
+              and m.receiver_id = listing_messages.sender_id
+          )
+        )
+      )
+  )
+);
+
+--    收件人只能改 read_at(标记已读),不能改消息内容。
+revoke update on public.listing_messages from anon, authenticated;
+grant update (read_at) on public.listing_messages to authenticated;
+
+-- 3. 链接只能是 http/https(第 23 条)。not valid:只检查以后写入的数据,老数据不影响执行。
+alter table public.seller_profiles
+  drop constraint if exists seller_profiles_website_url_http,
+  add constraint seller_profiles_website_url_http
+    check (website_url is null or website_url ~* '^https?://') not valid;
+alter table public.social_accounts
+  drop constraint if exists social_accounts_url_http,
+  add constraint social_accounts_url_http
+    check (url is null or url ~* '^https?://') not valid;
+```
+
+```sql
+-- 4. 上传文件(第 12 条):bucket 只收图片/视频,单个文件最大 10MB。已经上传的文件不受影响。
+update storage.buckets
+set allowed_mime_types = array[
+      'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+      'video/mp4', 'video/webm', 'video/quicktime'
+    ],
+    file_size_limit = 10485760
+where id = 'ad-space-photos';
+```
+
+执行完可以核对(第一句应该返回 `true`;第二句列出不是 http/https 的老链接,有结果的话在后台改掉或发给开发):
+
+```sql
+select exists (select 1 from pg_trigger where tgname = 'listing_orders_booking_payment_guard');
+
+select 'seller_profiles' as tbl, user_id::text as id, website_url as url from public.seller_profiles
+where website_url is not null and website_url !~* '^https?://'
+union all
+select 'social_accounts', id::text, url from public.social_accounts
+where url is not null and url !~* '^https?://';
+```
+
+### 手动测一遍
+
+1. **上传**:发布广告时传一个 `.html` 或 `.svg` 文件(改名成 `.jpg` 也一样)→ 提示 "isn't a supported file";传一张正常 JPG、一段 MP4 → 正常;传一个超过 10MB 的文件 → 提示 "larger than 10 MB"。头像上传 MP4 → 提示只能是图片。
+2. **私信**:买家在广告页 "Ask the seller" 发消息 → 正常;卖家在 Messages 里回复 → 正常;卖家打开一个不存在的会话地址 `/dashboard/messages/<广告id>/<随便一个用户id>` 发消息 → 提示 "You can only reply to people who have messaged you about this listing"。
+3. **密码**:注册时填 `abcdefgh` → 提示规则;填 `Abcdefg1` → 能注册。Dashboard → Password 同样。
+4. **guest 付款成功页**:未登录用 guest 下单付款(测试卡)→ 成功页地址是 `...?session_id=cs_test_...`,页面显示打码邮箱。
+5. **状态名**:Purchases/Sales 页已放款的订单显示 "Released to seller"。
+6. **默认币种**:收款国家是英国的卖家打开 "Publish a listing" → 币种默认 GBP,下面有换汇提示。
+7. **响应头**:浏览器 F12 → Network → 点任意页面请求 → Response Headers 里有 `strict-transport-security`、`x-frame-options: DENY`、`content-security-policy-report-only`。之后一周在 Vercel Logs 搜 "CSP violation",有结果截图给开发。
+8. **付款时日期冲突**(不好手动造,可以不测):触发器已在本地 Postgres 上测过;真遇到时买家和 `ADMIN_ALERT_EMAIL` 会收到邮件。
 
 ## 部署(Vercel)
 

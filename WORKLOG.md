@@ -348,6 +348,7 @@
 - 产品负责人实测:阶段 C(开启 Supabase CAPTCHA 后登录/注册/登录链接/验证码/Google 登录/guest 下单)正常。第 2 批(限流 + Turnstile)全部验证通过,Supabase CAPTCHA 已开启。
 - 产品负责人决定不做:订单查询加手机号、"把名下订单发到邮箱"。用户靠订单邮件或登录后的 Purchases 找订单,有问题走联系表单。已记进 README"第 2 批测试反馈"。
 - 下一步:第 3 批(README 交接一节的表格);其中标"先问"的三项(币种缩减、默认币种提示、"Paid out" 改名)实现前要问产品负责人。另外待做:Stripe cancel_url 之外的 `checkout.session.expired` 事件处理(第 3 批第 10 条)。
+
 ## 2026-09-25 安全核查 · 第 3 批(分支 `claude/wonderful-sagan-i5bufm`)
 
 - 产品负责人决定:币种/开户国家**暂不缩减**(等有用户再看);同意默认币种 + 换汇提示;同意 "Paid out" → "Released to seller"。
