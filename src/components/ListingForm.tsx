@@ -39,6 +39,7 @@ export function ListingForm({
   duplicatedFromTitle,
   socialAccounts,
   websiteUrl,
+  userId,
   submitLabel,
   pendingLabel,
   defaultCurrency,
@@ -54,6 +55,8 @@ export function ListingForm({
   duplicatedFromTitle?: string;
   socialAccounts: SocialAccount[];
   websiteUrl: string | null;
+  /** 当前卖家的 user id,视频直传 Storage 时用作文件夹名。 */
+  userId: string;
   submitLabel: string;
   pendingLabel: string;
   /** 新发布时的默认币种(卖家收款国家的货币);编辑/复制时用原来的币种。 */
@@ -398,6 +401,7 @@ export function ListingForm({
 
       <ListingMediaManager
         initialUrls={initialListing?.media_urls ?? []}
+        userId={userId}
         hint={
           duplicatedFromTitle
             ? "Copied from the original listing. Swap the cover for a platform-specific screenshot if needed."

@@ -12,6 +12,16 @@ export const MAX_LISTING_MEDIA = 10;
  */
 export const MAX_NEW_MEDIA_BYTES_PER_SAVE = 4 * 1024 * 1024;
 
+/** 广告视频限制(产品负责人 2026-09-26):10 秒以内、最高 1080p,建议 MP4。 */
+export const MAX_VIDEO_SECONDS = 10;
+export const MAX_VIDEO_LONG_EDGE = 1920;
+export const MAX_VIDEO_SHORT_EDGE = 1080;
+/**
+ * 单个视频文件上限。10 秒 1080p 手机视频一般 10–20MB。Storage bucket 的 file_size_limit
+ * 必须 >= 这个值(见 supabase/migrations/20260925000006_storage.sql),否则上传会被拒。
+ */
+export const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
+
 const VIDEO_EXTENSIONS = /\.(mp4|webm|mov|m4v)(\?|#|$)/i;
 
 export function isVideoUrl(url: string): boolean {

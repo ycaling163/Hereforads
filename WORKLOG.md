@@ -468,3 +468,12 @@
 - 因为图片基本不再占体积,每次保存新文件合计的提示阈值从 9.5MB 改成 4MB(`MAX_NEW_MEDIA_BYTES_PER_SAVE`),对齐 Vercel 函数请求体约 4.5MB 的上限——现在主要是视频会碰到。
 
 **待跟进 / 风险**:视频没法在浏览器里压缩,大于约 4MB 的视频走 Server Action 会被 Vercel 拒绝。需要支持更大的视频时,改成浏览器直传 Storage(已有 `{user_id}/` 文件夹 insert 策略),服务端只收 URL 并用 `isOwnStorageUrl` 校验。头像、横幅、私信图片还没接这个压缩,需要的话可以复用 `compressImage`。
+
+**再追加(同日):其它图片也压缩 + 广告视频规则**(产品负责人:头像、横幅、私信图片同样压缩;视频 10 秒以内、提示 MP4、最高 1080p,更长的以后再说)
+- `FileInput`:`accept="image/*"` 的 input(头像、横幅、私信/联系卖家的图片)选完先用 `compressImage` 压缩,再换回 input 提交,服务端 action 没改。
+- 广告视频改成**浏览器直传 Storage**(`ListingMediaManager.addVideo`):10 秒 1080p 手机视频一般 10–20MB,走 Server Action 会撞 Vercel 约 4.5MB 的请求体上限。选文件时先检查:MP4/MOV/WebM、≤ 25MB(`MAX_VIDEO_BYTES`)、时长 ≤ 10 秒、分辨率 ≤ 1080p(横竖都行)、浏览器能解码(解不了就提示导出成 MP4 H.264,也顺带保证站上能播)。直传路径 `{user_id}/listings/{uuid}.{ext}`,用的是现有的 insert 策略;上传没完成时拦住保存。表单提交 `direct_media`,服务端 `verifyDirectVideoUpload` 只认本人 `listings/` 文件夹下的文件,并按文件头(Range 请求前 16 字节)确认确实是视频,再并入保留列表排序。`ListingForm` 新增 `userId` 属性(发布页、编辑页传 `user.id`)。
+- 验证:Playwright 真实浏览器里,12 秒视频、2560×1440 视频被拒并给出提示;3 秒视频直传(拦截了 Storage 请求)路径正确,上传中点保存被拦,完成后提交的 `direct_media`/`media_order` 正确;头像 11.9MB → 1.28MB WebP。`verifyDirectVideoUpload` 用本地 HTTP 服务测过:真视频通过,伪装成 .mp4 的 HTML、非 `listings/` 路径、别人的文件都拒绝。**没有**连真实 Supabase 跑过直传。
+
+**需要人工操作(上线前必须做)**:在 HereForAds 的 Supabase SQL Editor 执行 `update storage.buckets set file_size_limit = 26214400 where id = 'ad-space-photos';`(10MB → 25MB,README 第 3 批 SQL 下面也补了这句;`supabase/migrations/20260925000006_storage.sql` 已同步给新站点用)。不改的话超过 10MB 的视频会上传失败(页面会显示 Storage 返回的错误)。
+
+**已知小问题**:直传的视频如果用户上传后又删掉、或者没保存就离开页面,文件会留在 Storage 里(用户没有 delete 权限,只能以后做一次性清理)。

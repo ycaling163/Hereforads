@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { deleteUnusedMedia } from "@/lib/mediaCleanup";
-import { checkUpload, isOwnStorageUrl } from "@/lib/uploads";
+import { checkUpload, isOwnStorageUrl, verifyDirectVideoUpload } from "@/lib/uploads";
 import { MAX_LISTING_MEDIA, orderListingMedia } from "@/lib/listingMedia";
 import { parseListingFormFields } from "@/lib/listingFormValidation";
 import { MEDIA_BUCKET } from "@/config/site";
@@ -58,6 +58,16 @@ export async function updateListingAction(
     .getAll("existing_media")
     .map(String)
     .filter((url) => isOwnStorageUrl(url, MEDIA_BUCKET, user.id));
+
+  // 浏览器直传到 Storage 的视频(见 ListingMediaManager):按文件头再确认一次是视频。
+  const directMediaUrls = [...new Set(formData.getAll("direct_media").map(String))];
+  const directChecks = await Promise.all(
+    directMediaUrls.map((url) => verifyDirectVideoUpload(url, MEDIA_BUCKET, user.id))
+  );
+  if (directChecks.includes(false)) {
+    return { error: "One of the videos couldn't be verified — please remove it and upload again" };
+  }
+  keptMediaUrls.push(...directMediaUrls.filter((url) => !keptMediaUrls.includes(url)));
 
   if (keptMediaUrls.length + mediaFiles.length > MAX_LISTING_MEDIA) {
     return { error: `A listing can have up to ${MAX_LISTING_MEDIA} photos/videos` };

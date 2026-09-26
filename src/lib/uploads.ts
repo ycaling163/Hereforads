@@ -79,3 +79,26 @@ export function isOwnStorageUrl(url: string, bucket: string, userId: string): bo
   if (!base) return false;
   return url.startsWith(`${base}/storage/v1/object/public/${bucket}/${userId}/`) && !url.includes("..");
 }
+
+/**
+ * 浏览器直传到 Storage 的广告视频(绕开 Server Action / Vercel 约 4.5MB 的请求体上限,见
+ * ListingMediaManager):保存时服务端再按文件头确认一次它真的是允许的视频,不信客户端。
+ * 只接受这个用户 `{userId}/listings/` 下的文件。
+ */
+export async function verifyDirectVideoUpload(
+  url: string,
+  bucket: string,
+  userId: string
+): Promise<boolean> {
+  if (!isOwnStorageUrl(url, bucket, userId) || !url.includes(`/${userId}/listings/`)) {
+    return false;
+  }
+  try {
+    const response = await fetch(url, { headers: { Range: "bytes=0-15" }, cache: "no-store" });
+    if (!response.ok) return false;
+    const head = new Uint8Array(await response.arrayBuffer()).slice(0, 16);
+    return detect(head)?.video === true;
+  } catch {
+    return false;
+  }
+}
