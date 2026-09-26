@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { ProfileForm } from "./ProfileForm";
 import { SocialAccountsManager } from "./SocialAccountsManager";
 import { PriceCardManager } from "./PriceCardManager";
+import { HouseAdsManager } from "./HouseAdsManager";
+import { getHouseAds } from "@/lib/sponsorData";
+import { MAX_HOUSE_ADS } from "@/lib/sponsors";
 import {
   PUBLIC_PROFILE_COLUMNS,
   PUBLIC_SELLER_PROFILE_COLUMNS,
@@ -32,6 +35,7 @@ export default async function ProfilePage({
     { data: sellerProfile },
     { data: socialAccounts },
     { data: priceCardItems },
+    houseAds,
   ] = await Promise.all([
     supabase.from("profiles").select(PUBLIC_PROFILE_COLUMNS).eq("id", user.id).maybeSingle(),
     supabase
@@ -49,6 +53,7 @@ export default async function ProfilePage({
       .select("*")
       .eq("seller_id", user.id)
       .order("sort_order", { ascending: true }),
+    getHouseAds(user.id, { includeHidden: true }),
   ]);
 
   return (
@@ -115,6 +120,21 @@ export default async function ProfilePage({
         </p>
         <div className="mt-6 max-w-xl">
           <PriceCardManager items={(priceCardItems ?? []) as PriceCardItem[]} />
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight text-zinc-900">
+          Open days on your booking calendar
+        </h2>
+        <p className="mt-2 text-sm text-zinc-500">
+          On listings with a booking calendar, days nobody has booked can show one of these
+          instead of looking empty — your own brand or a friend&apos;s. They rotate by date,
+          are labelled &ldquo;Creator&apos;s pick&rdquo;, and the day stays available to book.
+          Up to {MAX_HOUSE_ADS}.
+        </p>
+        <div className="mt-6 max-w-xl">
+          <HouseAdsManager items={houseAds} />
         </div>
       </div>
     </div>

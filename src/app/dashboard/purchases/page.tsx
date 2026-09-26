@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
 import { CancelOrderForm } from "@/components/CancelOrderForm";
 import { ProofLinkHistory } from "@/components/ProofLinkHistory";
+import { OrderSponsorPanel } from "@/components/OrderSponsorPanel";
+import { getOrderSponsors } from "@/lib/sponsorData";
 import {
   LISTING_ORDER_STATUS_LABELS,
   PAYOUT_HOLD_LABELS,
@@ -59,6 +61,7 @@ export default async function PurchasesPage({
 
   const listingIds = [...new Set(orders.map((o) => o.listing_id))];
   const orderIds = orders.map((o) => o.id);
+  const sponsorsByOrderId = await getOrderSponsors(orderIds);
   // 卖家改过交付链接的记录(RLS 只返回自己订单的)。
   const { data: proofChangeRows } = orderIds.length
     ? await supabase
@@ -187,6 +190,14 @@ export default async function PurchasesPage({
               )}
 
               <ProofLinkHistory changes={proofChangesByOrderId.get(order.id) ?? []} />
+
+              {sponsorsByOrderId.has(order.id) && (
+                <OrderSponsorPanel
+                  orderId={order.id}
+                  sponsor={sponsorsByOrderId.get(order.id)!}
+                  role="buyer"
+                />
+              )}
 
               {canCancel && cancelDeadline && (
                 <CancelOrderForm

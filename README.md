@@ -2587,6 +2587,67 @@ select
 
 **已执行(2026-09-25)**:PR #64 合并部署之后,产品负责人已在线上执行上面的 SQL。
 
+## 赞助商展示:日历上显示买家品牌 + 卖家自选的空档展示(2026-09-26 决策记录)
+
+参考 thewall.ink 的 WALL HISTORY:买家愿意的话,在广告页上展示"谁买过这个广告位",点一下就能访问买家的网站或社交账号——对卖家是成交背书,对买家是额外曝光。产品负责人 2026-09-26 确认的规则:
+
+### 1. 买家:下单时自愿填写
+- 付款页多一块可选项"Show my brand on this listing":**品牌名**(最多 60 字)+ **一个链接**(网站或一个社交账号,只能一个),勾选"同意公开展示"才会展示。不填、不勾都不影响购买。
+- 只有**付款成功**的订单才展示:`paid_in_escrow / delivered / confirmed / released / expired_auto_confirmed`。待付款、已取消、因退款/拒付暂停放款(`payout_hold` 为 `refund` 或 `dispute`)的都不展示。
+- 付款后买家**不能再改**名字和链接(防止卖家看过之后被换成恶意链接),但可以在"我的购买"里随时**撤回展示**(再打开也行,内容不变)。
+
+### 2. 展示在哪里
+- **开了日历预订的广告**:详情页的"Sponsor calendar"按天列出——已被预订的日子显示买家的品牌名和链接(包括还没开始的预订,买家下单时已被告知);没被预订的日子显示"Available",如果卖家设了自选展示(见第 3 条),同时显示卖家的内容并标注 **"Creator's pick"**,这一天仍然可以预订。
+- **没开日历的广告**:详情页显示"Sponsors"一栏,列出自愿展示的历史买家(同一品牌去重,最多显示最近 12 个)。
+
+### 3. 卖家:空档自选展示(house ads)
+- 卖家在个人资料页设置最多 5 条"品牌名 + 链接",用来放自己的或朋友的。日历上**没被预订的日子**按日期轮换展示其中一条(同一天刷新不会变)。
+- 必须标"Creator's pick"并且那天保持可预订——不能让买家误以为这天已经被人买了(虚假成交背书在英国消费者保护法下有风险)。
+
+### 4. 安全规则
+- 链接只接受 `http(s)://`,拒绝 IP 地址、localhost、带用户名密码的链接,长度 ≤ 300;名字去掉控制字符。数据库层面也有 check 约束兜底。
+- 页面上显示链接的**域名**(让人点之前看得到要去哪),所有链接 `target="_blank" rel="sponsored nofollow noopener noreferrer ugc"`——付费链接必须标 sponsored,否则会影响整站在 Google 的排名。
+- **卖家审查**:在"我的销售"订单卡片上能看到买家填的内容,可以"Hide from listing"/"Show again"。
+- **管理员监管**:`/admin/sponsors` 列出所有公开的买家展示和卖家的自选展示,可以隐藏;管理员隐藏的,卖家和买家都不能重新打开。
+- 所有写操作走服务端(service_role),先校验身份:买家只能改自己的订单,卖家只能改卖给自己的订单,管理员走 `requireAdmin()`。
+- 新字段不放进买卖双方用户态 client 读的订单列(`PARTY_ORDER_COLUMNS`),由服务端单独读——**没执行下面的 SQL 之前,网站其它功能照常,只是这个功能不显示**。
+
+### 要手动执行的 SQL(HereForAds 线上库,部署前或部署后都行)
+
+```sql
+-- 订单上的买家展示信息
+alter table public.listing_orders
+  add column if not exists sponsor_name text,
+  add column if not exists sponsor_url text,
+  add column if not exists sponsor_public boolean not null default false,
+  add column if not exists sponsor_hidden_by_seller_at timestamptz,
+  add column if not exists sponsor_hidden_by_admin_at timestamptz;
+alter table public.listing_orders drop constraint if exists listing_orders_sponsor_name_len;
+alter table public.listing_orders drop constraint if exists listing_orders_sponsor_url_http;
+alter table public.listing_orders
+  add constraint listing_orders_sponsor_name_len
+    check (sponsor_name is null or char_length(sponsor_name) between 1 and 60),
+  add constraint listing_orders_sponsor_url_http
+    check (sponsor_url is null or (sponsor_url ~* '^https?://' and char_length(sponsor_url) <= 300));
+
+-- 卖家的空档自选展示,只有服务端读写
+create table if not exists public.seller_house_ads (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 60),
+  url text check (url is null or (url ~* '^https?://' and char_length(url) <= 300)),
+  hidden_by_admin_at timestamptz,
+  created_at timestamptz default now() not null
+);
+create index if not exists seller_house_ads_user_idx on public.seller_house_ads (user_id);
+alter table public.seller_house_ads enable row level security;
+revoke all on table public.seller_house_ads from anon, authenticated;
+```
+
+执行完核对:`select sponsor_public from public.listing_orders limit 1;` 不报错、`select count(*) from public.seller_house_ads;` 返回 0。
+
+> **2026-09-26 已在 HereForAds 线上库执行**(产品负责人确认,核对查询不报错、`seller_house_ads` 返回 0)。上面的 SQL 可以重复执行。
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀

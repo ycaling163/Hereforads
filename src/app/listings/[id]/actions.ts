@@ -12,6 +12,7 @@ import { formatOrderNumber } from "@/lib/orders/orderNumber";
 import { releaseBuyerHoldsOnListing } from "@/lib/orders/releaseHold";
 import { checkUpload } from "@/lib/uploads";
 import { deleteUnusedMedia } from "@/lib/mediaCleanup";
+import { parseSponsorFields } from "@/lib/sponsors";
 import { UUID_PATTERN } from "@/lib/messages";
 import { MEDIA_BUCKET } from "@/config/site";
 import {
@@ -84,6 +85,13 @@ async function startCheckout(
     return { error: "Please tick both boxes to continue" };
   }
   const consentedAt = new Date().toISOString();
+
+  // 可选:买家愿意在广告页展示的品牌名 + 链接(README"赞助商展示"一节)。先校验,
+  // 不合法就不建订单;付款成功后才会展示。
+  const sponsor = parseSponsorFields(formData);
+  if ("error" in sponsor) {
+    return { error: sponsor.error };
+  }
 
   // Guest 结账(不强制先注册/登录):买家只填邮箱,后台静默建号(不发邮件,之后
   // 靠免密码登录链接进来),见 src/lib/supabase/guest-checkout.ts 和 README"Guest 结账"、
@@ -262,6 +270,18 @@ async function startCheckout(
     .maybeSingle();
   const orderNumber = formatOrderNumber(numbered?.order_number);
   const order = { id: orderId };
+
+  // 单独写赞助商展示字段(日历订单是数据库函数建的,不认这几个字段)。写不进去(比如线上
+  // 还没执行 README 里的 SQL)只记日志,不耽误买家付款。
+  if (sponsor.fields) {
+    const { error: sponsorError } = await createServiceClient()
+      .from("listing_orders")
+      .update(sponsor.fields)
+      .eq("id", orderId);
+    if (sponsorError) {
+      console.error("Failed to save sponsor details:", sponsorError.message);
+    }
+  }
 
   // Charges & Transfers 模式:钱先收进平台自己的账户,不是 destination charge,
   // 所以这里不带 transfer_data/application_fee_amount —— 真正转给卖家的 Transfer

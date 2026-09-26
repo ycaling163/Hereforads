@@ -487,3 +487,20 @@
 - 验证:`tsc`/`eslint` 通过。Playwright:删掉已上传的视频、上传中删掉、保存中不发、离开页面时发,四种情况的 discard 请求都对;`/api/media/discard` 跨站 403、未登录 401;cron 未带密钥 401。用一个模拟 Supabase(Storage list/remove + PostgREST)跑了一遍 cron:4 个旧文件里只删了没人引用的那个,被广告、私信、老 ad_spaces 表引用的和 24 小时内的都保留,缺失的老表不影响。**没有**连真实 Supabase 跑过。
 
 **上线后建议**:第一次 cron 跑完(或者在 Vercel → Cron Jobs 手动触发一次)看一下返回的 `scanned`/`deleted` 数和 Vercel 日志 "Media cleanup cron",数字合理再放着不管。
+
+## 2026-09-26 赞助商展示(日历显示买家品牌 + 卖家空档自选展示)
+
+产品负责人确认的规则已写进 README 新增的"赞助商展示"一节(权威版本),这里只记做了什么:
+- **下单**:`BuyListingButton` 多了可选的"Show my brand on this listing"(品牌名 + 一个链接),`startCheckout` 用 `parseSponsorFields` 校验,订单建好后用 service_role 单独写 `sponsor_*` 字段(日历订单的数据库函数不认这些字段;写失败只记日志,不耽误付款)。
+- **展示**:`src/components/Sponsors.tsx`——开了日历的广告显示"Sponsor calendar"(过去 7 天有展示的 + 今天起 30 天,已订显示买家品牌/没展示的显示 Booked,空档显示 Available + 卖家的 "Creator's pick");没开日历的显示"Sponsors"(去重,最多 12 个)。所有外链 `rel="sponsored nofollow noopener noreferrer ugc"`、新窗口、旁边显示域名。
+- **读数据**:`src/lib/sponsorData.ts` 全部用 service_role,只取付款成功、买家同意、没被卖家/管理员隐藏、没有退款/拒付暂停的;线上没执行 SQL 时当作没有数据,不影响页面。
+- **卖家**:"我的销售"订单卡片显示买家填的品牌和完整链接,可隐藏/重新显示;个人资料页新增"Open days on your booking calendar"(最多 5 条自选展示)。
+- **买家**:"我的购买"可以撤回/重新打开展示;付款后不能改名字和链接(防止审核后换成恶意链接)。
+- **管理员**:新页面 `/admin/sponsors`(导航加了 Sponsors),看完整链接,可隐藏买家品牌和卖家自选展示;管理员隐藏的卖家/买家都打不开。
+- 写操作在 `src/app/dashboard/sponsorActions.ts` / `src/app/admin/sponsors/actions.ts`,都先校验身份,update 条件带 seller_id / buyer_id / user_id。
+- 新站点用的迁移文件(tables / rls / grants)已同步。
+- 顺手修:详情页左栏加 `min-w-0`,横向滚动的赞助商列表不会把手机页面撑宽。
+
+**验证**:`tsc`/`eslint` 通过;链接校验用例(javascript:/data:/带账号密码/IP/localhost/ftp/无点主机/超长/含空格)全部拒绝,正常网址和社交链接通过;Playwright 渲染日历、赞助商列表、付款页勾选项,桌面和 390px 手机都不横向溢出,链接属性正确。**没有**连真实 Supabase 跑下单→付款→展示的全流程。
+
+**需要人工操作**:在 Supabase SQL Editor 执行 README"赞助商展示"一节的 SQL(给 `listing_orders` 加 5 个字段、建 `seller_house_ads` 表)。没执行之前网站照常,只是这个功能不显示、付款页填了也不会保存。

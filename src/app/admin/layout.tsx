@@ -9,6 +9,7 @@ const ADMIN_NAV: { href: string; label: string }[] = [
   { href: "/admin/users", label: "Users" },
   { href: "/admin/orders", label: "Orders" },
   { href: "/admin/holds", label: "Disputes & holds" },
+  { href: "/admin/sponsors", label: "Sponsors" },
   { href: "/admin/finance", label: "Finance" },
   { href: "/admin/contact", label: "Contact" },
   { href: "/admin/pages", label: "Pages" },

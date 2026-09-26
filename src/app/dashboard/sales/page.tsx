@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { DeliverOrderForm, EditProofUrlForm } from "@/components/DeliverOrderForm";
 import { ProofLinkHistory } from "@/components/ProofLinkHistory";
+import { OrderSponsorPanel } from "@/components/OrderSponsorPanel";
+import { getOrderSponsors } from "@/lib/sponsorData";
 import { CancelOrderForm } from "@/components/CancelOrderForm";
 import {
   LISTING_ORDER_STATUS_LABELS,
@@ -103,6 +105,7 @@ export default async function SalesPage({
   const orders = (orderRows ?? []) as unknown as PartyListingOrder[];
 
   const orderIds = orders.map((o) => o.id);
+  const sponsorsByOrderId = await getOrderSponsors(orderIds);
   const listingIds = [...new Set(orders.map((o) => o.listing_id))];
   const buyerIds = [...new Set(orders.map((o) => o.buyer_id))];
   const [{ data: listingRows }, { data: paymentRows }, { data: buyerRows }] =
@@ -359,6 +362,14 @@ export default async function SalesPage({
                       <EditProofUrlForm orderId={order.id} currentUrl={order.proof_url} />
                     )}
                     <ProofLinkHistory changes={proofChangesByOrderId.get(order.id) ?? []} />
+
+                    {sponsorsByOrderId.has(order.id) && (
+                      <OrderSponsorPanel
+                        orderId={order.id}
+                        sponsor={sponsorsByOrderId.get(order.id)!}
+                        role="seller"
+                      />
+                    )}
                   </div>
                 );
               })}

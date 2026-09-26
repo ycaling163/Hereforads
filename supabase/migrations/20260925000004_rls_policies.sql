@@ -15,6 +15,8 @@ alter table public.payments enable row level security;
 alter table public.profiles enable row level security;
 alter table public.rate_limits enable row level security;
 alter table public.seller_price_card_items enable row level security;
+-- 没有任何策略:只有 service_role 读写
+alter table public.seller_house_ads enable row level security;
 alter table public.seller_profiles enable row level security;
 alter table public.site_pages enable row level security;
 alter table public.social_accounts enable row level security;
