@@ -2698,6 +2698,7 @@ alter table public.listing_orders drop constraint if exists listing_orders_payou
 alter table public.listing_orders add constraint listing_orders_payout_hold_check
   check (payout_hold is null or payout_hold in ('dispute', 'refund', 'seller_banned', 'review'));
 ```
+   **2026-09-26 已在 HereForAds 线上库执行**(产品负责人确认)。
 2. Supabase → Authentication → **Multi-Factor**:确认 **TOTP** 是 Enabled(新项目默认开)。
 3. 合并 PR、部署完成后,**立刻**用管理员账号打开 `/admin`,按提示绑定验证器 App。
 4. Stripe 后台 → Radar → Rules(不用改代码):保留默认规则;加 `Block if :risk_level: = 'highest'`;加 `Request 3D Secure if :card_country: != :ip_country:`。
