@@ -2667,6 +2667,42 @@ revoke all on table public.seller_house_ads from anon, authenticated;
 - **过期后自动隐藏**(`src/lib/orders/checkoutExpiry.ts`):下单超过 36 分钟(或日历占用已提前释放)还没付款的订单,卖家 Sales 和买家 Purchases 都不再显示;卖家的 "Awaiting payment" 只剩正在付款的,并显示"付款链接还剩 N 分钟"。后台订单列表标成 "Checkout expired (not paid)",订单查询页提示"没有扣款,可以重新下单"。以前积压的旧待付款订单一起隐藏。
 - **订单状态不改**,仍是 `pending_payment`——跟日历占用过期的处理一致(`releaseHold.ts`):`cancelled` 在财务、退款统计、Disputes & holds 里都代表"退过款",不能混进没付过钱的订单;万一买家在最后一刻付了款,webhook 照常推进到 `paid_in_escrow`,订单重新出现。不需要执行 SQL。
 
+## 放款审核 + 3D Secure + 管理员两步验证(2026-09-26 决策记录)
+
+产品负责人要求"安全更稳妥"。代码核对结论:外人改不了金额、伪造不了付款通知、改不了收款账户,放款/退款只能走既定流程。剩下两个真实风险,这次补上:
+
+### 1. 放款审核(防"盗卡买自己的广告 + 假交付 + 3 天自动放款")
+- 满足任一条件的订单,放款前暂停(`payout_hold = 'review'`),管理员批准后才转账:
+  - 卖家已成功放款的订单**少于 3 笔**(`PAYOUT_REVIEW_FIRST_ORDERS`);
+  - 订单金额 **≥ 约 £200**(`PAYOUT_REVIEW_THRESHOLDS`:GBP 200 / EUR 230 / USD 250 / CAD 350 / AUD 400 / SGD 350 / HKD 2000 / JPY 40000;不在表里的币种一律审核)。
+- 在 `releaseOrderPayout` 里、转账之前判断(`src/lib/orders/payoutReview.ts`),买家确认收货和 cron 自动放款都经过这里。加暂停时给 `ADMIN_ALERT_EMAIL` 发邮件。
+- 管理员在 **Admin → Disputes & holds** 看到这单(带卖家交付链接和 Stripe 付款链接),点 **Approve payout** → 下一次每小时的 cron 转账。
+- 批准写的是单独的标记 `Payout approved by admin`,**不会**跳过转账前对 Stripe 拒付/退款状态的检查(解除拒付暂停用的 `Hold removed by admin` 才会跳过)。
+- 卖家在 Sales 看到"Payout review"的中性说明(1–2 个工作日);买家那边不显示,确认收货照常成功。
+- 查询失败时按"新卖家"处理(宁可多审);没执行下面的 SQL 时加暂停会失败 → 这单不转账、下个小时重试(不会误放款,但买家确认收货会报错),所以 **SQL 要在部署前执行**。
+
+### 2. 付款时请求 3D Secure
+- Stripe Checkout 加 `payment_method_options.card.request_three_d_secure = "any"`:支持的卡每笔都做 3DS(可能要输验证码,也可能银行后台无感通过)。通过 3DS 的交易出现盗刷拒付,责任转给发卡行。
+- 不支持 3DS 的卡(部分美国卡)照常付款,靠放款审核兜底。只对"盗刷"类拒付转移责任,"没收到服务"类纠纷仍靠托管 + 交付凭证。
+
+### 3. 管理员两步验证
+- `requireAdmin()` 要求会话是 `aal2`(这次登录用验证器 App 验证过),否则跳到 `/dashboard/two-factor`。所有 `/admin` 页面和管理员 action 都经过 `requireAdmin()`,光有密码进不了后台。
+- 第一次:扫二维码绑定验证器 App(Google Authenticator / 1Password / Authy…),输 6 位码。以后每次登录后进后台输一次码。
+- 已经绑定过的,只有密码的人既删不掉也加不了新的验证器(Supabase 要求 aal2)。**部署后管理员要马上去绑定**,别让别人抢先。
+- **手机丢了**:Supabase → Authentication → Users → 找到这个管理员 → 删掉 MFA factor,下次登录重新绑定。
+
+### 要手动做的(按顺序)
+1. **部署前**在 Supabase SQL Editor 执行(可重复执行):
+```sql
+alter table public.listing_orders drop constraint if exists listing_orders_payout_hold_check;
+alter table public.listing_orders add constraint listing_orders_payout_hold_check
+  check (payout_hold is null or payout_hold in ('dispute', 'refund', 'seller_banned', 'review'));
+```
+2. Supabase → Authentication → **Multi-Factor**:确认 **TOTP** 是 Enabled(新项目默认开)。
+3. 合并 PR、部署完成后,**立刻**用管理员账号打开 `/admin`,按提示绑定验证器 App。
+4. Stripe 后台 → Radar → Rules(不用改代码):保留默认规则;加 `Block if :risk_level: = 'highest'`;加 `Request 3D Secure if :card_country: != :ip_country:`。
+5. Stripe、Vercel、Supabase、GitHub、邮箱全部开两步验证;团队成员只留必需的人。
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀

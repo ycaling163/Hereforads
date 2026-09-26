@@ -9,7 +9,7 @@ import type { PayoutHold } from "@/lib/supabase/types";
 
 // 放款时发现订单被暂停,调用方(cron / 确认收货)据此区分"被挡下"和"真的失败"。
 export class PayoutHeldError extends Error {
-  constructor(orderId: string, reason: string) {
+  constructor(orderId: string, readonly reason: string) {
     super(`Payout for order ${orderId} is on hold (${reason})`);
     this.name = "PayoutHeldError";
   }
@@ -19,6 +19,11 @@ export class PayoutHeldError extends Error {
 // 拒付/退款状态自动重新暂停——管理员已经看过并决定放款(比如拒付赢了之后,
 // Stripe 上这笔 charge 的 disputed 仍然是 true)。
 export const HOLD_REMOVED_MARKER = "Hold removed by admin";
+
+// 管理员批准"放款审核"(payout_hold = review,见 src/lib/orders/payoutReview.ts)时写的标记。
+// 跟上面的 HOLD_REMOVED_MARKER 分开:批准审核只表示"这单可以放款",**不能**让
+// releaseOrderPayout 跳过转账前对 Stripe 拒付/退款状态的检查。
+export const REVIEW_APPROVED_MARKER = "Payout approved by admin";
 
 function stamp(note: string): string {
   return `[${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC] ${note}`;
@@ -122,7 +127,11 @@ export async function removePayoutHold(orderId: string, adminId: string) {
       payout_hold: null,
       payout_hold_note: [
         order.payout_hold_note,
-        stamp(`${HOLD_REMOVED_MARKER} (${adminId}); was: ${order.payout_hold}.`),
+        stamp(
+          order.payout_hold === "review"
+            ? `${REVIEW_APPROVED_MARKER} (${adminId}).`
+            : `${HOLD_REMOVED_MARKER} (${adminId}); was: ${order.payout_hold}.`
+        ),
       ]
         .filter(Boolean)
         .join("\n"),

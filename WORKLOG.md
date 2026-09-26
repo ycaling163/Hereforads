@@ -518,3 +518,12 @@
 - `startCheckout`:所有订单的 Stripe 付款链接都设成 31 分钟过期(以前只有日历订单设,普通订单是 24 小时)。
 - 新增 `src/lib/orders/checkoutExpiry.ts`;Sales / Purchases 过滤掉过期的待付款订单,Sales 的 Awaiting payment 显示剩余分钟数;`/admin/orders` 标 "Checkout expired (not paid)";`/orders/[token]` 提示没有扣款。订单状态不改,不需要 SQL。
 - 验证:`tsc`/`eslint` 通过;过期判断 5 个用例(普通订单 10/40 分钟、日历占用提前释放/仍有效、已付款订单)通过。确认付款链接只用于下单后立即跳转,缩短有效期不影响其它功能。
+
+## 2026-09-26 放款审核 + 3D Secure + 管理员两步验证
+
+- 起因:产品负责人问"会不会被改金额、写入假数据、不经管理员把钱转走"。核对了所有动钱的代码路径(下单金额、webhook 签名和金额核对、订单/付款表写权限、收款账户写入、放款、退款、管理员提权),结论和剩余风险写进 README 新增的"放款审核 + 3D Secure + 管理员两步验证"一节。
+- 放款审核:`src/lib/orders/payoutReview.ts` + `releaseOrderPayout` 转账前检查;新增暂停原因 `review`(类型、标签、迁移文件的 check 约束);`REVIEW_APPROVED_MARKER` 跟 `HOLD_REMOVED_MARKER` 分开;`/admin/holds` 对 review 显示交付链接和 "Approve payout";卖家 Sales 显示中性说明,买家不显示,买家确认收货遇到 review 不报错。
+- 3DS:Checkout 加 `request_three_d_secure: "any"`。
+- 管理员两步验证:`requireAdmin()` 要求 aal2;新增 `/dashboard/two-factor`(首次扫码绑定、之后输码)。
+- 验证:`tsc`/`eslint` 通过;逻辑走查了"加暂停 → 管理员批准 → cron 重试 → 转账前仍查拒付/退款"整条链路。**没有**连真实 Supabase/Stripe 跑过——两步验证和放款审核都需要部署后实测(README 那一节的第 3 步)。
+- **需要人工操作**:部署前执行 README 那一节的 SQL;部署后管理员马上绑定验证器;Stripe Radar 规则;各平台账号两步验证。

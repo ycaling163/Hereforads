@@ -317,6 +317,10 @@ async function startCheckout(
     // 付款方式付款成功时 payment_status 还是 unpaid,webhook 会当成金额不符、订单卡住,
     // 等专门支持了再开(安全核查第 1 批,产品负责人 2026-09-24 确认)。
     payment_method_types: ["card"],
+    // 每笔都向发卡行请求 3D Secure(产品负责人 2026-09-26,README"放款审核"一节):支持的卡
+    // 都会做验证(可能是输验证码,也可能是银行后台无感通过),通过验证的交易出现盗刷拒付时
+    // 责任转给发卡行。不支持 3DS 的卡照常付款,靠放款审核兜底。
+    payment_method_options: { card: { request_three_d_secure: "any" } },
     customer_email: buyerEmail,
     line_items: [
       {
