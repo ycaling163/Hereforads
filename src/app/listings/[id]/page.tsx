@@ -269,21 +269,9 @@ export default async function ListingDetailPage({
               ))}
             </div>
           </div>
-
-          {isCalendarListing ? (
-            <SponsorCalendar
-              listingId={listing.id}
-              today={sponsorToday}
-              bookedRanges={sponsorBookedRanges}
-              sponsors={sponsors}
-              houseAds={houseAds}
-            />
-          ) : (
-            <SponsorList sponsors={sponsors} />
-          )}
         </div>
 
-        <div className="flex flex-col gap-6">
+        <div className="flex min-w-0 flex-col gap-6">
           <div
             id="buy"
             className={`scroll-mt-24 rounded-2xl border bg-zinc-50 p-6 ${
@@ -334,6 +322,20 @@ export default async function ListingDetailPage({
               )}
             </div>
           </div>
+
+          {/* 赞助商展示放在价格/购买框下面(产品负责人 2026-09-26),买家下单前就能看到
+              哪些日子被谁订了、哪些还空着。 */}
+          {isCalendarListing ? (
+            <SponsorCalendar
+              listingId={listing.id}
+              today={sponsorToday}
+              bookedRanges={sponsorBookedRanges}
+              sponsors={sponsors}
+              houseAds={houseAds}
+            />
+          ) : (
+            <SponsorList sponsors={sponsors} />
+          )}
 
           {!isOwnListing && (
             <div id="ask" className="scroll-mt-24 rounded-2xl border border-transparent bg-zinc-50 p-6">

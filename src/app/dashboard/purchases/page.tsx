@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
 import { CancelOrderForm } from "@/components/CancelOrderForm";
 import { ProofLinkHistory } from "@/components/ProofLinkHistory";
+import { isExpiredCheckout } from "@/lib/orders/checkoutExpiry";
 import { OrderSponsorPanel } from "@/components/OrderSponsorPanel";
 import { getOrderSponsors } from "@/lib/sponsorData";
 import {
@@ -57,7 +58,13 @@ export default async function PurchasesPage({
     .eq("buyer_id", user.id)
     .order("created_at", { ascending: false });
 
-  const orders = (orderRows ?? []) as unknown as PartyListingOrder[];
+  // 付款链接已过期、没付款的订单不显示(想买可以回广告页重新下单),见
+  // src/lib/orders/checkoutExpiry.ts。
+  // eslint-disable-next-line react-hooks/purity
+  const loadedAt = Date.now();
+  const orders = ((orderRows ?? []) as unknown as PartyListingOrder[]).filter(
+    (o) => !isExpiredCheckout(o, loadedAt)
+  );
 
   const listingIds = [...new Set(orders.map((o) => o.listing_id))];
   const orderIds = orders.map((o) => o.id);

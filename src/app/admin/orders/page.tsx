@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isExpiredCheckout } from "@/lib/orders/checkoutExpiry";
 import { requireAdmin } from "@/lib/supabase/admin";
 import { createServiceClient } from "@/lib/supabase/service";
 import { LISTING_ORDER_STATUS_LABELS } from "@/lib/supabase/enums";
@@ -55,6 +56,8 @@ export default async function AdminOrdersPage({
   const { data: orderRows, error } = await orderQuery;
 
   const orders = (orderRows ?? []) as ListingOrder[];
+  // eslint-disable-next-line react-hooks/purity
+  const loadedAt = Date.now();
   const orderIds = orders.map((o) => o.id);
 
   const listingIds = [...new Set(orders.map((o) => o.listing_id))];
@@ -224,7 +227,9 @@ export default async function AdminOrdersPage({
                 </td>
                 <td className="py-2 pr-4">
                   <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600">
-                    {LISTING_ORDER_STATUS_LABELS[order.status]}
+                    {isExpiredCheckout(order, loadedAt)
+                      ? "Checkout expired (not paid)"
+                      : LISTING_ORDER_STATUS_LABELS[order.status]}
                   </span>
                 </td>
                 <td className="py-2 pr-4 text-zinc-500">

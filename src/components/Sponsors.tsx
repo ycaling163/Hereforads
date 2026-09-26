@@ -61,7 +61,7 @@ export function SponsorCalendar({
   }
 
   return (
-    <section className="mt-8 min-w-0">
+    <section className="min-w-0">
       <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
         Sponsor calendar
       </h2>
@@ -116,7 +116,7 @@ export function SponsorList({ sponsors, max = 12 }: { sponsors: PublicSponsor[];
   if (unique.length === 0) return null;
 
   return (
-    <section className="mt-8 min-w-0">
+    <section className="min-w-0">
       <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">Sponsors</h2>
       <div className="mt-3 flex snap-x gap-3 overflow-x-auto pb-2">
         {unique.slice(0, max).map((s) => (

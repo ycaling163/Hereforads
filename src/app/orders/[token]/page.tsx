@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { isExpiredCheckout } from "@/lib/orders/checkoutExpiry";
 import { ProofLinkHistory } from "@/components/ProofLinkHistory";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadOrderSummary } from "@/lib/orders/summary";
@@ -30,7 +31,10 @@ function nextStep(order: ListingOrder): string {
   const booking = !!order.start_date;
   switch (order.status) {
     case "pending_payment":
-      return "Payment hasn't been completed for this order.";
+      // 付款链接 31 分钟有效,过期后这单不会再被付款(见 src/lib/orders/checkoutExpiry.ts)。
+      return isExpiredCheckout(order, Date.now())
+        ? "This checkout expired before payment, so nothing was charged. You can buy again from the listing."
+        : "Payment hasn't been completed for this order.";
     case "paid_in_escrow":
       return booking
         ? "Your payment is held securely. The seller will put your ad live on the start date and share the live link here."

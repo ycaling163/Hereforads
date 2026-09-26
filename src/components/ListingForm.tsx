@@ -23,6 +23,7 @@ import {
   minListingPrice,
 } from "@/lib/fees";
 import { ListingMediaManager } from "@/components/ListingMediaManager";
+import { LISTING_EXAMPLES, type ListingExample } from "@/lib/listingExamples";
 import { DEFAULT_MIN_BOOKING_DAYS, MAX_BOOKING_DAYS } from "@/lib/booking";
 
 export interface ListingFormState {
@@ -78,6 +79,33 @@ export function ListingForm({
     priceAmount && !Number.isNaN(parsedPrice) && parsedPrice >= minPrice
       ? calculateFees(parsedPrice, priceCurrency)
       : null;
+  const [adType, setAdType] = useState<string>(initialListing?.ad_type ?? "");
+  const [showExamples, setShowExamples] = useState(false);
+  const shownExamples = adType
+    ? LISTING_EXAMPLES.filter((example) => example.adType === adType)
+    : LISTING_EXAMPLES;
+
+  // "Use this example":把示例的标题/描述/广告类型填进表单,已经写了内容的先确认。
+  // 标题、描述、广告类型都是非受控输入框(跟表单其它字段一致),直接改 DOM 的值。
+  function applyExample(example: ListingExample, form: HTMLFormElement | null) {
+    if (!form) return;
+    const title = form.elements.namedItem("title") as HTMLInputElement | null;
+    const description = form.elements.namedItem("description") as HTMLTextAreaElement | null;
+    if (
+      (title?.value.trim() || description?.value.trim()) &&
+      !window.confirm("Replace your title and description with this example?")
+    ) {
+      return;
+    }
+    const adTypeSelect = form.elements.namedItem("ad_type") as HTMLSelectElement | null;
+    if (title) title.value = example.title;
+    if (description) description.value = example.description;
+    if (adTypeSelect) adTypeSelect.value = example.adType;
+    setAdType(example.adType);
+    setShowExamples(false);
+    title?.focus();
+  }
+
   const [acceptsAnyCategory, setAcceptsAnyCategory] = useState(
     initialListing?.categories.includes("any") ?? false
   );
@@ -132,13 +160,22 @@ export function ListingForm({
           What kind of ad is this? Buyers can compare this across listings.
           Pick <strong>Custom</strong> if this placement doesn&apos;t fit the
           standard types — buyers will be nudged to message you before
-          buying so you can agree on scope first.
+          buying so you can agree on scope first.{" "}
+          <button
+            type="button"
+            onClick={() => setShowExamples((open) => !open)}
+            aria-expanded={showExamples}
+            className="font-medium text-zinc-900 underline"
+          >
+            {showExamples ? "Hide examples" : "See examples"}
+          </button>
         </p>
         <select
           id="ad_type"
           name="ad_type"
           required
           defaultValue={initialListing?.ad_type ?? ""}
+          onChange={(event) => setAdType(event.target.value)}
           className={inputClass}
         >
           <option value="" disabled>
@@ -150,6 +187,44 @@ export function ListingForm({
             </option>
           ))}
         </select>
+        {showExamples && (
+          <div className="mt-1 flex flex-col gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+            <p className="text-xs text-zinc-500">
+              {adType
+                ? `Examples for "${AD_TYPE_LABELS[adType as keyof typeof AD_TYPE_LABELS]}":`
+                : "What creators sell on HereForAds:"}
+            </p>
+            {shownExamples.map((example) => (
+              <div key={example.id} className="rounded-lg bg-white p-3 text-sm">
+                <p className="font-medium text-zinc-900">{example.name}</p>
+                <p className="mt-0.5 text-xs text-zinc-500">{example.summary}</p>
+                <p className="mt-2 text-xs text-zinc-700">
+                  <span className="text-zinc-400">Example title:</span> {example.title}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-3 text-xs">
+                  <button
+                    type="button"
+                    onClick={(event) => applyExample(example, event.currentTarget.form)}
+                    className="font-medium text-zinc-900 underline"
+                  >
+                    Use this example
+                  </button>
+                  <a
+                    href={`/help#${example.id}`}
+                    target="_blank"
+                    rel="noopener"
+                    className="text-zinc-500 underline"
+                  >
+                    Full example ↗
+                  </a>
+                </div>
+              </div>
+            ))}
+            <a href="/help" target="_blank" rel="noopener" className="text-xs font-medium text-zinc-900 underline">
+              All examples &amp; writing tips ↗
+            </a>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">

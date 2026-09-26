@@ -25,6 +25,9 @@ export function Footer() {
             <Link href="/privacy" className="hover:text-zinc-900">
               Privacy Policy
             </Link>
+            <Link href="/help" className="hover:text-zinc-900">
+              Help &amp; listing examples
+            </Link>
             <Link href="/orders/find" className="hover:text-zinc-900">
               Find an order
             </Link>
