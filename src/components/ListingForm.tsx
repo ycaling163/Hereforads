@@ -22,7 +22,7 @@ import {
   formatMoney,
   minListingPrice,
 } from "@/lib/fees";
-import { FileInput } from "@/components/FileInput";
+import { ListingMediaManager } from "@/components/ListingMediaManager";
 import { DEFAULT_MIN_BOOKING_DAYS, MAX_BOOKING_DAYS } from "@/lib/booking";
 
 export interface ListingFormState {
@@ -39,6 +39,7 @@ export function ListingForm({
   duplicatedFromTitle,
   socialAccounts,
   websiteUrl,
+  userId,
   submitLabel,
   pendingLabel,
   defaultCurrency,
@@ -54,6 +55,8 @@ export function ListingForm({
   duplicatedFromTitle?: string;
   socialAccounts: SocialAccount[];
   websiteUrl: string | null;
+  /** 当前卖家的 user id,视频直传 Storage 时用作文件夹名。 */
+  userId: string;
   submitLabel: string;
   pendingLabel: string;
   /** 新发布时的默认币种(卖家收款国家的货币);编辑/复制时用原来的币种。 */
@@ -75,7 +78,6 @@ export function ListingForm({
     priceAmount && !Number.isNaN(parsedPrice) && parsedPrice >= minPrice
       ? calculateFees(parsedPrice, priceCurrency)
       : null;
-  const [keptMedia, setKeptMedia] = useState(initialListing?.media_urls ?? []);
   const [acceptsAnyCategory, setAcceptsAnyCategory] = useState(
     initialListing?.categories.includes("any") ?? false
   );
@@ -397,51 +399,15 @@ export function ListingForm({
         )}
       </div>
 
-      {keptMedia.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          <p className={labelClass}>
-            {duplicatedFromTitle ? "Copied media" : "Uploaded media"}
-          </p>
-          {duplicatedFromTitle && (
-            <p className="text-xs text-zinc-500">
-              The first image is used as the cover. Remove and re-upload to
-              replace it (e.g. with a platform-specific screenshot).
-            </p>
-          )}
-          <div className="grid grid-cols-4 gap-3">
-            {keptMedia.map((url) => (
-              <div key={url} className="group relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={url}
-                  alt=""
-                  className="aspect-square w-full rounded-lg object-cover"
-                />
-                <input type="hidden" name="existing_media" value={url} />
-                <button
-                  type="button"
-                  onClick={() =>
-                    setKeptMedia((current) => current.filter((kept) => kept !== url))
-                  }
-                  aria-label="Remove image"
-                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-zinc-900/70 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="media" className={labelClass}>
-          {keptMedia.length > 0
-            ? "Add more media (optional, appended after the ones above)"
-            : "Media (optional, multiple allowed)"}
-        </label>
-        <FileInput id="media" name="media" accept="image/*,video/*" multiple />
-      </div>
+      <ListingMediaManager
+        initialUrls={initialListing?.media_urls ?? []}
+        userId={userId}
+        hint={
+          duplicatedFromTitle
+            ? "Copied from the original listing. Swap the cover for a platform-specific screenshot if needed."
+            : undefined
+        }
+      />
 
       {/* 只在真正创建新 listing 时问一次(见 README"发布免审核 + KYC 后置"
           一节)——编辑已有 listing 不重新要求勾选,不然改个价格都要重新同意

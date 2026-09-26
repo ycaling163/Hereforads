@@ -50,6 +50,7 @@ export default async function EditListingPage({
 
       <div className="mt-8">
         <ListingForm
+          userId={user.id}
           action={updateListingAction.bind(null, listing.id)}
           initialListing={listing}
           socialAccounts={(socialAccounts ?? []) as SocialAccount[]}

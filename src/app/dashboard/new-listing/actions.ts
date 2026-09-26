@@ -1,9 +1,11 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { checkUpload, isOwnStorageUrl } from "@/lib/uploads";
+import { deleteUnusedMedia } from "@/lib/mediaCleanup";
+import { isOwnStorageUrl, verifyDirectVideoUpload } from "@/lib/uploads";
+import { uploadListingFiles } from "@/lib/listingUploads";
+import { MAX_LISTING_MEDIA, orderListingMedia } from "@/lib/listingMedia";
 import { parseListingFormFields } from "@/lib/listingFormValidation";
 import { MEDIA_BUCKET } from "@/config/site";
 
@@ -66,32 +68,27 @@ export async function createListingAction(
     .map(String)
     .filter((url) => isOwnStorageUrl(url, MEDIA_BUCKET, user.id));
 
-  const mediaUrls: string[] = [...existingMediaUrls];
-  try {
-    for (const file of mediaFiles) {
-      const checked = await checkUpload(file, "listing_media");
-      if (!checked.ok) {
-        return { error: checked.error };
-      }
-      const path = `${user.id}/listings/${randomUUID()}.${checked.ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from(MEDIA_BUCKET)
-        .upload(path, file, { contentType: checked.contentType });
-
-      if (uploadError) {
-        return { error: `Media upload failed: ${uploadError.message}` };
-      }
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
-      mediaUrls.push(publicUrl);
-    }
-  } catch (err) {
-    return {
-      error: `Media upload failed: ${err instanceof Error ? err.message : "unknown error"}`,
-    };
+  // 浏览器直传到 Storage 的视频(见 ListingMediaManager):按文件头再确认一次是视频。
+  const directMediaUrls = [...new Set(formData.getAll("direct_media").map(String))];
+  const directChecks = await Promise.all(
+    directMediaUrls.map((url) => verifyDirectVideoUpload(url, MEDIA_BUCKET, user.id))
+  );
+  if (directChecks.includes(false)) {
+    return { error: "One of the videos couldn't be verified — please remove it and upload again" };
   }
+  existingMediaUrls.push(...directMediaUrls.filter((url) => !existingMediaUrls.includes(url)));
+
+  if (existingMediaUrls.length + mediaFiles.length > MAX_LISTING_MEDIA) {
+    return { error: `A listing can have up to ${MAX_LISTING_MEDIA} photos/videos` };
+  }
+
+  const uploaded = await uploadListingFiles(supabase, user.id, mediaFiles);
+  if ("error" in uploaded) {
+    return { error: uploaded.error };
+  }
+  const uploadedUrls = uploaded.urls;
+  // 按表单里排好的顺序(可以把任意一张设为封面)拼出最终列表,第一张是封面。
+  const mediaUrls = orderListingMedia(formData.get("media_order"), existingMediaUrls, uploadedUrls);
 
   // 发布免审核 + KYC 后置(2026-09-19 决策记录,见 README 同名一节):不再要求
   // stripe_onboarded、也不再进 pending_review 排队等管理员批准,发布就是
@@ -126,6 +123,8 @@ export async function createListingAction(
     .single();
 
   if (error || !data) {
+    // 没发布成功,这次传上去的图片没人用,删掉(直传的视频还留在表单里,用户重试时会再用)。
+    await deleteUnusedMedia(user.id, uploadedUrls);
     return { error: error?.message ?? "Failed to publish, please try again" };
   }
 

@@ -1,10 +1,11 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { deleteUnusedMedia } from "@/lib/mediaCleanup";
-import { checkUpload, isOwnStorageUrl } from "@/lib/uploads";
+import { isOwnStorageUrl, verifyDirectVideoUpload } from "@/lib/uploads";
+import { uploadListingFiles } from "@/lib/listingUploads";
+import { MAX_LISTING_MEDIA, orderListingMedia } from "@/lib/listingMedia";
 import { parseListingFormFields } from "@/lib/listingFormValidation";
 import { MEDIA_BUCKET } from "@/config/site";
 import type { ListingFormState } from "@/components/ListingForm";
@@ -58,32 +59,27 @@ export async function updateListingAction(
     .map(String)
     .filter((url) => isOwnStorageUrl(url, MEDIA_BUCKET, user.id));
 
-  const mediaUrls: string[] = [...keptMediaUrls];
-  try {
-    for (const file of mediaFiles) {
-      const checked = await checkUpload(file, "listing_media");
-      if (!checked.ok) {
-        return { error: checked.error };
-      }
-      const path = `${user.id}/listings/${randomUUID()}.${checked.ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from(MEDIA_BUCKET)
-        .upload(path, file, { contentType: checked.contentType });
-
-      if (uploadError) {
-        return { error: `Media upload failed: ${uploadError.message}` };
-      }
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
-      mediaUrls.push(publicUrl);
-    }
-  } catch (err) {
-    return {
-      error: `Media upload failed: ${err instanceof Error ? err.message : "unknown error"}`,
-    };
+  // 浏览器直传到 Storage 的视频(见 ListingMediaManager):按文件头再确认一次是视频。
+  const directMediaUrls = [...new Set(formData.getAll("direct_media").map(String))];
+  const directChecks = await Promise.all(
+    directMediaUrls.map((url) => verifyDirectVideoUpload(url, MEDIA_BUCKET, user.id))
+  );
+  if (directChecks.includes(false)) {
+    return { error: "One of the videos couldn't be verified — please remove it and upload again" };
   }
+  keptMediaUrls.push(...directMediaUrls.filter((url) => !keptMediaUrls.includes(url)));
+
+  if (keptMediaUrls.length + mediaFiles.length > MAX_LISTING_MEDIA) {
+    return { error: `A listing can have up to ${MAX_LISTING_MEDIA} photos/videos` };
+  }
+
+  const uploaded = await uploadListingFiles(supabase, user.id, mediaFiles);
+  if ("error" in uploaded) {
+    return { error: uploaded.error };
+  }
+  const uploadedUrls = uploaded.urls;
+  // 按表单里排好的顺序(可以把任意一张设为封面)拼出最终列表,第一张是封面。
+  const mediaUrls = orderListingMedia(formData.get("media_order"), keptMediaUrls, uploadedUrls);
 
   const { data: updatedRows, error } = await supabase
     .from("listings")
@@ -105,11 +101,10 @@ export async function updateListingAction(
     .eq("seller_id", user.id)
     .select("id");
 
-  if (error) {
-    return { error: error.message };
-  }
-  if (!updatedRows || updatedRows.length === 0) {
-    return { error: "Save failed — the database rejected the request" };
+  if (error || !updatedRows || updatedRows.length === 0) {
+    // 没保存成功,这次传上去的图片没人用,删掉(直传的视频还留在表单里,用户重试时会再用)。
+    await deleteUnusedMedia(user.id, uploadedUrls);
+    return { error: error?.message ?? "Save failed — the database rejected the request" };
   }
 
   // Only clean up dropped images once the new media_urls is safely saved,

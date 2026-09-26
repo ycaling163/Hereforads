@@ -75,6 +75,7 @@ export default async function NewListingPage({
 
       <div className="mt-8">
         <ListingForm
+          userId={user.id}
           action={createListingAction}
           initialListing={sourceListing ?? undefined}
           duplicatedFromTitle={sourceListing?.title}

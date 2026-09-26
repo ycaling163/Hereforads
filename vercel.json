@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/auto-confirm",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/media-cleanup",
+      "schedule": "17 3 * * *"
     }
   ]
 }

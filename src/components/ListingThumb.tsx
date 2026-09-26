@@ -1,6 +1,6 @@
 // 订单卡片、消息列表里的广告小封面图(产品负责人 2026-09-25 要求:卖家/买家对自己的
 // 产品图更有记忆,一眼能认出是哪条广告)。封面是视频时显示视频第一帧,没有媒体时显示灰块。
-const VIDEO_EXTENSIONS = /\.(mp4|webm|mov)(\?|$)/i;
+import { isVideoUrl } from "@/lib/listingMedia";
 
 export function ListingThumb({ url, size = 48 }: { url?: string | null; size?: number }) {
   const style = { width: size, height: size };
@@ -8,7 +8,7 @@ export function ListingThumb({ url, size = 48 }: { url?: string | null; size?: n
   if (!url) {
     return <div style={style} className={className} aria-hidden />;
   }
-  if (VIDEO_EXTENSIONS.test(url)) {
+  if (isVideoUrl(url)) {
     return (
       <video
         src={`${url}#t=0.1`}

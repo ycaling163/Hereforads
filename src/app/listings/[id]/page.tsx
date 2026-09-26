@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { BuyListingButton } from "@/components/BuyListingButton";
 import { ContactSellerForm } from "@/components/ContactSellerForm";
 import { DailyCountdown } from "@/components/DailyCountdown";
+import { ListingGallery } from "@/components/ListingGallery";
 import type { BookingOptions } from "@/components/BookingPicker";
 import { getBookedRanges } from "@/lib/orders/bookings";
 import { toMinorUnits } from "@/lib/fees";
@@ -226,33 +227,7 @@ export default async function ListingDetailPage({
 
       <div className="mt-4 grid grid-cols-1 gap-10 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-zinc-100">
-            {media[0] ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={media[0]}
-                alt={listing.title}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-zinc-400">
-                No image
-              </div>
-            )}
-          </div>
-          {media.length > 1 && (
-            <div className="mt-3 grid grid-cols-4 gap-3">
-              {media.slice(1).map((url) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={url}
-                  src={url}
-                  alt={listing.title}
-                  className="aspect-square w-full rounded-lg object-cover"
-                />
-              ))}
-            </div>
-          )}
+          <ListingGallery media={media} title={listing.title} />
 
           {listing.description && (
             <div className="mt-6 rounded-2xl border border-transparent bg-zinc-50 p-6">

@@ -3,12 +3,13 @@
 --
 -- bucket 名 ad-space-photos 跟代码里的 MEDIA_BUCKET 对应(src/config/site.ts),
 -- 新站点想换名字要两边一起改。文件按上传者分文件夹:{user_id}/...
--- 广告媒体、头像、横幅、私信图片都放在这里;单个文件最大 10MB,只收下面这些类型
+-- 广告媒体、头像、横幅、私信图片都放在这里;单个文件最大 25MB(2026-09-26 为 10 秒 1080p
+-- 广告视频直传从 10MB 调大;图片仍由服务端限制 10MB、且上传前已在浏览器压缩),只收下面这些类型
 -- (代码里另外按文件头再校验一遍,见 src/lib/uploads.ts)。
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
-  'ad-space-photos', 'ad-space-photos', true, 10485760,
+  'ad-space-photos', 'ad-space-photos', true, 26214400,
   array['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime']
 )
 on conflict (id) do update

@@ -445,3 +445,45 @@
 2. PR #64 的手动测试结果待产品负责人确认(README"安全复查"第 3 条的 6 项;重点是删广告/编辑去图后 Storage 里旧文件确实没了,复制出来的广告图片还在)。
 3. 以前积累的、没被删掉的旧图片没有清理;要清的话另做一次性清理(先查引用再删)。
 4. 更早留下的:一两周后看 Vercel 日志 "CSP violation",没问题就把 CSP 改成强制;切 Stripe live 前的手动清单;日历订单分两次放款;Terms/隐私政策给律师看。
+
+## 2026-09-26 广告媒体:编辑时看全、删除、设封面;详情页展示全部
+
+**问题**(产品负责人反馈):编辑广告时上传了两张图片和一个视频,前台只展示了一张;编辑页看不出有几张图,也删不掉不要的。
+
+**原因**:
+1. 旧表单用的是原生 `<input type="file" multiple>`——每次重新选择都会把上次选的覆盖掉,"先选两张图、再选视频"最后只会提交视频;
+2. 编辑页、详情页、广告卡片、我的广告、后台列表都把视频当 `<img>` 渲染,显示成裂图;
+3. 编辑页删除按钮只在鼠标悬停时出现(`opacity-0 group-hover`),手机上根本看不到;也没有设封面的办法(封面固定是 `media_urls[0]`);
+4. 详情页大图区只显示第一张,不能切换。
+
+**改动**(不改数据库,仍是 `listings.media_urls`,第一张 = 封面):
+- `src/components/ListingMediaManager.tsx`(新):发布/编辑表单里的媒体管理网格——已有和新选的文件一起显示(视频显示第一帧 + ▶),每张都有常驻的删除、"Set as cover"、左右移动按钮,标出 Cover / New、计数 `n/10`。新文件由单独的"添加"input 选完追加进列表,再用 DataTransfer 同步到真正提交的隐藏 `media` input;React 19 表单 reset 后会重新塞回去(保存报错后可以直接再点保存)。一次保存新文件合计超过约 9.5MB 时提前提示(Server Action 请求体上限 10MB)。
+- 提交字段新增 `media_order`(JSON,`e:<url>` / `n:<下标>`),`src/lib/listingMedia.ts` 的 `orderListingMedia` 在服务端按它拼最终顺序——只认已校验过的本人文件和本次上传结果,没提到的补在最后,不会丢文件。发布和编辑两个 action 都改了,并限制每条广告最多 10 个媒体(`MAX_LISTING_MEDIA`)。
+- `src/components/ListingGallery.tsx`(新):详情页画廊,大图区可切换(左右箭头 + `n / N`),视频带播放控件;下方缩略图列出全部媒体(含封面)。
+- `src/components/MediaPreview.tsx`(新):图片/视频通用预览;`ListingCard`、`/dashboard/my-listings`、`/admin/listings` 的封面改用它,封面是视频时不再裂图。`ListingThumb` 复用 `isVideoUrl`。
+
+**验证**:`tsc`、`eslint` 通过;`orderListingMedia` 用例(乱序、伪造 URL、坏 JSON)通过;在临时页面用 Playwright 真实浏览器跑过:分两次选择文件会累加(2 张已有 + 3 个新 = 5 格)、删除已有图、把视频设成封面后提交的 `media_order`/`existing_media`/`media` 顺序正确、表单 reset 后文件仍在、详情页画廊能切到视频。**没有**用真实 Supabase 登录账号端到端点过发布/编辑(本环境连不上 HereForAds 的 Supabase 项目)。
+
+**追加:上传前压缩图片**(产品负责人:图片只需要常规网站清晰度)。之前代码里其实没有任何压缩,原图直接进 Storage。新增 `src/lib/compressImage.ts`,在 `ListingMediaManager` 选文件时于浏览器端处理:长边缩到 1920px、重新编码成 WebP(不支持时用 JPEG,质量 0.82),按 EXIF 方向摆正;GIF、视频、小于 300KB 且尺寸不大的图、解码失败的格式、压完反而更大的都保留原文件。Playwright 实测:4000×3000、11.9MB 的 JPEG(随机噪点,最难压的情况)→ 1920×1440 WebP 1.2MB,真实照片一般只有几百 KB。
+- 因为图片基本不再占体积,每次保存新文件合计的提示阈值从 9.5MB 改成 4MB(`MAX_NEW_MEDIA_BYTES_PER_SAVE`),对齐 Vercel 函数请求体约 4.5MB 的上限——现在主要是视频会碰到。
+
+**待跟进 / 风险**:视频没法在浏览器里压缩,大于约 4MB 的视频走 Server Action 会被 Vercel 拒绝。需要支持更大的视频时,改成浏览器直传 Storage(已有 `{user_id}/` 文件夹 insert 策略),服务端只收 URL 并用 `isOwnStorageUrl` 校验。头像、横幅、私信图片还没接这个压缩,需要的话可以复用 `compressImage`。
+
+**再追加(同日):其它图片也压缩 + 广告视频规则**(产品负责人:头像、横幅、私信图片同样压缩;视频 10 秒以内、提示 MP4、最高 1080p,更长的以后再说)
+- `FileInput`:`accept="image/*"` 的 input(头像、横幅、私信/联系卖家的图片)选完先用 `compressImage` 压缩,再换回 input 提交,服务端 action 没改。
+- 广告视频改成**浏览器直传 Storage**(`ListingMediaManager.addVideo`):10 秒 1080p 手机视频一般 10–20MB,走 Server Action 会撞 Vercel 约 4.5MB 的请求体上限。选文件时先检查:MP4/MOV/WebM、≤ 25MB(`MAX_VIDEO_BYTES`)、时长 ≤ 10 秒、分辨率 ≤ 1080p(横竖都行)、浏览器能解码(解不了就提示导出成 MP4 H.264,也顺带保证站上能播)。直传路径 `{user_id}/listings/{uuid}.{ext}`,用的是现有的 insert 策略;上传没完成时拦住保存。表单提交 `direct_media`,服务端 `verifyDirectVideoUpload` 只认本人 `listings/` 文件夹下的文件,并按文件头(Range 请求前 16 字节)确认确实是视频,再并入保留列表排序。`ListingForm` 新增 `userId` 属性(发布页、编辑页传 `user.id`)。
+- 验证:Playwright 真实浏览器里,12 秒视频、2560×1440 视频被拒并给出提示;3 秒视频直传(拦截了 Storage 请求)路径正确,上传中点保存被拦,完成后提交的 `direct_media`/`media_order` 正确;头像 11.9MB → 1.28MB WebP。`verifyDirectVideoUpload` 用本地 HTTP 服务测过:真视频通过,伪装成 .mp4 的 HTML、非 `listings/` 路径、别人的文件都拒绝。**没有**连真实 Supabase 跑过直传。
+
+**需要人工操作(上线前必须做)**:在 HereForAds 的 Supabase SQL Editor 执行 `update storage.buckets set file_size_limit = 26214400 where id = 'ad-space-photos';`(10MB → 25MB,README 第 3 批 SQL 下面也补了这句;`supabase/migrations/20260925000006_storage.sql` 已同步给新站点用)。不改的话超过 10MB 的视频会上传失败(页面会显示 Storage 返回的错误)。
+
+~~已知小问题:直传的视频删掉/没保存就离开会留在 Storage~~ → 同日已解决,见下一条。
+
+**再追加(同日):删掉的/没用上的图片和视频都从 Storage 删除**(产品负责人:不删的话遗留文件会越来越多)
+原来已经有的:编辑广告时去掉的已有文件、删广告、换头像/横幅,保存成功后会删旧文件(PR #64)。这次补的是"传上去了但最后没用上"的几种情况:
+- **保存失败**:发布/编辑广告(新的 `src/lib/listingUploads.ts`,多张图中途失败会把已传的删掉;写数据库失败也删)、个人资料的头像/横幅、私信和联系卖家的图片——上传后如果后面保存失败,刚传的文件立刻删掉。
+- **直传的视频没用上**:在编辑页网格里删掉(包括还在上传中就删掉的)、或没保存就离开页面(跳转或关标签页,用 `fetch keepalive`),都会调新的 `POST /api/media/discard`。只收当前用户 `{userId}/listings/` 下的文件,校验 Origin,删之前照常查引用——所以保存成功后页面卸载发来的请求什么也不会删;正在保存时不发。
+- **每天兜底清理**:新的 `/api/cron/media-cleanup`(`vercel.json` 每天 03:17 UTC,要 `CRON_SECRET`,跟 auto-confirm 一样)。扫描每个用户的 `listings/messages/avatar/banner/price-card` 文件夹,超过 24 小时、没有任何地方引用的文件删掉。**第一次运行会把以前积累的遗留文件一起清掉**(上一条交接里"旧图片没清理"那项)。
+- `deleteUnusedMedia` 的引用检查扩大了:加上订单交付凭证(`listing_orders.proof_url`、`listing_order_proof_changes` 新旧链接),以及线上还留着的老 ad_spaces 流程的表(`ad_spaces.photo_urls`、`campaigns.creative_url`、`proof_uploads.media_url`;新站点没有这些表,查询报"表不存在"时当作没有引用,其它错误仍然一个都不删)。现在返回实际删除的数量。
+- 验证:`tsc`/`eslint` 通过。Playwright:删掉已上传的视频、上传中删掉、保存中不发、离开页面时发,四种情况的 discard 请求都对;`/api/media/discard` 跨站 403、未登录 401;cron 未带密钥 401。用一个模拟 Supabase(Storage list/remove + PostgREST)跑了一遍 cron:4 个旧文件里只删了没人引用的那个,被广告、私信、老 ad_spaces 表引用的和 24 小时内的都保留,缺失的老表不影响。**没有**连真实 Supabase 跑过。
+
+**上线后建议**:第一次 cron 跑完(或者在 Vercel → Cron Jobs 手动触发一次)看一下返回的 `scanned`/`deleted` 数和 Vercel 日志 "Media cleanup cron",数字合理再放着不管。

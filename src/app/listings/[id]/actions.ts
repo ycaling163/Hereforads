@@ -11,6 +11,7 @@ import { fromMinorUnits, isSupportedCurrency, toMinorUnits } from "@/lib/fees";
 import { formatOrderNumber } from "@/lib/orders/orderNumber";
 import { releaseBuyerHoldsOnListing } from "@/lib/orders/releaseHold";
 import { checkUpload } from "@/lib/uploads";
+import { deleteUnusedMedia } from "@/lib/mediaCleanup";
 import { UUID_PATTERN } from "@/lib/messages";
 import { MEDIA_BUCKET } from "@/config/site";
 import {
@@ -439,6 +440,8 @@ export async function sendListingMessageAction(
   });
 
   if (error) {
+    // 消息没发出去,刚传的图片没人用,删掉。
+    await deleteUnusedMedia(user.id, [imageUrl]);
     return { error: error.message };
   }
 

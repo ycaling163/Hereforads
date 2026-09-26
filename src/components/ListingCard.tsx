@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Listing, Profile, SellerProfile, SocialAccount } from "@/lib/supabase/types";
 import { AD_TYPE_LABELS, LISTING_CATEGORY_LABELS, PRICING_UNIT_LABELS } from "@/lib/supabase/enums";
 import { SocialStatChip, WebsiteStatChip } from "@/components/SocialStatChip";
+import { MediaPreview } from "@/components/MediaPreview";
 
 export function ListingCard({
   listing,
@@ -32,9 +33,8 @@ export function ListingCard({
           </span>
         )}
         {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={cover}
+          <MediaPreview
+            url={cover}
             alt={listing.title}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />

@@ -5,6 +5,7 @@ import { ConfirmSubmitForm } from "@/components/ConfirmSubmitForm";
 import { LISTING_STATUS_LABELS, PRICING_UNIT_LABELS } from "@/lib/supabase/enums";
 import type { Listing } from "@/lib/supabase/types";
 import { deleteListingAction } from "./actions";
+import { MediaPreview } from "@/components/MediaPreview";
 
 const STATUS_BADGE_CLASS: Record<Listing["status"], string> = {
   draft: "bg-amber-100 text-amber-800",
@@ -113,9 +114,8 @@ export default async function MyListingsPage({
                 className="h-16 w-20 shrink-0 overflow-hidden rounded-lg bg-zinc-100"
               >
                 {listing.media_urls?.[0] ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={listing.media_urls[0]}
+                  <MediaPreview
+                    url={listing.media_urls[0]}
                     alt={listing.title}
                     className="h-full w-full object-cover"
                   />

@@ -2426,6 +2426,12 @@ set allowed_mime_types = array[
 where id = 'ad-space-photos';
 ```
 
+> **2026-09-26 更新**:广告视频改成浏览器直传 Storage(10 秒以内、最高 1080p,单个最大 25MB),bucket 单文件上限要调到 25MB,不然 10 秒的 1080p 视频传不上去(图片仍由服务端限制 10MB,且上传前已在浏览器压缩):
+>
+> ```sql
+> update storage.buckets set file_size_limit = 26214400 where id = 'ad-space-photos';
+> ```
+
 执行完可以核对(第一句应该返回 `true`;第二句列出不是 http/https 的老链接,有结果的话在后台改掉或发给开发):
 
 ```sql
