@@ -282,7 +282,14 @@ export default async function SalesPage({
                       </p>
                     )}
 
-                    {order.payout_hold && (
+                    {order.payout_hold === "review" && (
+                      <p className="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800">
+                        Payout review — as a routine check on a seller&apos;s first orders and on
+                        larger orders, our team approves the payout before it&apos;s sent. This
+                        usually takes 1–2 business days; nothing is wrong with your order.
+                      </p>
+                    )}
+                    {order.payout_hold && order.payout_hold !== "review" && (
                       <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
                         On hold — under review ({PAYOUT_HOLD_LABELS[order.payout_hold]}). The
                         payout is paused until our team has looked at it; we&apos;ll email you.

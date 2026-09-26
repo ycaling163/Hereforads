@@ -156,7 +156,8 @@ export default async function PurchasesPage({
                 </p>
               )}
 
-              {order.payout_hold && (
+              {/* 放款审核(review)是平台和卖家之间的例行检查,买家不用看到。 */}
+              {order.payout_hold && order.payout_hold !== "review" && (
                 <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
                   On hold — under review ({PAYOUT_HOLD_LABELS[order.payout_hold]}). No money will
                   move on this order until our team has looked at it.

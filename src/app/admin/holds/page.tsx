@@ -189,6 +189,18 @@ export default async function AdminHoldsPage({
                         since {new Date(order.payout_hold_at).toUTCString().replace(" GMT", " UTC")}
                       </p>
                     )}
+                    {/* 放款审核:批准前先点开卖家的交付链接,确认广告真的发了。 */}
+                    {order.payout_hold === "review" && (
+                      <p className="mt-2 max-w-xs break-all text-xs">
+                        {order.proof_url ? (
+                          <a href={order.proof_url} target="_blank" rel="noreferrer" className="underline">
+                            Delivery link ↗
+                          </a>
+                        ) : (
+                          <span className="text-red-600">No delivery link</span>
+                        )}
+                      </p>
+                    )}
                   </td>
                   <td className="max-w-sm whitespace-pre-wrap py-3 pr-4 text-xs text-zinc-500">
                     {order.payout_hold_note ?? "—"}
@@ -197,8 +209,12 @@ export default async function AdminHoldsPage({
                   <td className="py-3 pr-4">
                     <ConfirmSubmitForm
                       action={removeHoldAction.bind(null, order.id)}
-                      confirmMessage="Remove the hold? The order goes back to the normal flow, and the seller may be paid out automatically within the hour."
-                      label="Remove hold"
+                      confirmMessage={
+                        order.payout_hold === "review"
+                          ? "Approve this payout? Check the delivery link and the payment in Stripe first. The seller is paid on the next hourly run."
+                          : "Remove the hold? The order goes back to the normal flow, and the seller may be paid out automatically within the hour."
+                      }
+                      label={order.payout_hold === "review" ? "Approve payout" : "Remove hold"}
                       className="whitespace-nowrap rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100"
                     />
                   </td>

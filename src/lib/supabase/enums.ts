@@ -217,6 +217,7 @@ export const PAYOUT_HOLD_LABELS: Record<PayoutHold, string> = {
   dispute: "Payment disputed",
   refund: "Refunded outside the normal flow",
   seller_banned: "Seller account suspended",
+  review: "Payout review (new seller or large order)",
 };
 
 // 最低发布价和费率在 src/lib/fees.ts / src/config/site.ts(2026-09-23 改成固定费率,按币种区分最低价)。

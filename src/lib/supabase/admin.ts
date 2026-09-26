@@ -18,7 +18,7 @@ export async function isAdmin(supabase: SupabaseClient, userId: string): Promise
 
 /**
  * 管理员专用 server action 的入口校验:没登录踢去登录页,登录了但不是管理员踢回
- * 普通 dashboard 首页,都不是往下走。返回的是当前用户,方便调用方判断"是不是在操作自己"
+ * 普通 dashboard 首页,这次登录没做两步验证的去 /dashboard/two-factor,都不是往下走。返回的是当前用户,方便调用方判断"是不是在操作自己"
  * (比如管理员不能把自己封禁掉)。
  */
 export async function requireAdmin() {
@@ -32,6 +32,13 @@ export async function requireAdmin() {
   }
   if (!(await isAdmin(supabase, user.id))) {
     redirect("/dashboard");
+  }
+  // 管理员必须两步验证(产品负责人 2026-09-26,README"管理员两步验证"):这次登录没用
+  // 验证器 App 验证过(会话不是 aal2)就先去验证/设置,光有密码进不了后台、也调不了
+  // 任何管理员 action。上面 getUser() 已经向 Supabase 校验过这个会话的令牌,aal 读的就是它。
+  const { data: aal, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (aalError || aal?.currentLevel !== "aal2") {
+    redirect("/dashboard/two-factor");
   }
   return user;
 }

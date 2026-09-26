@@ -87,6 +87,23 @@ export const MIN_LISTING_PRICE_MINOR: Record<string, number> = {
 // 卖家不标记交付,订单就一直停在 `paid_in_escrow`,不会超时自动放款。
 export const ESCROW_HOLD_DAYS = 3;
 
+// 放款前人工审核(产品负责人 2026-09-26,README"放款审核"一节):防止"盗卡买自己的广告、
+// 填个假交付链接、3 天后自动放款提走"。满足任一条件的订单,放款时先暂停,管理员在
+// /admin/holds 点 "Approve payout" 之后才转账:
+// - 卖家已经成功放款的订单少于 PAYOUT_REVIEW_FIRST_ORDERS 笔(新卖家);
+// - 订单金额 >= 该币种的 PAYOUT_REVIEW_THRESHOLDS(约等于 £200),表里没有的币种一律审核。
+export const PAYOUT_REVIEW_FIRST_ORDERS = 3;
+export const PAYOUT_REVIEW_THRESHOLDS: Record<string, number> = {
+  GBP: 200,
+  EUR: 230,
+  USD: 250,
+  CAD: 350,
+  AUD: 400,
+  SGD: 350,
+  HKD: 2000,
+  JPY: 40000,
+};
+
 // 付款后多少小时内,买家或卖家可以单方面免费取消(卖家还没交付的前提下),全额退款,
 // 不收卖家任何费用,不算违约。见 README"费用、取消与退款规则"第 4 条。
 export const FREE_CANCEL_HOURS = 24;

@@ -57,6 +57,10 @@ export async function releaseNowAction(orderId: string): Promise<void> {
   try {
     await releaseOrderPayout(order);
   } catch (err) {
+    // 放款审核(新卖家/大额订单)是平台和卖家之间的事,买家这边确认收货已经完成,不报错。
+    if (err instanceof PayoutHeldError && err.reason === "review") {
+      redirect("/dashboard/purchases");
+    }
     if (err instanceof PayoutHeldError) {
       redirect("/dashboard/purchases?error=on_hold");
     }

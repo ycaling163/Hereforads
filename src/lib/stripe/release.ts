@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { calculateFees, currencyDecimals, fromMinorUnits } from "@/lib/fees";
 import { HOLD_REMOVED_MARKER, PayoutHeldError, placePayoutHold } from "@/lib/orders/holds";
 import { sendAdminAlert } from "@/lib/email/send";
+import { payoutReviewReason } from "@/lib/orders/payoutReview";
 
 /**
  * 买家确认收货,或卖家标记交付后 ESCROW_HOLD_DAYS 天超时自动确认,触发的都是这一个
@@ -20,6 +21,7 @@ import { sendAdminAlert } from "@/lib/email/send";
  * 资金安全(同一节第 8 条):
  * - Transfer 带 source_transaction 绑定原始付款,钱从这笔付款里出,不依赖平台当时的
  *   可用余额(平台提现改手动之后,托管中的钱也不会被提走);
+ * - 放款审核:新卖家的前几单、大额订单先暂停(payout_hold = review),管理员批准才转账;
  * - 幂等:先按 transfer_group 查这笔订单是不是已经转过账(上次转账成功、但写库失败
  *   的情况),再带 idempotency key 创建,同一笔订单最多转一次。
  */
@@ -98,6 +100,18 @@ export async function releaseOrderPayout(order: {
         `The payout for order ${order.id} was about to be sent, but the payment ${charge.id} is ${why} in Stripe. The order is now on hold.`,
       ]);
       throw new PayoutHeldError(order.id, why);
+    }
+
+    // 放款审核(README"放款审核"):新卖家的前几单、大额订单,管理员批准之前不转账。
+    // 放在"已经转过账"的判断之后——上次转账成功、只是写库失败的重试不再审核。
+    const reviewReason = await payoutReviewReason(order, current?.payout_hold_note);
+    if (reviewReason) {
+      await placePayoutHold(order.id, "review", `Payout review needed: ${reviewReason}.`);
+      await sendAdminAlert(`Payout waiting for your approval`, [
+        `Order ${order.id} is ready to pay out ${order.amount} ${order.currency} to the seller, but needs review first: ${reviewReason}.`,
+        `Check the order and delivery link, then approve it in Admin → Disputes & holds. The payout is sent on the next hourly run after approval.`,
+      ]);
+      throw new PayoutHeldError(order.id, "review");
     }
 
     // source_transaction 的 Transfer 必须用这笔付款的结算币种(平台账户没开对应

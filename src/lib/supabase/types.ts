@@ -186,7 +186,7 @@ export interface ListingOrder {
   created_at: string;
 }
 
-export type PayoutHold = "dispute" | "refund" | "seller_banned";
+export type PayoutHold = "dispute" | "refund" | "seller_banned" | "review";
 
 // 买卖双方(authenticated)能读的订单列。买家联系方式、view_token、管理员备注只有
 // service_role 能读(列级权限,见 README"安全核查 → 第 1 批"的 SQL),所以用户态

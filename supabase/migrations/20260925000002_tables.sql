@@ -182,7 +182,7 @@ create table public.listing_orders (
     and (booking_units is null or booking_units > 0)
   ),
   constraint listing_orders_payout_hold_check check (
-    payout_hold is null or payout_hold = any (array['dispute'::text, 'refund'::text, 'seller_banned'::text])
+    payout_hold is null or payout_hold = any (array['dispute'::text, 'refund'::text, 'seller_banned'::text, 'review'::text])
   ),
   constraint listing_orders_buyer_id_fkey foreign key (buyer_id) references public.profiles (id),
   constraint listing_orders_cancelled_by_fkey foreign key (cancelled_by) references public.profiles (id),
