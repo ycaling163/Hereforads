@@ -2648,6 +2648,16 @@ revoke all on table public.seller_house_ads from anon, authenticated;
 
 > **2026-09-26 已在 HereForAds 线上库执行**(产品负责人确认,核对查询不报错、`seller_house_ads` 返回 0)。上面的 SQL 可以重复执行。
 
+## 发布示例与帮助页(2026-09-26)
+
+产品负责人:很多创作者不知道自己有哪些东西可以当广告位卖,需要示例。
+
+- **示例内容只维护一份**:`src/lib/listingExamples.ts`,10 种广告位(衣服上的品牌、视频植入、照片里的 logo、视频口播、测评视频、车身广告、艺术作品、赞助穿搭、社交媒体 shout-out、定制合作),每种有:一句话说明、对应的 Ad type、建议计价方式、示例标题、示例描述、交付凭证怎么给、写作建议。改文案只改这个文件。
+- **帮助页 `/help`**:页脚 "Help & listing examples"、手机菜单 "Help & examples" 进入。包含 10 个示例的快速跳转、写好广告位的 6 条建议、成交流程(托管 → 交付 → 放款)、全部示例、去发布的按钮。`help` 已在保留用户名里,不会跟 `/[username]` 冲突。
+- **发布/编辑页**:大屏右侧显示一个完整示例 + 10 种广告位列表(新窗口打开帮助页,不会丢掉正在填的表单);Ad type 说明后面加了 "See examples",按当前选的类型列出对应示例,"Use this example" 一键填入标题、描述、广告类型(已经写了内容会先确认)。
+- **广告详情页**:赞助商日历/赞助商列表从左栏描述下面移到右栏价格和购买框下面。
+- 顺手修:编辑页原来提示 "Saving changes sends it back for review",2026-09-19 起已经不审核了,改成 "Changes show to buyers as soon as you save."
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀

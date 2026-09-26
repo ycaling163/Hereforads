@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/listings", label: "Ad spaces" },
   { href: "/publishers", label: "Publishers" },
   { href: "/orders/find", label: "Find an order" },
+  { href: "/help", label: "Help & examples" },
 ];
 
 // 手机上(sm 以下)导航收进汉堡菜单,避免 logo 和几个链接挤在一行、换成两行

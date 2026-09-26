@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ListingForm } from "@/components/ListingForm";
+import { ListingExamplesAside } from "@/components/ListingExamplesAside";
 import type { Listing, SocialAccount } from "@/lib/supabase/types";
 import { createListingAction } from "./actions";
 import { defaultCurrencyForCountry } from "@/lib/stripe/countries";
@@ -51,41 +52,45 @@ export default async function NewListingPage({
       : null;
 
   return (
-    <div className="max-w-2xl">
-      <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
-        {sourceListing ? "Duplicate listing" : "Publish a listing"}
-      </h1>
-      <p className="mt-2 text-zinc-600">
-        {sourceListing
-          ? "Fields are pre-filled from the listing you're copying — check the ad placement below before publishing."
-          : "Describe the ad space or service you're offering. Please write in English — this marketplace doesn't auto-translate listings yet."}
-      </p>
-
-      {!profile?.stripe_onboarded && (
-        <p className="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          You haven&apos;t connected Stripe yet — you can still publish and
-          buyers can find and buy this listing right away, but you&apos;ll
-          need to{" "}
-          <Link href="/dashboard/stripe-connect" className="underline">
-            finish Stripe setup
-          </Link>{" "}
-          before you can get paid out on a sale.
+    // 大屏右侧放发布示例(产品负责人 2026-09-26),小屏排到表单下面。
+    <div className="grid gap-10 xl:grid-cols-[minmax(0,42rem)_18rem]">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
+          {sourceListing ? "Duplicate listing" : "Publish a listing"}
+        </h1>
+        <p className="mt-2 text-zinc-600">
+          {sourceListing
+            ? "Fields are pre-filled from the listing you're copying — check the ad placement below before publishing."
+            : "Describe the ad space or service you're offering. Please write in English — this marketplace doesn't auto-translate listings yet."}
         </p>
-      )}
 
-      <div className="mt-8">
-        <ListingForm
-          userId={user.id}
-          action={createListingAction}
-          initialListing={sourceListing ?? undefined}
-          duplicatedFromTitle={sourceListing?.title}
-          socialAccounts={(socialAccounts ?? []) as SocialAccount[]}
-          websiteUrl={sellerProfile?.website_url ?? null}
-          defaultCurrency={defaultCurrencyForCountry(profile?.country)}
-          submitLabel="Publish"
-          pendingLabel="Publishing…"
-        />
+        {!profile?.stripe_onboarded && (
+          <p className="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            You haven&apos;t connected Stripe yet — you can still publish and
+            buyers can find and buy this listing right away, but you&apos;ll
+            need to{" "}
+            <Link href="/dashboard/stripe-connect" className="underline">
+              finish Stripe setup
+            </Link>{" "}
+            before you can get paid out on a sale.
+          </p>
+        )}
+
+        <div className="mt-8">
+          <ListingForm
+            userId={user.id}
+            action={createListingAction}
+            initialListing={sourceListing ?? undefined}
+            duplicatedFromTitle={sourceListing?.title}
+            socialAccounts={(socialAccounts ?? []) as SocialAccount[]}
+            websiteUrl={sellerProfile?.website_url ?? null}
+            defaultCurrency={defaultCurrencyForCountry(profile?.country)}
+            submitLabel="Publish"
+            pendingLabel="Publishing…"
+          />
+        </div>
       </div>
+      <ListingExamplesAside />
     </div>
   );
 }

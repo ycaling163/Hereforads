@@ -504,3 +504,10 @@
 **验证**:`tsc`/`eslint` 通过;链接校验用例(javascript:/data:/带账号密码/IP/localhost/ftp/无点主机/超长/含空格)全部拒绝,正常网址和社交链接通过;Playwright 渲染日历、赞助商列表、付款页勾选项,桌面和 390px 手机都不横向溢出,链接属性正确。**没有**连真实 Supabase 跑下单→付款→展示的全流程。
 
 **需要人工操作**:在 Supabase SQL Editor 执行 README"赞助商展示"一节的 SQL(给 `listing_orders` 加 5 个字段、建 `seller_house_ads` 表)。没执行之前网站照常,只是这个功能不显示、付款页填了也不会保存。
+
+## 2026-09-26 发布示例 + 帮助页 + 赞助商日历位置
+
+- 产品负责人反馈:赞助商日历放到价格下方;很多创作者不知道能卖什么广告位,要示例。详见 README 新增的"发布示例与帮助页"一节。
+- 新增 `src/lib/listingExamples.ts`(10 个示例,唯一数据源)、`/help` 页、`ListingExampleCard`、`ListingExamplesAside`;`ListingForm` 的 Ad type 加 "See examples" 和 "Use this example";页脚、手机菜单加帮助入口;详情页赞助商展示移到右栏购买框下。
+- 顺手修:编辑页过时的"保存后退回审核"提示。
+- 验证:`tsc`/`eslint` 通过;Playwright:`/help` 10 个示例、桌面和 390px 手机不横向溢出、页脚有链接;表单里不选类型显示 10 个示例、选 Sponsored feature 显示 3 个,"Use this example" 填入标题/描述/类型,已有内容时弹确认。详情页的移动没有连真实数据库截图(只是把同一段组件挪到右栏,右栏加了 `min-w-0` 防止横向撑宽)。
