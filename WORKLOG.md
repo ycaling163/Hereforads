@@ -511,3 +511,10 @@
 - 新增 `src/lib/listingExamples.ts`(10 个示例,唯一数据源)、`/help` 页、`ListingExampleCard`、`ListingExamplesAside`;`ListingForm` 的 Ad type 加 "See examples" 和 "Use this example";页脚、手机菜单加帮助入口;详情页赞助商展示移到右栏购买框下。
 - 顺手修:编辑页过时的"保存后退回审核"提示。
 - 验证:`tsc`/`eslint` 通过;Playwright:`/help` 10 个示例、桌面和 390px 手机不横向溢出、页脚有链接;表单里不选类型显示 10 个示例、选 Sponsored feature 显示 3 个,"Use this example" 填入标题/描述/类型,已有内容时弹确认。详情页的移动没有连真实数据库截图(只是把同一段组件挪到右栏,右栏加了 `min-w-0` 防止横向撑宽)。
+
+## 2026-09-26 待付款订单过期后自动隐藏
+
+- 产品负责人确认:卖家不能删除待付款订单(删了之后买家仍可能付款,会出现"扣了钱找不到订单");改成系统自动处理。规则见 README 新增的"待付款订单:付款链接过期后自动隐藏"一节。
+- `startCheckout`:所有订单的 Stripe 付款链接都设成 31 分钟过期(以前只有日历订单设,普通订单是 24 小时)。
+- 新增 `src/lib/orders/checkoutExpiry.ts`;Sales / Purchases 过滤掉过期的待付款订单,Sales 的 Awaiting payment 显示剩余分钟数;`/admin/orders` 标 "Checkout expired (not paid)";`/orders/[token]` 提示没有扣款。订单状态不改,不需要 SQL。
+- 验证:`tsc`/`eslint` 通过;过期判断 5 个用例(普通订单 10/40 分钟、日历占用提前释放/仍有效、已付款订单)通过。确认付款链接只用于下单后立即跳转,缩短有效期不影响其它功能。

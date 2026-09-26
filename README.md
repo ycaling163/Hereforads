@@ -2658,6 +2658,15 @@ revoke all on table public.seller_house_ads from anon, authenticated;
 - **广告详情页**:赞助商日历/赞助商列表从左栏描述下面移到右栏价格和购买框下面。
 - 顺手修:编辑页原来提示 "Saving changes sends it back for review",2026-09-19 起已经不审核了,改成 "Changes show to buyers as soon as you save."
 
+## 待付款订单:付款链接过期后自动隐藏(2026-09-26 决策记录)
+
+产品负责人问"待付款的订单卖家能不能删除"。结论:**卖家不能删**,由系统自动处理。
+
+- **为什么不能删**:付款链接在有效期内仍然能付款。卖家删了/取消了,买家随后付款,webhook 发现订单不是 `pending_payment` 会直接跳过——钱扣了但没有订单、不进托管。
+- **付款链接一律 31 分钟有效**(`CHECKOUT_EXPIRES_MINUTES`,Stripe 最少 30 分钟)。以前只有日历订单设了,普通订单用的是 Stripe 默认的 24 小时。日历订单的日期占用仍是 36 分钟(`PENDING_HOLD_MINUTES`),不变。
+- **过期后自动隐藏**(`src/lib/orders/checkoutExpiry.ts`):下单超过 36 分钟(或日历占用已提前释放)还没付款的订单,卖家 Sales 和买家 Purchases 都不再显示;卖家的 "Awaiting payment" 只剩正在付款的,并显示"付款链接还剩 N 分钟"。后台订单列表标成 "Checkout expired (not paid)",订单查询页提示"没有扣款,可以重新下单"。以前积压的旧待付款订单一起隐藏。
+- **订单状态不改**,仍是 `pending_payment`——跟日历占用过期的处理一致(`releaseHold.ts`):`cancelled` 在财务、退款统计、Disputes & holds 里都代表"退过款",不能混进没付过钱的订单;万一买家在最后一刻付了款,webhook 照常推进到 `paid_in_escrow`,订单重新出现。不需要执行 SQL。
+
 ## 部署(Vercel)
 
 - Environment Variables 里配 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`(类型选 Secret 或 Config 都行,`NEXT_PUBLIC_` 前缀的值反正都会被打进浏览器端代码,选哪个纯粹是 Vercel 后台能不能再看到明文的区别,不影响功能),再加支付相关的 `SUPABASE_SERVICE_ROLE_KEY`、`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、`NEXT_PUBLIC_SITE_URL`(生产环境填 `https://hereforads.com`)——**前三个必须选 Secret**,不能带 `NEXT_PUBLIC_` 前缀

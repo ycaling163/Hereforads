@@ -335,11 +335,10 @@ async function startCheckout(
         quantity,
       },
     ],
-    // 日历订单:付款链接的有效期比日期占用期短几分钟,链接失效前日期一直留给这个买家,
-    // 失效后没付款的订单不再占用日期。
-    ...(booking
-      ? { expires_at: Math.floor(Date.now() / 1000) + CHECKOUT_EXPIRES_MINUTES * 60 }
-      : {}),
+    // 付款链接一律 CHECKOUT_EXPIRES_MINUTES 有效(Stripe 最少 30 分钟)。日历订单:比日期
+    // 占用期短几分钟,链接失效前日期一直留给这个买家。普通订单:以前用 Stripe 默认的 24 小时,
+    // 待付款订单会在卖家列表里挂一整天;过期后买家重新点 Buy now 就行(2026-09-26)。
+    expires_at: Math.floor(Date.now() / 1000) + CHECKOUT_EXPIRES_MINUTES * 60,
     metadata: stripeMetadata,
     payment_intent_data: {
       description: paymentDescription,

@@ -22,6 +22,7 @@ import type {
   Profile,
 } from "@/lib/supabase/types";
 import { ListingThumb, coverOf } from "@/components/ListingThumb";
+import { isExpiredCheckout, checkoutExpiresAt } from "@/lib/orders/checkoutExpiry";
 
 // 订单按"钱现在在哪"分成 4 个标签页(2026-09-24 产品负责人要求,避免各种状态
 // 混在一起):托管中(默认,卖家要处理的都在这)/ 待付款 / 已完成 / 已取消。
@@ -46,8 +47,8 @@ const TABS: {
   {
     key: "awaiting",
     label: "Awaiting payment",
-    sections: [{ title: "Checkout started, not paid yet", statuses: ["pending_payment"] }],
-    empty: "No unpaid checkouts.",
+    sections: [{ title: "Buyer is checking out now", statuses: ["pending_payment"] }],
+    empty: "Nobody is checking out right now. Unpaid checkouts disappear once the payment link expires.",
   },
   {
     key: "completed",
@@ -102,7 +103,13 @@ export default async function SalesPage({
     .eq("seller_id", user.id)
     .order("created_at", { ascending: false });
 
-  const orders = (orderRows ?? []) as unknown as PartyListingOrder[];
+  // 付款链接已过期、买家没付款的订单不再显示(状态仍是 pending_payment,见
+  // src/lib/orders/checkoutExpiry.ts)——Awaiting payment 里只剩正在付款的。
+  // eslint-disable-next-line react-hooks/purity
+  const loadedAt = Date.now();
+  const orders = ((orderRows ?? []) as unknown as PartyListingOrder[]).filter(
+    (o) => !isExpiredCheckout(o, loadedAt)
+  );
 
   const orderIds = orders.map((o) => o.id);
   const sponsorsByOrderId = await getOrderSponsors(orderIds);
@@ -325,6 +332,16 @@ export default async function SalesPage({
                           </div>
                         )}
                       </div>
+                    )}
+
+                    {order.status === "pending_payment" && (
+                      <p className="mt-3 text-xs text-zinc-500">
+                        The buyer opened checkout but hasn&apos;t paid yet. The payment link
+                        expires in{" "}
+                        {Math.max(1, Math.ceil((checkoutExpiresAt(order) - now) / 60_000))} min —
+                        if they don&apos;t pay, this disappears automatically. You could message
+                        them to answer any questions.
+                      </p>
                     )}
 
                     {order.status === "paid_in_escrow" &&
