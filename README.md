@@ -2622,6 +2622,8 @@ alter table public.listing_orders
   add column if not exists sponsor_public boolean not null default false,
   add column if not exists sponsor_hidden_by_seller_at timestamptz,
   add column if not exists sponsor_hidden_by_admin_at timestamptz;
+alter table public.listing_orders drop constraint if exists listing_orders_sponsor_name_len;
+alter table public.listing_orders drop constraint if exists listing_orders_sponsor_url_http;
 alter table public.listing_orders
   add constraint listing_orders_sponsor_name_len
     check (sponsor_name is null or char_length(sponsor_name) between 1 and 60),
@@ -2643,6 +2645,8 @@ revoke all on table public.seller_house_ads from anon, authenticated;
 ```
 
 执行完核对:`select sponsor_public from public.listing_orders limit 1;` 不报错、`select count(*) from public.seller_house_ads;` 返回 0。
+
+> **2026-09-26 已在 HereForAds 线上库执行**(产品负责人确认,核对查询不报错、`seller_house_ads` 返回 0)。上面的 SQL 可以重复执行。
 
 ## 部署(Vercel)
 
