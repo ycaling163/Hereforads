@@ -464,4 +464,7 @@
 
 **验证**:`tsc`、`eslint` 通过;`orderListingMedia` 用例(乱序、伪造 URL、坏 JSON)通过;在临时页面用 Playwright 真实浏览器跑过:分两次选择文件会累加(2 张已有 + 3 个新 = 5 格)、删除已有图、把视频设成封面后提交的 `media_order`/`existing_media`/`media` 顺序正确、表单 reset 后文件仍在、详情页画廊能切到视频。**没有**用真实 Supabase 登录账号端到端点过发布/编辑(本环境连不上 HereForAds 的 Supabase 项目)。
 
-**待跟进 / 风险**:Vercel 函数请求体上限约 4.5MB,比 `bodySizeLimit: 10mb` 小——一次带视频上传很容易超。长期方案是浏览器直传 Storage(已有 `{user_id}/` 文件夹 insert 策略),服务端只收 URL 并用 `isOwnStorageUrl` 校验。
+**追加:上传前压缩图片**(产品负责人:图片只需要常规网站清晰度)。之前代码里其实没有任何压缩,原图直接进 Storage。新增 `src/lib/compressImage.ts`,在 `ListingMediaManager` 选文件时于浏览器端处理:长边缩到 1920px、重新编码成 WebP(不支持时用 JPEG,质量 0.82),按 EXIF 方向摆正;GIF、视频、小于 300KB 且尺寸不大的图、解码失败的格式、压完反而更大的都保留原文件。Playwright 实测:4000×3000、11.9MB 的 JPEG(随机噪点,最难压的情况)→ 1920×1440 WebP 1.2MB,真实照片一般只有几百 KB。
+- 因为图片基本不再占体积,每次保存新文件合计的提示阈值从 9.5MB 改成 4MB(`MAX_NEW_MEDIA_BYTES_PER_SAVE`),对齐 Vercel 函数请求体约 4.5MB 的上限——现在主要是视频会碰到。
+
+**待跟进 / 风险**:视频没法在浏览器里压缩,大于约 4MB 的视频走 Server Action 会被 Vercel 拒绝。需要支持更大的视频时,改成浏览器直传 Storage(已有 `{user_id}/` 文件夹 insert 策略),服务端只收 URL 并用 `isOwnStorageUrl` 校验。头像、横幅、私信图片还没接这个压缩,需要的话可以复用 `compressImage`。

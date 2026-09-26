@@ -5,10 +5,12 @@
 export const MAX_LISTING_MEDIA = 10;
 
 /**
- * 一次保存里新上传文件的合计大小上限。Server Action 请求体上限是 10MB(next.config.ts),
- * 表单其它字段也占一点,留点余量;超了请求会直接被拒,所以前端提前提示。
+ * 一次保存里新上传文件的合计大小上限。Server Action 的请求体经过 Vercel Functions,
+ * 平台上限约 4.5MB(比 next.config.ts 的 bodySizeLimit 10mb 更紧),表单其它字段也占一点,
+ * 留点余量;超了请求会直接被拒,所以前端提前提示。图片上传前已在浏览器压缩
+ * (src/lib/compressImage.ts),一般只有视频会碰到这个上限。
  */
-export const MAX_NEW_MEDIA_BYTES_PER_SAVE = 9.5 * 1024 * 1024;
+export const MAX_NEW_MEDIA_BYTES_PER_SAVE = 4 * 1024 * 1024;
 
 const VIDEO_EXTENSIONS = /\.(mp4|webm|mov|m4v)(\?|#|$)/i;
 

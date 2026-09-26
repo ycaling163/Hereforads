@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { MediaPreview, PlayBadge } from "@/components/MediaPreview";
+import { compressImage } from "@/lib/compressImage";
 import {
   MAX_LISTING_MEDIA,
   MAX_NEW_MEDIA_BYTES_PER_SAVE,
@@ -44,6 +45,7 @@ export function ListingMediaManager({
     initialUrls.map((url) => ({ kind: "existing", key: `e:${url}`, url }))
   );
   const [notice, setNotice] = useState<string | null>(null);
+  const [optimizing, setOptimizing] = useState(false);
   const submitInputRef = useRef<HTMLInputElement>(null);
   const pickerRef = useRef<HTMLInputElement>(null);
   const itemsRef = useRef(items);
@@ -89,29 +91,37 @@ export function ListingMediaManager({
     []
   );
 
-  function addFiles(files: FileList | null) {
+  async function addFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
     const room = MAX_LISTING_MEDIA - items.length;
-    const accepted = Array.from(files).slice(0, Math.max(room, 0));
+    const picked = Array.from(files).slice(0, Math.max(room, 0));
+    if (pickerRef.current) pickerRef.current.value = "";
     setNotice(
-      accepted.length < files.length
+      picked.length < files.length
         ? `You can add up to ${MAX_LISTING_MEDIA} photos/videos per listing — ${
-            files.length - accepted.length
+            files.length - picked.length
           } file(s) were skipped.`
         : null
     );
-    if (accepted.length > 0) {
+    if (picked.length === 0) return;
+
+    setOptimizing(true);
+    try {
+      const accepted = await Promise.all(picked.map(compressImage));
       setItems((current) => [
         ...current,
-        ...accepted.map((file) => ({
-          kind: "new" as const,
-          key: `n:${crypto.randomUUID()}`,
-          file,
-          preview: URL.createObjectURL(file),
-        })),
+        ...accepted
+          .slice(0, Math.max(MAX_LISTING_MEDIA - current.length, 0))
+          .map((file) => ({
+            kind: "new" as const,
+            key: `n:${crypto.randomUUID()}`,
+            file,
+            preview: URL.createObjectURL(file),
+          })),
       ]);
+    } finally {
+      setOptimizing(false);
     }
-    if (pickerRef.current) pickerRef.current.value = "";
   }
 
   function remove(key: string) {
@@ -157,7 +167,7 @@ export function ListingMediaManager({
           </span>
         </p>
         <p className="text-xs text-zinc-500">
-          The first one is the cover. JPG, PNG, WebP, GIF, MP4, WebM or MOV, max 10 MB each.
+          The first one is the cover. Photos are resized for the web automatically; keep videos short (MP4, WebM or MOV).
         </p>
       </div>
       {hint && <p className="text-xs text-zinc-500">{hint}</p>}
@@ -276,6 +286,7 @@ export function ListingMediaManager({
         onChange={(event) => addFiles(event.target.files)}
       />
 
+      {optimizing && <p className="text-xs text-zinc-500">Optimizing images for the web…</p>}
       {notice && <p className="text-xs text-amber-700">{notice}</p>}
       {newBytes > MAX_NEW_MEDIA_BYTES_PER_SAVE && (
         <p className="text-xs text-red-600">
