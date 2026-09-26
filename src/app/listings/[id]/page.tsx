@@ -6,6 +6,8 @@ import { BuyListingButton } from "@/components/BuyListingButton";
 import { ContactSellerForm } from "@/components/ContactSellerForm";
 import { DailyCountdown } from "@/components/DailyCountdown";
 import { ListingGallery } from "@/components/ListingGallery";
+import { SponsorCalendar, SponsorList } from "@/components/Sponsors";
+import { getHouseAds, getListingSponsors } from "@/lib/sponsorData";
 import type { BookingOptions } from "@/components/BookingPicker";
 import { getBookedRanges } from "@/lib/orders/bookings";
 import { toMinorUnits } from "@/lib/fees";
@@ -123,6 +125,18 @@ export default async function ListingDetailPage({
       bookedRanges: await getBookedRanges(listing.id, today),
     };
   }
+  // 赞助商展示(README"赞助商展示"):买家自愿展示的品牌;开了日历的按天列出,空档显示
+  // 卖家的自选展示。卖家自己看自己的广告也显示,方便确认效果。
+  const isCalendarListing = listing.booking_enabled && isBookingUnit(listing.pricing_unit);
+  const sponsorToday = bookingToday();
+  const [sponsors, houseAds, sponsorBookedRanges] = await Promise.all([
+    getListingSponsors(listing.id),
+    isCalendarListing ? getHouseAds(listing.seller_id) : Promise.resolve([]),
+    isCalendarListing
+      ? getBookedRanges(listing.id, addDays(sponsorToday, -7))
+      : Promise.resolve([]),
+  ]);
+
   // 登录/注册回跳时带回之前选好的日期(见 BuyListingButton),不合法就当没选。
   const resumeStart =
     booking && typeof start === "string" && isValidDate(start) && start >= booking.today
@@ -164,7 +178,7 @@ export default async function ListingDetailPage({
         </p>
       )}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <div className="flex flex-wrap items-center gap-2">
             {listing.ad_type && (
               <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
@@ -226,7 +240,7 @@ export default async function ListingDetailPage({
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-10 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <ListingGallery media={media} title={listing.title} />
 
           {listing.description && (
@@ -255,6 +269,18 @@ export default async function ListingDetailPage({
               ))}
             </div>
           </div>
+
+          {isCalendarListing ? (
+            <SponsorCalendar
+              listingId={listing.id}
+              today={sponsorToday}
+              bookedRanges={sponsorBookedRanges}
+              sponsors={sponsors}
+              houseAds={houseAds}
+            />
+          ) : (
+            <SponsorList sponsors={sponsors} />
+          )}
         </div>
 
         <div className="flex flex-col gap-6">

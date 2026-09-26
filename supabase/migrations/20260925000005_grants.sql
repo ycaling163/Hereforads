@@ -10,6 +10,7 @@
 -- 只有服务端读写
 revoke all on table public.contact_messages from anon, authenticated;
 revoke all on table public.rate_limits from anon, authenticated;
+revoke all on table public.seller_house_ads from anon, authenticated;
 
 -- listing_orders:买卖双方只能读下面这些列(读不到买家邮箱/姓名/电话/地址、
 -- view_token、hold_ip_hash、checkout_session_id 等),写全部走服务端

@@ -163,7 +163,19 @@ create table public.listing_orders (
   payout_hold_note text,
   hold_ip_hash text,
   checkout_session_id text,
+  -- 赞助商展示(2026-09-26,README"赞助商展示"):买家自愿展示的品牌名 + 一个链接
+  sponsor_name text,
+  sponsor_url text,
+  sponsor_public boolean default false not null,
+  sponsor_hidden_by_seller_at timestamp with time zone,
+  sponsor_hidden_by_admin_at timestamp with time zone,
   constraint listing_orders_pkey primary key (id),
+  constraint listing_orders_sponsor_name_len check (
+    sponsor_name is null or char_length(sponsor_name) between 1 and 60
+  ),
+  constraint listing_orders_sponsor_url_http check (
+    sponsor_url is null or (sponsor_url ~* '^https?://' and char_length(sponsor_url) <= 300)
+  ),
   constraint listing_orders_booking_dates_check check (
     ((start_date is null) = (end_date is null))
     and (end_date is null or end_date >= start_date)
@@ -178,6 +190,23 @@ create table public.listing_orders (
   constraint listing_orders_seller_id_fkey foreign key (seller_id) references public.profiles (id)
 );
 alter sequence public.listing_order_number_seq owned by public.listing_orders.order_number;
+
+-- 卖家给日历空档设的自选展示(2026-09-26,README"赞助商展示"第 3 条),只有服务端读写
+create table public.seller_house_ads (
+  id uuid default gen_random_uuid() not null,
+  user_id uuid not null,
+  name text not null,
+  url text,
+  hidden_by_admin_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint seller_house_ads_pkey primary key (id),
+  constraint seller_house_ads_name_check check (char_length(name) between 1 and 60),
+  constraint seller_house_ads_url_check check (
+    url is null or (url ~* '^https?://' and char_length(url) <= 300)
+  ),
+  constraint seller_house_ads_user_id_fkey foreign key (user_id) references public.profiles (id) on delete cascade
+);
+create index seller_house_ads_user_idx on public.seller_house_ads using btree (user_id);
 
 create unique index listing_orders_order_number_key on public.listing_orders using btree (order_number);
 create unique index listing_orders_view_token_key on public.listing_orders using btree (view_token);

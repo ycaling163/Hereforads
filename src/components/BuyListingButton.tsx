@@ -5,6 +5,7 @@ import Link from "next/link";
 import { buyListingAction, type BuyListingState } from "@/app/listings/[id]/actions";
 import { BookingPicker, type BookingOptions } from "@/components/BookingPicker";
 import { Turnstile } from "@/components/Turnstile";
+import { SPONSOR_NAME_MAX, SPONSOR_URL_MAX } from "@/lib/sponsors";
 
 const primaryButtonClass =
   "w-full rounded-full bg-zinc-900 px-6 py-3 text-center text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50";
@@ -35,6 +36,7 @@ export function BuyListingButton({
     {}
   );
   const [showOptions, setShowOptions] = useState(false);
+  const [showSponsor, setShowSponsor] = useState(false);
   const [selection, setSelection] = useState({
     start: initialStart ?? null,
     units: initialUnits ?? booking?.minUnits ?? 1,
@@ -124,6 +126,52 @@ export function BuyListingButton({
             <Turnstile resetKey={state} />
           </div>
         )}
+        {/* 可选:付款成功后在这条广告页上展示买家的品牌和一个链接(README"赞助商展示")。 */}
+        <div className="flex flex-col gap-2 rounded-lg bg-white p-3 text-xs text-zinc-600">
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              name="sponsor_public"
+              checked={showSponsor}
+              onChange={(event) => setShowSponsor(event.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300"
+            />
+            <span>
+              <span className="font-medium text-zinc-800">
+                Show my brand on this listing (optional)
+              </span>
+              <br />
+              After payment, your brand name and link appear publicly on this listing
+              {booking ? " and its booking calendar" : ""}. You can turn this off later in
+              your purchases.
+            </span>
+          </label>
+          {showSponsor && (
+            <div className="flex flex-col gap-2 pl-6">
+              <input
+                name="sponsor_name"
+                required
+                maxLength={SPONSOR_NAME_MAX}
+                placeholder="Brand name, e.g. ZARA"
+                aria-label="Brand name"
+                className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
+              />
+              <input
+                name="sponsor_url"
+                type="text"
+                inputMode="url"
+                maxLength={SPONSOR_URL_MAX}
+                placeholder="One website or social link (optional)"
+                aria-label="Website or social media link"
+                className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
+              />
+              <p className="text-zinc-400">
+                One link only. The seller and our team can hide anything that breaks the
+                rules. Brand name and link can&apos;t be changed after payment.
+              </p>
+            </div>
+          )}
+        </div>
         {/* 结账前必勾(README"费用、取消与退款规则"第 10 条):同意条款 + 英国
             Consumer Contracts Regulations 下"要求立即开始服务、知道完成后失去
             14 天取消权"的明确确认。勾选时间由服务端写进订单留痕。措辞待律师确认。 */}
