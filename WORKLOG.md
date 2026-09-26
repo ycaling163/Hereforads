@@ -476,4 +476,14 @@
 
 **需要人工操作(上线前必须做)**:在 HereForAds 的 Supabase SQL Editor 执行 `update storage.buckets set file_size_limit = 26214400 where id = 'ad-space-photos';`(10MB → 25MB,README 第 3 批 SQL 下面也补了这句;`supabase/migrations/20260925000006_storage.sql` 已同步给新站点用)。不改的话超过 10MB 的视频会上传失败(页面会显示 Storage 返回的错误)。
 
-**已知小问题**:直传的视频如果用户上传后又删掉、或者没保存就离开页面,文件会留在 Storage 里(用户没有 delete 权限,只能以后做一次性清理)。
+~~已知小问题:直传的视频删掉/没保存就离开会留在 Storage~~ → 同日已解决,见下一条。
+
+**再追加(同日):删掉的/没用上的图片和视频都从 Storage 删除**(产品负责人:不删的话遗留文件会越来越多)
+原来已经有的:编辑广告时去掉的已有文件、删广告、换头像/横幅,保存成功后会删旧文件(PR #64)。这次补的是"传上去了但最后没用上"的几种情况:
+- **保存失败**:发布/编辑广告(新的 `src/lib/listingUploads.ts`,多张图中途失败会把已传的删掉;写数据库失败也删)、个人资料的头像/横幅、私信和联系卖家的图片——上传后如果后面保存失败,刚传的文件立刻删掉。
+- **直传的视频没用上**:在编辑页网格里删掉(包括还在上传中就删掉的)、或没保存就离开页面(跳转或关标签页,用 `fetch keepalive`),都会调新的 `POST /api/media/discard`。只收当前用户 `{userId}/listings/` 下的文件,校验 Origin,删之前照常查引用——所以保存成功后页面卸载发来的请求什么也不会删;正在保存时不发。
+- **每天兜底清理**:新的 `/api/cron/media-cleanup`(`vercel.json` 每天 03:17 UTC,要 `CRON_SECRET`,跟 auto-confirm 一样)。扫描每个用户的 `listings/messages/avatar/banner/price-card` 文件夹,超过 24 小时、没有任何地方引用的文件删掉。**第一次运行会把以前积累的遗留文件一起清掉**(上一条交接里"旧图片没清理"那项)。
+- `deleteUnusedMedia` 的引用检查扩大了:加上订单交付凭证(`listing_orders.proof_url`、`listing_order_proof_changes` 新旧链接),以及线上还留着的老 ad_spaces 流程的表(`ad_spaces.photo_urls`、`campaigns.creative_url`、`proof_uploads.media_url`;新站点没有这些表,查询报"表不存在"时当作没有引用,其它错误仍然一个都不删)。现在返回实际删除的数量。
+- 验证:`tsc`/`eslint` 通过。Playwright:删掉已上传的视频、上传中删掉、保存中不发、离开页面时发,四种情况的 discard 请求都对;`/api/media/discard` 跨站 403、未登录 401;cron 未带密钥 401。用一个模拟 Supabase(Storage list/remove + PostgREST)跑了一遍 cron:4 个旧文件里只删了没人引用的那个,被广告、私信、老 ad_spaces 表引用的和 24 小时内的都保留,缺失的老表不影响。**没有**连真实 Supabase 跑过。
+
+**上线后建议**:第一次 cron 跑完(或者在 Vercel → Cron Jobs 手动触发一次)看一下返回的 `scanned`/`deleted` 数和 Vercel 日志 "Media cleanup cron",数字合理再放着不管。

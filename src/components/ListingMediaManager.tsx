@@ -64,6 +64,19 @@ const labelClass = "text-sm font-medium text-zinc-700";
 const actionButtonClass =
   "rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-medium text-zinc-700 shadow-sm backdrop-blur transition-colors hover:bg-white hover:text-zinc-900 disabled:opacity-40";
 
+/** 删掉直传后没用上的视频(见 /api/media/discard);关页面时也能发出去。 */
+function discardUploads(urls: string[]) {
+  if (urls.length === 0) return;
+  fetch("/api/media/discard", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ urls }),
+    keepalive: true,
+  }).catch(() => {
+    // 删不掉也没关系,每天的定时清理(/api/cron/media-cleanup)会兜底。
+  });
+}
+
 function formatMb(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
@@ -110,6 +123,7 @@ export function ListingMediaManager({
   const newBytes = newItems.reduce((sum, item) => sum + item.file.size, 0);
   const uploadingVideos = items.some((item) => item.kind === "video" && !item.url);
   const uploadingRef = useRef(uploadingVideos);
+  const submittingRef = useRef(false);
   uploadingRef.current = uploadingVideos;
 
   // 把新文件(按网格顺序)同步进真正随表单提交的那个隐藏 input。
@@ -144,13 +158,41 @@ export function ListingMediaManager({
     const form = submitInputRef.current?.form;
     if (!form) return;
     const guard = (event: SubmitEvent) => {
-      if (!uploadingRef.current) return;
+      if (!uploadingRef.current) {
+        submittingRef.current = true;
+        return;
+      }
       event.preventDefault();
       event.stopImmediatePropagation();
       setNotice("Please wait until the video finishes uploading, then save again.");
     };
+    // 保存返回错误时 React 会 reset 表单,说明这次提交结束了。
+    const settled = () => {
+      submittingRef.current = false;
+    };
     form.addEventListener("submit", guard, true);
-    return () => form.removeEventListener("submit", guard, true);
+    form.addEventListener("reset", settled);
+    return () => {
+      form.removeEventListener("submit", guard, true);
+      form.removeEventListener("reset", settled);
+    };
+  }, []);
+
+  // 没保存就离开(关标签页、跳到别的页面):把这次直传的视频删掉。保存成功后页面也会
+  // 卸载、同样会发请求,但那时视频已经被广告引用,服务端查到在用就不会删。正在保存的
+  // 时候不发,免得跟保存抢跑。
+  useEffect(() => {
+    const discardUnsaved = () => {
+      if (submittingRef.current) return;
+      discardUploads(
+        itemsRef.current.flatMap((item) => (item.kind === "video" && item.url ? [item.url] : []))
+      );
+    };
+    window.addEventListener("pagehide", discardUnsaved);
+    return () => {
+      window.removeEventListener("pagehide", discardUnsaved);
+      discardUnsaved();
+    };
   }, []);
 
   // 卸载时释放本地预览用的 blob URL。
@@ -253,12 +295,19 @@ export function ListingMediaManager({
     const {
       data: { publicUrl },
     } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
+    // 上传过程中用户已经把它删了:文件刚落地,直接删掉。
+    if (!itemsRef.current.some((item) => item.key === key)) {
+      discardUploads([publicUrl]);
+      return;
+    }
     setItems((current) =>
       current.map((item) => (item.key === key ? { ...item, url: publicUrl } : item))
     );
   }
 
   function remove(key: string) {
+    const target = itemsRef.current.find((item) => item.key === key);
+    if (target?.kind === "video" && target.url) discardUploads([target.url]);
     setItems((current) => {
       const target = current.find((item) => item.key === key);
       if (target && target.kind !== "existing") URL.revokeObjectURL(target.preview);

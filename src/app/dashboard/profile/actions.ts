@@ -111,9 +111,14 @@ export async function updateProfileAction(
   let bannerUrl: string | undefined;
   if (bannerFile instanceof File && bannerFile.size > 0) {
     const result = await uploadImage(bannerFile, "banner");
-    if (typeof result !== "string") return result;
+    if (typeof result !== "string") {
+      await deleteUnusedMedia(user.id, [avatarUrl]);
+      return result;
+    }
     bannerUrl = result;
   }
+  // 后面任何一步保存失败,刚传上去的新头像/横幅就没人用了,删掉再返回错误。
+  const discardNewImages = () => deleteUnusedMedia(user.id, [avatarUrl, bannerUrl]);
 
   const { data: updatedProfile, error: profileError } = await supabase
     .from("profiles")
@@ -122,6 +127,7 @@ export async function updateProfileAction(
     .select("id");
 
   if (profileError) {
+    await discardNewImages();
     // Postgres unique_violation — someone else already has this username.
     if (profileError.code === "23505") {
       return { error: "That username is already taken — please choose another." };
@@ -129,6 +135,7 @@ export async function updateProfileAction(
     return { error: profileError.message };
   }
   if (!updatedProfile || updatedProfile.length === 0) {
+    await discardNewImages();
     return {
       error:
         "Save failed — the database rejected the update (permission policy issue). Please contact an admin to check the profiles table's UPDATE RLS policy.",
@@ -148,6 +155,7 @@ export async function updateProfileAction(
   );
 
   if (sellerError) {
+    await discardNewImages();
     return { error: sellerError.message };
   }
 

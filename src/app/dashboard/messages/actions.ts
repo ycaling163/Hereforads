@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { checkMessageAllowed } from "@/lib/messages";
 import { checkUpload } from "@/lib/uploads";
+import { deleteUnusedMedia } from "@/lib/mediaCleanup";
 import { MEDIA_BUCKET } from "@/config/site";
 
 // 私信图片跟广告媒体放在同一个 bucket(名字在 src/config/site.ts)。
@@ -72,6 +73,8 @@ export async function replyToThreadAction(
   });
 
   if (error) {
+    // 消息没发出去,刚传的图片没人用,删掉。
+    await deleteUnusedMedia(user.id, [imageUrl]);
     return { error: error.message };
   }
 
