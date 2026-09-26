@@ -15,6 +15,7 @@ import {
   removeListingAction,
   setFeaturedAction,
 } from "./actions";
+import { MediaPreview } from "@/components/MediaPreview";
 
 const TABS: { label: string; status: ListingStatus | "all" }[] = [
   { label: "Pending review", status: "pending_review" },
@@ -98,10 +99,8 @@ export default async function AdminListingsPage({
             <div className="flex gap-4">
               <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-zinc-100">
                 {listing.media_urls[0] ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={listing.media_urls[0]}
-                    alt=""
+                  <MediaPreview
+                    url={listing.media_urls[0]}
                     className="h-full w-full object-cover"
                   />
                 ) : null}

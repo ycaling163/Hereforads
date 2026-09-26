@@ -445,3 +445,23 @@
 2. PR #64 的手动测试结果待产品负责人确认(README"安全复查"第 3 条的 6 项;重点是删广告/编辑去图后 Storage 里旧文件确实没了,复制出来的广告图片还在)。
 3. 以前积累的、没被删掉的旧图片没有清理;要清的话另做一次性清理(先查引用再删)。
 4. 更早留下的:一两周后看 Vercel 日志 "CSP violation",没问题就把 CSP 改成强制;切 Stripe live 前的手动清单;日历订单分两次放款;Terms/隐私政策给律师看。
+
+## 2026-09-26 广告媒体:编辑时看全、删除、设封面;详情页展示全部
+
+**问题**(产品负责人反馈):编辑广告时上传了两张图片和一个视频,前台只展示了一张;编辑页看不出有几张图,也删不掉不要的。
+
+**原因**:
+1. 旧表单用的是原生 `<input type="file" multiple>`——每次重新选择都会把上次选的覆盖掉,"先选两张图、再选视频"最后只会提交视频;
+2. 编辑页、详情页、广告卡片、我的广告、后台列表都把视频当 `<img>` 渲染,显示成裂图;
+3. 编辑页删除按钮只在鼠标悬停时出现(`opacity-0 group-hover`),手机上根本看不到;也没有设封面的办法(封面固定是 `media_urls[0]`);
+4. 详情页大图区只显示第一张,不能切换。
+
+**改动**(不改数据库,仍是 `listings.media_urls`,第一张 = 封面):
+- `src/components/ListingMediaManager.tsx`(新):发布/编辑表单里的媒体管理网格——已有和新选的文件一起显示(视频显示第一帧 + ▶),每张都有常驻的删除、"Set as cover"、左右移动按钮,标出 Cover / New、计数 `n/10`。新文件由单独的"添加"input 选完追加进列表,再用 DataTransfer 同步到真正提交的隐藏 `media` input;React 19 表单 reset 后会重新塞回去(保存报错后可以直接再点保存)。一次保存新文件合计超过约 9.5MB 时提前提示(Server Action 请求体上限 10MB)。
+- 提交字段新增 `media_order`(JSON,`e:<url>` / `n:<下标>`),`src/lib/listingMedia.ts` 的 `orderListingMedia` 在服务端按它拼最终顺序——只认已校验过的本人文件和本次上传结果,没提到的补在最后,不会丢文件。发布和编辑两个 action 都改了,并限制每条广告最多 10 个媒体(`MAX_LISTING_MEDIA`)。
+- `src/components/ListingGallery.tsx`(新):详情页画廊,大图区可切换(左右箭头 + `n / N`),视频带播放控件;下方缩略图列出全部媒体(含封面)。
+- `src/components/MediaPreview.tsx`(新):图片/视频通用预览;`ListingCard`、`/dashboard/my-listings`、`/admin/listings` 的封面改用它,封面是视频时不再裂图。`ListingThumb` 复用 `isVideoUrl`。
+
+**验证**:`tsc`、`eslint` 通过;`orderListingMedia` 用例(乱序、伪造 URL、坏 JSON)通过;在临时页面用 Playwright 真实浏览器跑过:分两次选择文件会累加(2 张已有 + 3 个新 = 5 格)、删除已有图、把视频设成封面后提交的 `media_order`/`existing_media`/`media` 顺序正确、表单 reset 后文件仍在、详情页画廊能切到视频。**没有**用真实 Supabase 登录账号端到端点过发布/编辑(本环境连不上 HereForAds 的 Supabase 项目)。
+
+**待跟进 / 风险**:Vercel 函数请求体上限约 4.5MB,比 `bodySizeLimit: 10mb` 小——一次带视频上传很容易超。长期方案是浏览器直传 Storage(已有 `{user_id}/` 文件夹 insert 策略),服务端只收 URL 并用 `isOwnStorageUrl` 校验。

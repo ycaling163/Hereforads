@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { checkUpload, isOwnStorageUrl } from "@/lib/uploads";
+import { MAX_LISTING_MEDIA, orderListingMedia } from "@/lib/listingMedia";
 import { parseListingFormFields } from "@/lib/listingFormValidation";
 import { MEDIA_BUCKET } from "@/config/site";
 
@@ -66,7 +67,11 @@ export async function createListingAction(
     .map(String)
     .filter((url) => isOwnStorageUrl(url, MEDIA_BUCKET, user.id));
 
-  const mediaUrls: string[] = [...existingMediaUrls];
+  if (existingMediaUrls.length + mediaFiles.length > MAX_LISTING_MEDIA) {
+    return { error: `A listing can have up to ${MAX_LISTING_MEDIA} photos/videos` };
+  }
+
+  const uploadedUrls: string[] = [];
   try {
     for (const file of mediaFiles) {
       const checked = await checkUpload(file, "listing_media");
@@ -85,13 +90,15 @@ export async function createListingAction(
       const {
         data: { publicUrl },
       } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
-      mediaUrls.push(publicUrl);
+      uploadedUrls.push(publicUrl);
     }
   } catch (err) {
     return {
       error: `Media upload failed: ${err instanceof Error ? err.message : "unknown error"}`,
     };
   }
+  // 按表单里排好的顺序(可以把任意一张设为封面)拼出最终列表,第一张是封面。
+  const mediaUrls = orderListingMedia(formData.get("media_order"), existingMediaUrls, uploadedUrls);
 
   // 发布免审核 + KYC 后置(2026-09-19 决策记录,见 README 同名一节):不再要求
   // stripe_onboarded、也不再进 pending_review 排队等管理员批准,发布就是
